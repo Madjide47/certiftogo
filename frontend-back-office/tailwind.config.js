@@ -1,0 +1,66 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{js,jsx}'],
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        display: ['Manrope', 'Inter', 'system-ui', 'sans-serif'],
+      },
+      colors: {
+        // Palette CertifTOGO historique (compat).
+        togo: {
+          green: '#006a4e',
+          'green-dark': '#00543e',
+          yellow: '#ffce00',
+          red: '#d21034',
+        },
+        // Design system (tokens Material 3 issus du DESIGN.md Stitch).
+        // Vert institutionnel, jaune togolais, rouge révocation.
+        primary: '#00503a',
+        'on-primary': '#ffffff',
+        'primary-container': '#006a4e',
+        'on-primary-container': '#92e7c3',
+        'primary-fixed': '#9ef4d0',
+        'primary-fixed-dim': '#83d7b4',
+        'on-primary-fixed': '#002116',
+        'inverse-primary': '#83d7b4',
+        secondary: '#735c00',
+        'on-secondary': '#ffffff',
+        'secondary-container': '#fdcc00',
+        'secondary-fixed': '#ffe086',
+        'secondary-fixed-dim': '#efc100',
+        'on-secondary-fixed': '#231a00',
+        'on-secondary-container': '#6e5700',
+        tertiary: '#8f001e',
+        'tertiary-container': '#bc002b',
+        'on-tertiary': '#ffffff',
+        error: '#ba1a1a',
+        'error-container': '#ffdad6',
+        'on-error': '#ffffff',
+        'on-error-container': '#93000a',
+        background: '#f8fafc',
+        surface: '#faf8ff',
+        'surface-bright': '#faf8ff',
+        'surface-dim': '#d2d9f4',
+        'surface-container-lowest': '#ffffff',
+        'surface-container-low': '#f2f3ff',
+        'surface-container': '#eaedff',
+        'surface-container-high': '#e2e7ff',
+        'surface-container-highest': '#dae2fd',
+        'surface-variant': '#dae2fd',
+        'on-surface': '#131b2e',
+        'on-surface-variant': '#3f4944',
+        outline: '#6f7a73',
+        'outline-variant': '#bec9c2',
+        'inverse-surface': '#283044',
+        'inverse-on-surface': '#eef0ff',
+      },
+      boxShadow: {
+        soft: '0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.05)',
+        'soft-md': '0 2px 4px rgba(15,23,42,0.05), 0 8px 24px rgba(15,23,42,0.08)',
+      },
+    },
+  },
+  plugins: [],
+};

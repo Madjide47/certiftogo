@@ -1,0 +1,47 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{js,jsx}'],
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        display: ['Manrope', 'Inter', 'system-ui', 'sans-serif'],
+      },
+      colors: {
+        togo: { green: '#006a4e', 'green-dark': '#00543e', yellow: '#ffce00', red: '#d21034' },
+        primary: '#00503a',
+        'on-primary': '#ffffff',
+        'primary-container': '#006a4e',
+        'on-primary-container': '#92e7c3',
+        'primary-fixed': '#9ef4d0',
+        'primary-fixed-dim': '#83d7b4',
+        secondary: '#735c00',
+        'secondary-container': '#fdcc00',
+        'secondary-fixed': '#ffe086',
+        'secondary-fixed-dim': '#efc100',
+        tertiary: '#8f001e',
+        error: '#ba1a1a',
+        'error-container': '#ffdad6',
+        'on-error-container': '#93000a',
+        background: '#f8fafc',
+        surface: '#faf8ff',
+        'surface-container-lowest': '#ffffff',
+        'surface-container-low': '#f2f3ff',
+        'surface-container': '#eaedff',
+        'surface-container-high': '#e2e7ff',
+        'surface-container-highest': '#dae2fd',
+        'surface-variant': '#dae2fd',
+        'on-surface': '#131b2e',
+        'on-surface-variant': '#3f4944',
+        outline: '#6f7a73',
+        'outline-variant': '#bec9c2',
+        'inverse-surface': '#283044',
+      },
+      boxShadow: {
+        soft: '0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.05)',
+        'soft-md': '0 2px 4px rgba(15,23,42,0.05), 0 8px 24px rgba(15,23,42,0.08)',
+      },
+    },
+  },
+  plugins: [],
+};

@@ -1,0 +1,35 @@
+{
+  "name": "certiftogo-backend",
+  "version": "0.1.0",
+  "description": "API REST CertifTOGO — certification de diplômes sur blockchain",
+  "type": "module",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "test": "node --import ./tests/setup-env.mjs --test tests/api.test.js",
+    "migrate": "node scripts/run-sql.js migrations/001_init_schema.sql",
+    "seed": "node scripts/run-sql.js seeds/seed_dev.sql",
+    "seed:demo": "node scripts/seed-demo.mjs",
+    "db:reset": "node scripts/run-sql.js migrations/001_init_schema.sql && node scripts/run-sql.js seeds/seed_dev.sql",
+    "db:demo": "node scripts/run-sql.js migrations/001_init_schema.sql && node scripts/run-sql.js seeds/seed_dev.sql && node scripts/seed-demo.mjs"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.17.0",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "pdfkit": "^0.19.1",
+    "pg": "^8.12.0",
+    "qrcode": "^1.5.4",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4",
+    "supertest": "^7.2.2"
+  }
+}

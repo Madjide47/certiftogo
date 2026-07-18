@@ -1,0 +1,33 @@
+# Dépendances
+node_modules/
+
+# Variables d'environnement (ne jamais committer les secrets)
+.env
+.env.local
+.env.*.local
+
+# Build / dist
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Fichiers générés au runtime
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Blockchain (Hardhat)
+blockchain/artifacts/
+blockchain/cache/
+blockchain/typechain-types/
+
+# Divers
+.DS_Store
+.vscode/
+.idea/
+coverage/
+
+# Claude Code (paramètres locaux)
+.claude/

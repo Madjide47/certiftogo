@@ -1,0 +1,32 @@
+# ─────────────────────────────────────────────────────────────
+# PostgreSQL local pour CertifTOGO (optionnel).
+# À utiliser si vous préférez Docker plutôt qu'un PostgreSQL installé.
+#
+#   docker compose up -d        # démarre la base
+#   docker compose down         # arrête la base (données conservées)
+#   docker compose down -v      # arrête + supprime les données
+# ─────────────────────────────────────────────────────────────
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: certiftogo_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-certiftogo}
+      POSTGRES_USER: ${POSTGRES_USER:-certiftogo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-certiftogo_dev}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - certiftogo_pgdata:/var/lib/postgresql/data
+      # Les fichiers .sql placés ici sont joués automatiquement à la 1re création
+      - ./backend/migrations/001_init_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./backend/seeds/seed_dev.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-certiftogo} -d ${POSTGRES_DB:-certiftogo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  certiftogo_pgdata:
