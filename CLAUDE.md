@@ -257,9 +257,14 @@ Connexion par OTP (le code s'affiche dans la **console du backend**) :
     portefeuille candidat, admin et isolation inter-établissements.
   - Blockchain : `cd blockchain && npm test` — 16 tests du contrat.
 - ✅ **Déploiement Polygon Amoy (Phase 8)** — voir §11.
+- ✅ **CI (Phase 8)** : `.github/workflows/ci.yml` — tests backend sur un
+  PostgreSQL éphémère, compilation + tests du contrat, build des deux frontends.
+  Déclenché sur push `main` et sur PR.
+- ✅ **Hébergement (Phase 8)** : blueprint Render `render.yaml` (PostgreSQL
+  managé + API + 2 sites statiques) — procédure et limites dans
+  [`docs/DEPLOIEMENT.md`](docs/DEPLOIEMENT.md).
 - ⏳ **Reste (Phase 8)** : notifications WhatsApp réelles (OTP encore affiché en
-  console via `whatsapp.service.js`), hébergement + CI (aucun `Dockerfile` ni
-  workflow GitHub Actions pour l'instant).
+  console via `whatsapp.service.js`).
 
 ---
 
