@@ -309,3 +309,57 @@ Redéployer / vérifier depuis `blockchain/` :
 npm run deploy:amoy
 npx hardhat verify --network amoy <ADRESSE>
 ```
+
+---
+
+## 12. Workflow git
+
+**On ne commite jamais directement sur `main`.** Un chantier = une branche = une
+Pull Request relue avant merge. L'historique reste lisible et raconte la
+progression du projet — utile à présenter en soutenance.
+
+### Nommage des branches
+
+`<phase>/<sujet-en-kebab-case>` — par exemple :
+
+```
+phase-8/deploiement-amoy
+phase-8/hebergement-ci
+phase-8/whatsapp-reel
+fix/gas-used-manquant
+```
+
+### Cycle type
+
+```bash
+git checkout main && git pull          # partir d'un main à jour
+git checkout -b phase-8/mon-chantier   # brancher
+# … travail, commits …
+git push -u origin phase-8/mon-chantier
+gh pr create --base main               # ouvrir la PR
+# … relecture, puis merge depuis GitHub …
+git checkout main && git pull          # récupérer l'état mergé
+```
+
+### Messages de commit
+
+Format **Conventional Commits**, sujet en français à l'impératif :
+
+```
+feat(blockchain): déploie RegistreDiplomes sur Polygon Amoy
+fix(dossier): empêche la re-transmission d'un dossier déjà soumis
+docs: documente la configuration on-chain
+test(api): couvre l'isolation inter-établissements
+```
+
+Portées usuelles : `backend`, `blockchain`, `back-office`, `public`, `bdd`,
+ou le module concerné (`dossier`, `diplome`, `auth`…). Le corps du message
+explique le **pourquoi**, pas le *quoi* (le diff le montre déjà).
+
+### Règles de sécurité
+
+- Aucun secret dans un commit : clés privées, `JWT_SECRET`,
+  `MINISTERE_SIGNING_SECRET` et clés d'API vivent dans les `.env`
+  (ignorés par git). Vérifier avec `git diff` avant de commiter.
+- Ne jamais commiter `backend/uploads/` (PDF et QR générés au runtime).
+- En cas de doute sur un fichier : `git check-ignore -v <fichier>`.
