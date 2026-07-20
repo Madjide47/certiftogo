@@ -25,14 +25,15 @@ module.exports = {
     },
     // Testnet public Polygon Amoy.
     amoy: {
-      url: AMOY_RPC_URL || 'https://rpc-amoy.polygon.technology',
+      // NB : l'endpoint historique rpc-amoy.polygon.technology ne résout plus (DNS).
+      url: AMOY_RPC_URL || 'https://polygon-amoy-bor-rpc.publicnode.com',
       chainId: 80002,
       accounts: DEPLOYER_PRIVATE_KEY ? [DEPLOYER_PRIVATE_KEY] : [],
     },
   },
+  // Etherscan API V2 : une clé unique couvre toutes les chaînes (dont Amoy).
+  // L'ancien format { apiKey: { polygonAmoy: … } } (V1) n'est plus accepté.
   etherscan: {
-    apiKey: {
-      polygonAmoy: POLYGONSCAN_API_KEY || '',
-    },
+    apiKey: POLYGONSCAN_API_KEY || '',
   },
 };
