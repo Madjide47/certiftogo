@@ -1,0 +1,113 @@
+# ─────────────────────────────────────────────────────────────
+# Intégration continue CertifTOGO.
+# Joue les tests backend (sur un PostgreSQL éphémère), les tests du
+# smart contract, et vérifie que les deux frontends compilent.
+# ─────────────────────────────────────────────────────────────
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── API Express + PostgreSQL ────────────────────────────────
+  backend:
+    name: Backend (API + BDD)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # Le rôle est propriétaire de l'instance : la suite de tests
+          # crée et détruit elle-même la base `certiftogo_test`.
+          POSTGRES_USER: certiftogo
+          POSTGRES_PASSWORD: certiftogo_dev
+          POSTGRES_DB: certiftogo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U certiftogo"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: certiftogo
+      PGPASSWORD: certiftogo_dev
+      # La suite force déjà BLOCKCHAIN_MODE=mock (tests/setup-env.mjs) :
+      # la CI ne touche jamais Amoy et ne consomme aucun POL.
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Installer les dépendances
+        working-directory: backend
+        run: npm ci
+
+      - name: Jouer les tests d'intégration
+        working-directory: backend
+        run: npm test
+
+  # ── Smart contract ──────────────────────────────────────────
+  blockchain:
+    name: Smart contract (Hardhat)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: blockchain/package-lock.json
+
+      - name: Installer les dépendances
+        working-directory: blockchain
+        run: npm ci
+
+      - name: Compiler le contrat
+        working-directory: blockchain
+        run: npm run compile
+
+      - name: Jouer les tests du contrat
+        working-directory: blockchain
+        run: npm test
+
+  # ── Frontends ───────────────────────────────────────────────
+  frontends:
+    name: Build ${{ matrix.app }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [frontend-back-office, frontend-public]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+
+      - name: Installer les dépendances
+        working-directory: ${{ matrix.app }}
+        run: npm ci
+
+      - name: Compiler
+        working-directory: ${{ matrix.app }}
+        run: npm run build
