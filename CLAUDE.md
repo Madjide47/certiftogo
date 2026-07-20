@@ -123,6 +123,7 @@ npm run db:demo    # reset + seed + démo (données riches pour présentation)
 cd backend
 npm install
 npm run dev       # http://localhost:4000  (nodemon)
+npm test          # ~30 tests d'intégration (base dédiée certiftogo_test)
 ```
 
 ### Frontends
@@ -134,11 +135,15 @@ cd frontend-public      && npm install && npm run dev   # public      : http://l
 ### Blockchain (optionnel — vérification on-chain réelle)
 ```bash
 cd blockchain && npm install
+npm test                           # 16 tests du contrat
 npm run node                       # nœud Hardhat local (RPC :8545)
 npm run deploy:local               # déploie RegistreDiplomes → note l'adresse
 # puis dans backend/.env : BLOCKCHAIN_MODE=onchain, CONTRAT_ADRESSE=…,
 #   BLOCKCHAIN_RPC_URL=http://127.0.0.1:8545, BLOCKCHAIN_PRIVATE_KEY=… (compte autorisé)
 ```
+
+> Le contrat est **déjà déployé sur Polygon Amoy** — pas besoin de nœud local
+> pour une démo on-chain réelle. Voir **§11** pour l'adresse et la configuration.
 
 ---
 
@@ -171,7 +176,8 @@ Connexion par OTP (le code s'affiche dans la **console du backend**) :
 5. **Phase 5 :** front-office public (vérification). ✅
 6. **Phase 6 :** portefeuille candidat. ✅
 7. **Phase 7 :** admin système. ✅ *(notifications WhatsApp réelles : à venir)*
-8. Phase 8 : tests automatisés + déploiement. ⏳
+8. **Phase 8 :** tests automatisés ✅ + déploiement blockchain Amoy ✅ —
+   *reste : hébergement/CI et notifications WhatsApp réelles.* ⏳
 
 > **Refonte UI (post-phases)** : design system Material 3 (vert Togo + jaune),
 > polices Manrope/Inter, icônes Material Symbols. Tous les écrans back-office
@@ -181,7 +187,7 @@ Connexion par OTP (le code s'affiche dans la **console du backend**) :
 
 ---
 
-## 10. État actuel (Phases 1–7 ✅ + refonte UI)
+## 10. État actuel (Phases 1–8 ✅ sauf hébergement/WhatsApp)
 
 - ✅ Schéma BDD complet + seed de développement.
 - ✅ API d'authentification OTP (`/api/auth/request-otp`, `/verify-otp`, `/me`).
@@ -244,5 +250,62 @@ Connexion par OTP (le code s'affiche dans la **console du backend**) :
   Symbols) sur le back-office (4 rôles) et le front public.
 - ✅ **Seed de démo** (`npm run seed:demo`) : ~6 établissements, ~36 candidats,
   ~40 dossiers (tous statuts), ~20 diplômes (PDF/QR/hash réels), vérifications.
-- ⏳ **Reste (Phase 8)** : notifications WhatsApp réelles (OTP encore en console),
-  déploiement Amoy + hébergement, suite de tests automatisés.
+- ✅ **Tests automatisés (Phase 8)** :
+  - Backend : `cd backend && npm test` — ~30 tests d'intégration sur une base
+    dédiée `certiftogo_test` (recréée avant chaque exécution). Couvre auth OTP,
+    RBAC, cycle de vie du dossier, certification, vérification publique,
+    portefeuille candidat, admin et isolation inter-établissements.
+  - Blockchain : `cd blockchain && npm test` — 16 tests du contrat.
+- ✅ **Déploiement Polygon Amoy (Phase 8)** — voir §11.
+- ⏳ **Reste (Phase 8)** : notifications WhatsApp réelles (OTP encore affiché en
+  console via `whatsapp.service.js`), hébergement + CI (aucun `Dockerfile` ni
+  workflow GitHub Actions pour l'instant).
+
+---
+
+## 11. Déploiement blockchain — Polygon Amoy (testnet)
+
+Le contrat `RegistreDiplomes` est déployé et **vérifié** sur le testnet public :
+
+| | |
+|---|---|
+| Adresse | `0x42d2e5EE482c365E5b4737C2d476D127732495F6` |
+| Réseau | Polygon Amoy (chainId **80002**) |
+| Explorer | https://amoy.polygonscan.com/address/0x42d2e5EE482c365E5b4737C2d476D127732495F6#code |
+| Propriétaire / certificateur | `0x038151d7d0A18B4fe604C94EeE72D8913A3b871D` |
+
+**Points d'attention :**
+
+- ⚠️ **L'endpoint RPC historique `rpc-amoy.polygon.technology` ne résout plus**
+  (DNS mort). On utilise `https://polygon-amoy-bor-rpc.publicnode.com`
+  (secours : `https://polygon-amoy.drpc.org`).
+- Le constructeur autorise automatiquement le déployeur à certifier : le backend
+  signe avec **la même clé** que le déploiement, aucun appel `autoriser()` requis.
+- `hardhat-verify` exige le format de clé **Etherscan API V2** (une clé unique,
+  `etherscan: { apiKey: '…' }`) ; l'ancien format par réseau est rejeté.
+- **Coût réel ≈ 0,0075 POL par opération** (certification ou révocation).
+  Prévoir le solde en conséquence ; faucet : https://faucet.polygon.technology
+- ⚠️ **Données mixtes en base de démo** : les diplômes issus de `seed:demo` ont
+  été ancrés en mode `mock` — leurs hash **ne sont pas** sur le contrat, la
+  vérification publique renvoie `ancrage_blockchain.ancre = false`. Seuls
+  **6 diplômes vitrine** sont réellement ancrés, dont **un révoqué**
+  (`DIP-2026-23831`) qui démontre l'état `valide=false / revoqué=true` on-chain.
+  Un reseed complet en mode `onchain` coûterait ~0,15 POL.
+- Connu : la colonne `transactions_blockchain.gas_used` reste `NULL`
+  (`blockchain.service.js` ne remonte pas `receipt.gasUsed`).
+
+Bascule du backend en on-chain (`backend/.env`) :
+
+```bash
+BLOCKCHAIN_MODE=onchain
+CONTRAT_ADRESSE=0x42d2e5EE482c365E5b4737C2d476D127732495F6
+BLOCKCHAIN_RPC_URL=https://polygon-amoy-bor-rpc.publicnode.com
+BLOCKCHAIN_PRIVATE_KEY=…        # clé du déployeur (voir blockchain/.env)
+```
+
+Redéployer / vérifier depuis `blockchain/` :
+
+```bash
+npm run deploy:amoy
+npx hardhat verify --network amoy <ADRESSE>
+```
