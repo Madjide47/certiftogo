@@ -5,7 +5,7 @@
 import * as utilisateurModel from '../models/utilisateur.model.js';
 import * as otpModel from '../models/otp.model.js';
 import { genererCodeOtp, calculerExpiration, OTP_EXPIRATION_MINUTES } from './otp.service.js';
-import { envoyerCodeOtp } from './whatsapp.service.js';
+import { envoyerCodeOtp, estActif as whatsappActif } from './whatsapp.service.js';
 import { genererToken } from '../config/jwt.js';
 
 /** Erreur métier avec code HTTP et code applicatif. */
@@ -45,16 +45,27 @@ export async function demanderOtp(telephone) {
     date_expiration,
   });
 
-  await envoyerCodeOtp(telephone, code);
+  try {
+    await envoyerCodeOtp(telephone, code);
+  } catch (err) {
+    // L'envoi a échoué : le code stocké est inutilisable, on l'invalide
+    // pour ne pas laisser traîner un OTP que personne n'a reçu.
+    await otpModel.invaliderCodesActifs(utilisateur.id);
+    throw new ErreurAuth(
+      502,
+      'ENVOI_OTP_ECHEC',
+      "Impossible d'envoyer le code de vérification. Réessayez dans un instant."
+    );
+  }
 
   const reponse = {
     message: `Un code de vérification a été envoyé par WhatsApp. Il expire dans ${OTP_EXPIRATION_MINUTES} minutes.`,
     expiration_minutes: OTP_EXPIRATION_MINUTES,
   };
 
-  // Hors production (WhatsApp mocké), le code est renvoyé au front pour
-  // faciliter les tests. NE JAMAIS exposer en production.
-  if (process.env.NODE_ENV !== 'production') {
+  // Le code n'est renvoyé au front que si AUCUN envoi réel n'a eu lieu
+  // (mode mock) et hors production. NE JAMAIS exposer autrement.
+  if (process.env.NODE_ENV !== 'production' && !whatsappActif()) {
     reponse.code_dev = code;
   }
 

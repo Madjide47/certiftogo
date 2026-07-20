@@ -62,6 +62,21 @@ services:
       - key: BLOCKCHAIN_PRIVATE_KEY
         sync: false
 
+      # ── Notifications WhatsApp (Meta Cloud API) ────────────
+      # Passer à "cloud" une fois le numéro et le template validés
+      # par Meta. En "mock", le code OTP sort dans les logs Render.
+      - key: WHATSAPP_MODE
+        value: mock
+      - key: WHATSAPP_TEMPLATE_NOM
+        value: certiftogo_code_otp
+      - key: WHATSAPP_TEMPLATE_LANGUE
+        value: fr
+      # Secrets : à saisir dans le dashboard Render.
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+
       # ── URLs publiques ─────────────────────────────────────
       # Render expose chaque service sur https://<nom>.onrender.com.
       # Si un nom est déjà pris, Render ajoute un suffixe : vérifier les
