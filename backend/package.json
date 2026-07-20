@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
-    "test": "node --import ./tests/setup-env.mjs --test tests/api.test.js",
+    "test": "node --import ./tests/setup-env.mjs --test tests/*.test.js",
     "migrate": "node scripts/run-sql.js migrations/001_init_schema.sql",
     "seed": "node scripts/run-sql.js seeds/seed_dev.sql",
     "seed:demo": "node scripts/seed-demo.mjs",

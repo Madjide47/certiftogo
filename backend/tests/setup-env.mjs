@@ -6,3 +6,5 @@ process.env.PGPORT = process.env.PGPORT || '5433';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_secret';
 process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
 process.env.BLOCKCHAIN_MODE = 'mock';
+// Aucun appel réseau vers Meta pendant les tests.
+process.env.WHATSAPP_MODE = 'mock';

@@ -123,7 +123,7 @@ npm run db:demo    # reset + seed + démo (données riches pour présentation)
 cd backend
 npm install
 npm run dev       # http://localhost:4000  (nodemon)
-npm test          # ~30 tests d'intégration (base dédiée certiftogo_test)
+npm test          # 34 tests (base dédiée certiftogo_test + service WhatsApp)
 ```
 
 ### Frontends
@@ -176,8 +176,10 @@ Connexion par OTP (le code s'affiche dans la **console du backend**) :
 5. **Phase 5 :** front-office public (vérification). ✅
 6. **Phase 6 :** portefeuille candidat. ✅
 7. **Phase 7 :** admin système. ✅ *(notifications WhatsApp réelles : à venir)*
-8. **Phase 8 :** tests automatisés ✅ + déploiement blockchain Amoy ✅ —
-   *reste : hébergement/CI et notifications WhatsApp réelles.* ⏳
+8. **Phase 8 :** tests automatisés ✅ + déploiement blockchain Amoy ✅ +
+   CI ✅ + blueprint Render ✅ + intégration WhatsApp ✅.
+   *Reste des étapes hors code : débloquer la facturation GitHub, créer le
+   Blueprint Render, faire valider numéro et template par Meta.* ⏳
 
 > **Refonte UI (post-phases)** : design system Material 3 (vert Togo + jaune),
 > polices Manrope/Inter, icônes Material Symbols. Tous les écrans back-office
@@ -251,10 +253,11 @@ Connexion par OTP (le code s'affiche dans la **console du backend**) :
 - ✅ **Seed de démo** (`npm run seed:demo`) : ~6 établissements, ~36 candidats,
   ~40 dossiers (tous statuts), ~20 diplômes (PDF/QR/hash réels), vérifications.
 - ✅ **Tests automatisés (Phase 8)** :
-  - Backend : `cd backend && npm test` — ~30 tests d'intégration sur une base
-    dédiée `certiftogo_test` (recréée avant chaque exécution). Couvre auth OTP,
-    RBAC, cycle de vie du dossier, certification, vérification publique,
-    portefeuille candidat, admin et isolation inter-établissements.
+  - Backend : `cd backend && npm test` — 34 tests. 27 tests d'intégration sur
+    une base dédiée `certiftogo_test` (recréée avant chaque exécution) couvrant
+    auth OTP, RBAC, cycle de vie du dossier, certification, vérification
+    publique, portefeuille candidat, admin et isolation inter-établissements ;
+    7 tests unitaires du service WhatsApp (`fetch` doublé, aucun appel réseau).
   - Blockchain : `cd blockchain && npm test` — 16 tests du contrat.
 - ✅ **Déploiement Polygon Amoy (Phase 8)** — voir §11.
 - ✅ **CI (Phase 8)** : `.github/workflows/ci.yml` — tests backend sur un
@@ -263,8 +266,11 @@ Connexion par OTP (le code s'affiche dans la **console du backend**) :
 - ✅ **Hébergement (Phase 8)** : blueprint Render `render.yaml` (PostgreSQL
   managé + API + 2 sites statiques) — procédure et limites dans
   [`docs/DEPLOIEMENT.md`](docs/DEPLOIEMENT.md).
-- ⏳ **Reste (Phase 8)** : notifications WhatsApp réelles (OTP encore affiché en
-  console via `whatsapp.service.js`).
+- ✅ **Notifications WhatsApp (Phase 8)** : `whatsapp.service.js` gère deux modes
+  (`WHATSAPP_MODE`) — `mock` (code en console, défaut, aucun identifiant) et
+  `cloud` (envoi réel via la Meta Cloud API, template d'authentification).
+  Procédure de bascule dans [`docs/WHATSAPP.md`](docs/WHATSAPP.md).
+  ⏳ *Reste à faire côté Meta : validation du numéro et du template.*
 
 ---
 
