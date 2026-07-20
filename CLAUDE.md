@@ -123,7 +123,7 @@ npm run db:demo    # reset + seed + démo (données riches pour présentation)
 cd backend
 npm install
 npm run dev       # http://localhost:4000  (nodemon)
-npm test          # 34 tests (base dédiée certiftogo_test + service WhatsApp)
+npm test          # 41 tests (intégration + services WhatsApp et signature)
 ```
 
 ### Frontends
@@ -253,11 +253,13 @@ Connexion par OTP (le code s'affiche dans la **console du backend**) :
 - ✅ **Seed de démo** (`npm run seed:demo`) : ~6 établissements, ~36 candidats,
   ~40 dossiers (tous statuts), ~20 diplômes (PDF/QR/hash réels), vérifications.
 - ✅ **Tests automatisés (Phase 8)** :
-  - Backend : `cd backend && npm test` — 34 tests. 27 tests d'intégration sur
+  - Backend : `cd backend && npm test` — 41 tests. 27 tests d'intégration sur
     une base dédiée `certiftogo_test` (recréée avant chaque exécution) couvrant
     auth OTP, RBAC, cycle de vie du dossier, certification, vérification
     publique, portefeuille candidat, admin et isolation inter-établissements ;
-    7 tests unitaires du service WhatsApp (`fetch` doublé, aucun appel réseau).
+    7 tests unitaires du service WhatsApp (`fetch` doublé, aucun appel réseau) ;
+    7 tests du service de signature (dont le refus de démarrer en production
+    sans `MINISTERE_SIGNING_SECRET`).
   - Blockchain : `cd blockchain && npm test` — 16 tests du contrat.
 - ✅ **Déploiement Polygon Amoy (Phase 8)** — voir §11.
 - ✅ **CI (Phase 8)** : `.github/workflows/ci.yml` — tests backend sur un
