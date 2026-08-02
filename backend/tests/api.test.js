@@ -45,7 +45,11 @@ before(async () => {
 
   const db = new pg.Client({ ...cfg, database: 'certiftogo_test' });
   await db.connect();
-  await db.query(fs.readFileSync(path.join(__dirname, '../migrations/001_init_schema.sql'), 'utf8'));
+  // Toutes les migrations, dans l'ordre (la base de test est neuve à chaque fois).
+  const dossierMigrations = path.join(__dirname, '../migrations');
+  for (const fichier of fs.readdirSync(dossierMigrations).filter((f) => f.endsWith('.sql')).sort()) {
+    await db.query(fs.readFileSync(path.join(dossierMigrations, fichier), 'utf8'));
+  }
   await db.query(fs.readFileSync(path.join(__dirname, '../seeds/seed_dev.sql'), 'utf8'));
   await db.end();
 });
@@ -438,5 +442,133 @@ describe('Admin & isolation inter-établissements', () => {
     const otp = await api().post('/api/auth/request-otp').send({ telephone: '+22890000201' });
     assert.equal(otp.status, 403);
     assert.equal(otp.body.error.code, 'COMPTE_INACTIF');
+  });
+});
+
+// ── Référentiel académique (migration 002) ─────────────────────
+// Ces règles ne vivent que dans le schéma : sans test, elles peuvent
+// disparaître d'une migration à l'autre sans que rien ne le signale.
+describe('Référentiel académique', () => {
+  const ANNEE_2024 = '50000000-0000-0000-0000-000000000001';
+  const FILIERE_GL = '70000000-0000-0000-0000-000000000001';
+  const PROMO_L3_GL = '80000000-0000-0000-0000-000000000001';
+  const KOFFI = '30000000-0000-0000-0000-000000000001';
+
+  /** Vérifie qu'une écriture est refusée par la base, avec le bon code SQLSTATE. */
+  async function refuse(code, sql, params = []) {
+    await assert.rejects(() => pool.query(sql, params), (err) => {
+      assert.equal(err.code, code, `SQLSTATE attendu ${code}, reçu ${err.code}`);
+      return true;
+    });
+  }
+
+  test('le seed relie étudiant → promotion → filière → faculté → établissement', async () => {
+    const { rows } = await pool.query(
+      `SELECT e.nom AS etablissement, fa.code AS faculte, fi.code AS filiere,
+              p.niveau, a.libelle AS annee, s.type AS session
+         FROM inscriptions i
+         JOIN promotions p            ON p.id  = i.promotion_id
+         JOIN filieres fi             ON fi.id = p.filiere_id
+         JOIN facultes fa             ON fa.id = fi.faculte_id
+         JOIN etablissements e        ON e.id  = fa.etablissement_id
+         JOIN annees_academiques a    ON a.id  = p.annee_id
+         JOIN sessions_academiques s  ON s.id  = p.session_id
+        WHERE i.candidat_id = $1`,
+      [KOFFI]
+    );
+    assert.equal(rows.length, 1);
+    assert.deepEqual(rows[0], {
+      etablissement: 'Institut Africain d\'Informatique',
+      faculte: 'CII',
+      filiere: 'GL',
+      niveau: 3,
+      annee: '2024-2025',
+      session: 'normale',
+    });
+  });
+
+  test('refuse une seconde année académique ouverte', async () => {
+    await refuse('23505',
+      `INSERT INTO annees_academiques (libelle, date_debut, date_fin, statut)
+       VALUES ('2025-2026', '2025-10-01', '2026-07-31', 'ouverte')`);
+  });
+
+  test('refuse un libellé d\'année hors format AAAA-AAAA', async () => {
+    await refuse('23514',
+      `INSERT INTO annees_academiques (libelle, date_debut, date_fin)
+       VALUES ('2025/26', '2025-10-01', '2026-07-31')`);
+  });
+
+  test('refuse une seconde session normale sur la même année', async () => {
+    await refuse('23505',
+      `INSERT INTO sessions_academiques (annee_id, type) VALUES ($1, 'normale')`,
+      [ANNEE_2024]);
+  });
+
+  test('autorise plusieurs sessions exceptionnelles sur la même année', async () => {
+    for (const libelle of ['Exceptionnelle A', 'Exceptionnelle B']) {
+      await pool.query(
+        `INSERT INTO sessions_academiques (annee_id, type, libelle)
+         VALUES ($1, 'exceptionnelle', $2)`,
+        [ANNEE_2024, libelle]
+      );
+    }
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS n FROM sessions_academiques
+        WHERE annee_id = $1 AND type = 'exceptionnelle'`,
+      [ANNEE_2024]
+    );
+    assert.equal(rows[0].n, 2);
+    await pool.query(`DELETE FROM sessions_academiques WHERE type = 'exceptionnelle'`);
+  });
+
+  test('refuse une mention sur une inscription non admise', async () => {
+    await refuse('23514',
+      `INSERT INTO inscriptions (candidat_id, promotion_id, statut, mention)
+       VALUES ($1, $2, 'ajourne', 'bien')`,
+      ['30000000-0000-0000-0000-000000000002', PROMO_L3_GL]);
+  });
+
+  test('refuse d\'inscrire deux fois le même étudiant dans une promotion', async () => {
+    await refuse('23505',
+      `INSERT INTO inscriptions (candidat_id, promotion_id) VALUES ($1, $2)`,
+      [KOFFI, PROMO_L3_GL]);
+  });
+
+  test('conserve le parcours : un étudiant cumule les inscriptions par année', async () => {
+    const annee = (await pool.query(
+      `INSERT INTO annees_academiques (libelle, date_debut, date_fin, statut)
+       VALUES ('2023-2024', '2023-10-01', '2024-07-31', 'cloturee') RETURNING id`
+    )).rows[0].id;
+
+    const promo = (await pool.query(
+      `INSERT INTO promotions (filiere_id, annee_id, libelle, niveau, statut)
+       VALUES ($1, $2, 'Licence 2 Génie Logiciel — 2023-2024', 2, 'cloturee') RETURNING id`,
+      [FILIERE_GL, annee]
+    )).rows[0].id;
+
+    await pool.query(
+      `INSERT INTO inscriptions (candidat_id, promotion_id, statut, moyenne, mention)
+       VALUES ($1, $2, 'admis', 14.50, 'bien')`,
+      [KOFFI, promo]
+    );
+
+    const { rows } = await pool.query(
+      `SELECT p.niveau, a.libelle AS annee, i.statut
+         FROM inscriptions i
+         JOIN promotions p         ON p.id = i.promotion_id
+         JOIN annees_academiques a ON a.id = p.annee_id
+        WHERE i.candidat_id = $1
+        ORDER BY a.libelle`,
+      [KOFFI]
+    );
+    assert.deepEqual(rows.map((r) => `${r.annee} N${r.niveau} ${r.statut}`), [
+      '2023-2024 N2 admis',
+      '2024-2025 N3 inscrit',
+    ]);
+
+    await pool.query('DELETE FROM inscriptions WHERE promotion_id = $1', [promo]);
+    await pool.query('DELETE FROM promotions WHERE id = $1', [promo]);
+    await pool.query('DELETE FROM annees_academiques WHERE id = $1', [annee]);
   });
 });

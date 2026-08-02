@@ -58,10 +58,29 @@ et (à terme) le même smart contract :
 
 ## 4. Modèle de données (PostgreSQL)
 
-10 tables (voir `backend/migrations/001_init_schema.sql`) :
-`etablissements`, `ministeres`, `candidats`, `utilisateurs`, `codes_otp`,
-`dossiers`, `diplomes`, `transactions_blockchain`, `verifications_log`,
-`journal_audit`.
+16 tables métier, réparties en deux migrations.
+
+**`001_init_schema.sql`** — socle (10 tables) : `etablissements`, `ministeres`,
+`candidats`, `utilisateurs`, `codes_otp`, `dossiers`, `diplomes`,
+`transactions_blockchain`, `verifications_log`, `journal_audit`.
+
+**`002_referentiel_academique.sql`** — référentiel académique (6 tables) :
+`annees_academiques`, `sessions_academiques`, `facultes`, `filieres`,
+`promotions`, `inscriptions`. Hiérarchie :
+
+```
+etablissement → faculte → filiere → promotion → inscription → candidat
+                                       ↑
+                     annee_academique + session_academique
+```
+
+> Le lien étudiant↔promotion passe par `inscriptions` (et non par une colonne
+> sur `candidats`) afin de conserver le **parcours complet** : un étudiant
+> cumule une inscription par année d'études.
+
+Les migrations sont **incrémentales** : `scripts/run-migrations.js` joue les
+fichiers dans l'ordre et note chacun dans `schema_migrations`. Un fichier déjà
+appliqué n'est jamais rejoué, les données sont donc préservées.
 
 Points clés :
 - `utilisateurs.role` ∈ {etablissement, ministere, candidat, admin_systeme}, avec
@@ -111,9 +130,10 @@ docker compose up -d
 # Ou PostgreSQL local : créer la base puis jouer schéma + seed
 #   (voir README.md pour le détail)
 cd backend
-npm run migrate    # joue migrations/001_init_schema.sql
+npm run migrate    # joue les migrations en attente (sûr à relancer)
 npm run seed       # joue seeds/seed_dev.sql
-npm run db:reset   # schéma + seed d'un coup
+npm run migrate:reset  # ⚠️ reconstruit le schéma (efface les données)
+npm run db:reset   # schéma + seed d'un coup (⚠️ destructif)
 npm run seed:demo  # AJOUTE un gros jeu de données de démo (via les vrais services)
 npm run db:demo    # reset + seed + démo (données riches pour présentation)
 ```
@@ -123,7 +143,7 @@ npm run db:demo    # reset + seed + démo (données riches pour présentation)
 cd backend
 npm install
 npm run dev       # http://localhost:4000  (nodemon)
-npm test          # 41 tests (intégration + services WhatsApp et signature)
+npm test          # 49 tests (intégration + référentiel + WhatsApp + signature)
 ```
 
 ### Frontends
@@ -253,13 +273,15 @@ Connexion par OTP (le code s'affiche dans la **console du backend**) :
 - ✅ **Seed de démo** (`npm run seed:demo`) : ~6 établissements, ~36 candidats,
   ~40 dossiers (tous statuts), ~20 diplômes (PDF/QR/hash réels), vérifications.
 - ✅ **Tests automatisés (Phase 8)** :
-  - Backend : `cd backend && npm test` — 41 tests. 27 tests d'intégration sur
+  - Backend : `cd backend && npm test` — 49 tests. 27 tests d'intégration sur
     une base dédiée `certiftogo_test` (recréée avant chaque exécution) couvrant
     auth OTP, RBAC, cycle de vie du dossier, certification, vérification
     publique, portefeuille candidat, admin et isolation inter-établissements ;
-    7 tests unitaires du service WhatsApp (`fetch` doublé, aucun appel réseau) ;
-    7 tests du service de signature (dont le refus de démarrer en production
-    sans `MINISTERE_SIGNING_SECRET`).
+    8 tests du référentiel académique (règles métier portées par le schéma :
+    année ouverte unique, sessions, mention réservée aux admis, historique
+    des inscriptions) ; 7 tests unitaires du service WhatsApp (`fetch` doublé,
+    aucun appel réseau) ; 7 tests du service de signature (dont le refus de
+    démarrer en production sans `MINISTERE_SIGNING_SECRET`).
   - Blockchain : `cd blockchain && npm test` — 16 tests du contrat.
 - ✅ **Déploiement Polygon Amoy (Phase 8)** — voir §11.
 - ✅ **CI (Phase 8)** : `.github/workflows/ci.yml` — tests backend sur un
