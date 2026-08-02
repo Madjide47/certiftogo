@@ -1886,4 +1886,137 @@ describe('Lot de transmission — émission, contrôles, rejet partiel', () => {
     assert.equal(intrus.status, 404);
     assert.equal(intrus.body.error.code, 'LOT_INTROUVABLE');
   });
+
+  // ── Certification de masse et file d'ancrage ─────────────────
+  // 12 000 transactions blockchain dans un cycle HTTP dureraient 13 h.
+  describe('Ancrage asynchrone', () => {
+    let hashEnAttente;
+
+    test('certifie le lot : les diplômes existent, l\'ancrage est mis en file', async () => {
+      const t = await login('+22890000001');
+
+      const res = await api().post(`/api/ministere/lots/${lotGL}/certifier`).set(auth(t));
+      assert.equal(res.status, 201, JSON.stringify(res.body));
+      assert.equal(res.body.data.diplomes_crees, 1, 'le seul dossier validé du lot');
+      assert.deepEqual(res.body.data.echecs, []);
+
+      const { rows } = await pool.query(
+        `SELECT d.statut, d.hash_sha256, d.transaction_id
+           FROM diplomes d JOIN dossiers do2 ON do2.id = d.dossier_id
+          WHERE do2.lot_id = $1`,
+        [lotGL]
+      );
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].statut, 'en_attente_ancrage', 'officiel en base, pas encore prouvé');
+      assert.equal(rows[0].transaction_id, null);
+      hashEnAttente = rows[0].hash_sha256;
+    });
+
+    test('la vérification publique annonce franchement l\'attente d\'ancrage', async () => {
+      const res = await api().get(`/api/verification/${hashEnAttente}`);
+      assert.equal(res.status, 200);
+      assert.equal(res.body.data.resultat, 'en_attente_ancrage');
+      assert.match(res.body.data.message, /blockchain est en cours/);
+    });
+
+    test('affiche la progression du lot', async () => {
+      const t = await login('+22890000001');
+      const res = await api().get(`/api/ministere/lots/${lotGL}/ancrage`).set(auth(t));
+      assert.equal(res.status, 200);
+      assert.equal(res.body.data.progression.total, 1);
+      assert.equal(res.body.data.progression.ancres, 0);
+      assert.equal(res.body.data.progression.libelle, '0 / 1 ancrés');
+    });
+
+    test('le worker vide la file et bascule les diplômes en actif', async () => {
+      const t = await login('+22890000001');
+
+      const traitement = await api()
+        .post('/api/ministere/ancrage/traiter')
+        .set(auth(t)).send({ taille: 50 });
+      assert.equal(traitement.status, 200);
+      assert.equal(traitement.body.data.confirmees, 1);
+      assert.equal(traitement.body.data.echouees, 0);
+
+      const { rows } = await pool.query(
+        `SELECT d.statut, d.transaction_id, t.gas_used, t.gas_price
+           FROM diplomes d
+           JOIN dossiers do2 ON do2.id = d.dossier_id
+           JOIN transactions_blockchain t ON t.diplome_id = d.id
+          WHERE do2.lot_id = $1`,
+        [lotGL]
+      );
+      assert.equal(rows[0].statut, 'actif');
+      assert.ok(rows[0].transaction_id, 'la transaction est enregistrée');
+      assert.ok(rows[0].gas_used, 'gas_used n\'est plus NULL');
+      assert.ok(rows[0].gas_price);
+
+      const apres = await api().get(`/api/ministere/lots/${lotGL}/ancrage`).set(auth(t));
+      assert.equal(apres.body.data.progression.libelle, '1 / 1 ancrés');
+      assert.equal(apres.body.data.progression.pourcentage, 100);
+    });
+
+    test('le diplôme devient vérifiable publiquement une fois ancré', async () => {
+      const res = await api().get(`/api/verification/${hashEnAttente}`);
+      assert.equal(res.body.data.resultat, 'authentique');
+      assert.equal(res.body.data.message, null);
+    });
+
+    test('la file est idempotente : un même ancrage ne s\'enfile pas deux fois', async () => {
+      const { rows } = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM file_attente_ancrage WHERE lot_id = $1`,
+        [lotGL]
+      );
+      assert.equal(rows[0].n, 1);
+
+      // Une seconde certification du même lot est refusée en amont.
+      const t = await login('+22890000001');
+      const res = await api().post(`/api/ministere/lots/${lotGL}/certifier`).set(auth(t));
+      assert.equal(res.status, 409);
+      assert.equal(res.body.error.code, 'LOT_NON_CERTIFIABLE');
+    });
+
+    test('expose l\'état de la file et le coût cumulé par établissement', async () => {
+      const t = await login('+22890000001');
+      const res = await api().get('/api/ministere/ancrage').set(auth(t));
+      assert.equal(res.status, 200);
+
+      const confirmees = res.body.data.file.find((f) => f.statut === 'confirmee');
+      assert.ok(confirmees && confirmees.total >= 1);
+
+      const iai = res.body.data.couts.find((c) => c.code === 'IAI001');
+      assert.ok(iai, 'le coût est ventilé par établissement');
+      assert.ok(Number(iai.gas_total) > 0, 'le gaz consommé est enfin mesurable');
+    });
+
+    test('permet de relancer une tâche abandonnée', async () => {
+      const t = await login('+22890000001');
+
+      // On simule un abandon après épuisement des tentatives.
+      const { rows } = await pool.query(
+        `UPDATE file_attente_ancrage SET statut = 'abandonnee', tentatives = 5,
+                derniere_erreur = 'RPC injoignable'
+          WHERE lot_id = $1 RETURNING id`,
+        [lotGL]
+      );
+      const tacheId = rows[0].id;
+
+      const dlq = await api().get('/api/ministere/ancrage/abandonnees').set(auth(t));
+      assert.equal(dlq.status, 200);
+      assert.ok(dlq.body.data.taches.some((x) => x.id === tacheId));
+
+      const relance = await api()
+        .post(`/api/ministere/ancrage/${tacheId}/relancer`)
+        .set(auth(t));
+      assert.equal(relance.status, 200);
+      assert.equal(relance.body.data.tache.statut, 'en_attente');
+      assert.equal(relance.body.data.tache.tentatives, 0);
+
+      // Une tâche non abandonnée ne se relance pas.
+      const deuxieme = await api()
+        .post(`/api/ministere/ancrage/${tacheId}/relancer`)
+        .set(auth(t));
+      assert.equal(deuxieme.status, 404);
+    });
+  });
 });

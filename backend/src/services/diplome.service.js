@@ -67,6 +67,55 @@ async function genererReferenceUnique() {
 }
 
 /**
+ * Prépare tout ce qui précède l'écriture d'un diplôme : snapshot figé,
+ * empreinte, signature, référence, QR et PDF.
+ *
+ * Extrait de `certifier` pour être partagé avec la certification de
+ * masse : les deux chemins doivent produire exactement le même diplôme,
+ * seul le moment de l'ancrage diffère.
+ */
+export async function construireDiplomeDepuisDossier(dossier) {
+  const snapshot = construireSnapshot(dossier);
+  const hash = calculerHash(snapshot);
+  const signature = signer(hash);
+  const reference = await genererReferenceUnique();
+
+  // IO hors transaction : réutilisables si l'insertion échoue.
+  const qr = await genererQrFichier(hash, reference);
+  const qrDataUrl = await genererQrDataUrl(hash);
+  const pdf = await genererPdfDiplome({
+    reference,
+    candidat_nom: dossier.candidat_nom,
+    candidat_prenom: dossier.candidat_prenom,
+    type_diplome: dossier.type_diplome,
+    mention: dossier.mention,
+    filiere: dossier.filiere,
+    date_obtention: dossier.date_obtention,
+    etablissement_nom: dossier.etablissement_nom,
+    hash,
+    signature,
+    qrDataUrl,
+  });
+
+  return {
+    hash,
+    signature,
+    reference,
+    donnees: {
+      reference,
+      dossier_id: dossier.id,
+      candidat_id: dossier.candidat_id,
+      etablissement_id: dossier.etablissement_id,
+      donnees_signees: snapshot,
+      hash_sha256: hash,
+      signature_numerique: signature,
+      qr_code_url: qr.url,
+      pdf_url: pdf.url,
+    },
+  };
+}
+
+/**
  * Certifie un dossier validé → crée le diplôme.
  * @param {string} dossier_id
  * @param {string} ministere_id - ministère de l'agent (depuis le JWT)
@@ -91,31 +140,16 @@ export async function certifier(dossier_id, ministere_id) {
     throw new ErreurApp(409, 'DEJA_CERTIFIE', 'Ce dossier a déjà été certifié.');
   }
 
-  // 1–2. Snapshot, empreinte, signature.
-  const snapshot = construireSnapshot(dossier);
-  const hash = calculerHash(snapshot);
-  const signature = signer(hash);
-  const reference = await genererReferenceUnique();
+  const { donnees, hash, signature, reference } = await construireDiplomeDepuisDossier(dossier);
 
-  // 3. Ancrage blockchain (mock).
+  // Certification UNITAIRE : l'ancrage reste synchrone. Sur un seul
+  // diplôme, attendre la confirmation est acceptable et le résultat
+  // immédiat est plus clair pour l'agent. La certification de masse,
+  // elle, passe par la file (voir ancrage.service.js).
   const tx = await blockchain.certifier({ reference, hash, signature });
-
-  // 4. QR + PDF (IO hors transaction ; réutilisables si l'insert échoue).
-  const qr = await genererQrFichier(hash, reference);
-  const qrDataUrl = await genererQrDataUrl(hash);
-  const pdf = await genererPdfDiplome({
-    reference,
-    candidat_nom: dossier.candidat_nom,
-    candidat_prenom: dossier.candidat_prenom,
-    type_diplome: dossier.type_diplome,
-    mention: dossier.mention,
-    filiere: dossier.filiere,
-    date_obtention: dossier.date_obtention,
-    etablissement_nom: dossier.etablissement_nom,
-    hash,
-    signature,
-    qrDataUrl,
-  });
+  const qr = { url: donnees.qr_code_url };
+  const pdf = { url: donnees.pdf_url };
+  const snapshot = donnees.donnees_signees;
 
   // 5. Écriture atomique : diplôme + transaction + statut dossier.
   const diplome = await withTransaction(async (client) => {
@@ -141,6 +175,8 @@ export async function certifier(dossier_id, ministere_id) {
         transaction_hash: tx.transactionHash,
         block_number: tx.blockNumber,
         adresse_contrat: tx.adresseContrat,
+        gas_used: tx.gasUsed,
+        gas_price: tx.gasPrice,
         statut: tx.statut,
       },
       client
@@ -233,6 +269,8 @@ export async function revoquer(id, motif) {
         transaction_hash: tx.transactionHash,
         block_number: tx.blockNumber,
         adresse_contrat: tx.adresseContrat,
+        gas_used: tx.gasUsed,
+        gas_price: tx.gasPrice,
         statut: tx.statut,
       },
       client

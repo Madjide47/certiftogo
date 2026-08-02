@@ -6,6 +6,7 @@ import { Router } from 'express';
 import * as ministereController from '../controllers/ministere.controller.js';
 import * as gouvernanceController from '../controllers/gouvernance.controller.js';
 import * as lotController from '../controllers/lot.controller.js';
+import * as ancrageController from '../controllers/ancrage.controller.js';
 import { authJWT } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/role.middleware.js';
 
@@ -41,6 +42,15 @@ router.get('/lots/:id', lotController.detailler);
 router.post('/lots/:id/examiner', lotController.examiner);
 router.post('/lots/:id/valider', lotController.valider);
 router.post('/lots/:id/rejeter', lotController.rejeter);
+
+// ── Ancrage blockchain : certification de masse et supervision de la file.
+// Chemins fixes avant les paramétrés.
+router.get('/ancrage/abandonnees', ancrageController.abandonnees);
+router.post('/ancrage/traiter', ancrageController.traiter);
+router.post('/ancrage/:id/relancer', ancrageController.relancer);
+router.get('/ancrage', ancrageController.etat);
+router.post('/lots/:id/certifier', ancrageController.certifierLot);
+router.get('/lots/:id/ancrage', ancrageController.progression);
 
 router.get('/demandes', gouvernanceController.listerDemandes);
 router.post('/demandes/:id/examiner', gouvernanceController.examinerDemande);

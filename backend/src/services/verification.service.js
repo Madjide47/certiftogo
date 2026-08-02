@@ -26,6 +26,10 @@ function vuePublique(d, resultat) {
     hash: d.hash_sha256,
     transaction_id: d.transaction_id,
     motif_revocation: d.statut === 'revoque' ? d.motif_revocation : null,
+    message:
+      resultat === 'en_attente_ancrage'
+        ? 'Diplôme délivré par le ministère. Son enregistrement sur la blockchain est en cours ; la preuve publique sera disponible sous peu.'
+        : null,
   };
 }
 
@@ -46,7 +50,16 @@ export async function verifier(valeur, { methode = 'hash', ip = null, userAgent 
       : await diplomeModel.trouverParReference(cle.toUpperCase());
   }
 
-  const resultat = !diplome ? 'introuvable' : diplome.statut === 'revoque' ? 'revoque' : 'authentique';
+  // Un diplôme en attente d'ancrage est bien délivré, mais sa preuve
+  // publique n'est pas encore publiée. Le dire franchement vaut mieux que
+  // de l'annoncer « authentique » sans pouvoir l'étayer on-chain.
+  const resultat = !diplome
+    ? 'introuvable'
+    : diplome.statut === 'revoque'
+      ? 'revoque'
+      : diplome.statut === 'en_attente_ancrage'
+        ? 'en_attente_ancrage'
+        : 'authentique';
 
   // Journalisation (best-effort : ne bloque pas la réponse en cas d'échec).
   try {

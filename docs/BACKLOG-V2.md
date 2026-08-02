@@ -103,7 +103,7 @@ Dernière mise à jour : 2 août 2026.
 |---|---|---|
 | F-01 | Distinction préparation (établissement) / création officielle (ministère) | ✅ |
 | F-02 | Chaîne hash → signature → blockchain → PDF → QR → portefeuille | ✅ |
-| F-03 | **Certification de masse d'un lot** | ⬜ |
+| F-03 | **Certification de masse d'un lot** | ✅ |
 | F-04 | **Versionnement d'un diplôme** (v1 → v2, chaînage) | ⬜ |
 | F-05 | **Révocation puis réémission** avec conservation de la trace | 🔨 *révocation seule* |
 | F-06 | **Changement de nom après mariage / décision de justice** | ⬜ |
@@ -115,21 +115,21 @@ Dernière mise à jour : 2 août 2026.
 
 | # | Élément | Statut |
 |---|---|---|
-| G-01 | **File d'attente d'ancrage** (table + worker) | ⬜ |
-| G-02 | Statut intermédiaire « en attente d'ancrage » | ⬜ |
-| G-03 | **Retry exponentiel** et dead letter queue | ⬜ |
-| G-04 | **Idempotence** et reprise après incident | ⬜ |
-| G-05 | Indicateur de progression « 8 245 / 12 000 ancrés » | ⬜ |
-| G-06 | Comportement du candidat pendant l'ancrage | ⬜ |
-| G-07 | Réponse de la vérification publique pendant l'ancrage | ⬜ |
+| G-01 | **File d'attente d'ancrage** (table + worker) | ✅ |
+| G-02 | Statut intermédiaire « en attente d'ancrage » | ✅ |
+| G-03 | **Retry exponentiel** et dead letter queue | ✅ |
+| G-04 | **Idempotence** et reprise après incident | ✅ |
+| G-05 | Indicateur de progression « 8 245 / 12 000 ancrés » | ✅ |
+| G-06 | Comportement du candidat pendant l'ancrage | ✅ |
+| G-07 | Réponse de la vérification publique pendant l'ancrage | ✅ |
 | G-08 | Notification admin en cas d'échec de transaction | ⬜ |
 
 ## H. Coûts blockchain
 
 | # | Élément | Statut |
 |---|---|---|
-| H-01 | **`gas_used` remonté** dans `transactions_blockchain` (aujourd'hui toujours NULL) | ⬜ |
-| H-02 | Coût cumulé par établissement et par période | ⬜ |
+| H-01 | **`gas_used` remonté** dans `transactions_blockchain` (aujourd'hui toujours NULL) | ✅ |
+| H-02 | Coût cumulé par établissement et par période | ✅ |
 | H-03 | **Wallet de service** : solde, seuil d'alerte bas, procédure de recharge | ⬜ |
 | H-04 | **Batching** de plusieurs certifications | ⬜ |
 | H-05 | **Arbre de Merkle** : une racine par promotion + preuves individuelles | ⬜ |
@@ -298,9 +298,9 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 73 |
+| ✅ fait et testé | 83 |
 | 🔨 partiel ou en cours | 13 |
-| ⬜ à faire | 88 |
+| ⬜ à faire | 78 |
 | **Total** | **174** |
 
 ## Ordre d'implémentation proposé

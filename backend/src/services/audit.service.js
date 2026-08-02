@@ -74,7 +74,10 @@ export const ACTIONS = {
   DOSSIER_VALIDE: 'dossier_valide',
   DOSSIER_REJETE: 'dossier_rejete',
 
-  // Certification
+  // Certification et ancrage
+  LOT_CERTIFIE: 'lot_certifie',
+  ANCRAGE_ABANDONNE: 'ancrage_abandonne',
+  ANCRAGE_RELANCE: 'ancrage_relance',
   DIPLOME_CERTIFIE: 'diplome_certifie',
   DIPLOME_REVOQUE: 'diplome_revoque',
 

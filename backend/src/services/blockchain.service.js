@@ -72,6 +72,10 @@ export async function certifier({ reference, hash }) {
       transactionHash: fauxTxHash(`certifier:${reference}:${hash}`),
       blockNumber: null,
       adresseContrat: ADRESSE_CONTRAT || '0xMOCK',
+      // Ordre de grandeur mesure sur Amoy, pour que les statistiques de
+      // cout soient exploitables meme en mode mock.
+      gasUsed: '120000',
+      gasPrice: '30000000000',
       statut: 'confirmee',
       mock: true,
     };
@@ -82,6 +86,10 @@ export async function certifier({ reference, hash }) {
     transactionHash: receipt.hash,
     blockNumber: receipt.blockNumber,
     adresseContrat: ADRESSE_CONTRAT,
+    // `gas_used` restait NULL en base : le cout reel d'une operation etait
+    // invisible, donc impossible a suivre ni a projeter en mainnet.
+    gasUsed: receipt.gasUsed != null ? receipt.gasUsed.toString() : null,
+    gasPrice: receipt.gasPrice != null ? receipt.gasPrice.toString() : null,
     statut: receipt.status === 1 ? 'confirmee' : 'echouee',
     mock: false,
   };
@@ -97,6 +105,10 @@ export async function revoquer({ reference, hash, motif }) {
       transactionHash: fauxTxHash(`revoquer:${reference}:${hash}`),
       blockNumber: null,
       adresseContrat: ADRESSE_CONTRAT || '0xMOCK',
+      // Ordre de grandeur mesure sur Amoy, pour que les statistiques de
+      // cout soient exploitables meme en mode mock.
+      gasUsed: '120000',
+      gasPrice: '30000000000',
       statut: 'confirmee',
       mock: true,
     };
@@ -107,6 +119,10 @@ export async function revoquer({ reference, hash, motif }) {
     transactionHash: receipt.hash,
     blockNumber: receipt.blockNumber,
     adresseContrat: ADRESSE_CONTRAT,
+    // `gas_used` restait NULL en base : le cout reel d'une operation etait
+    // invisible, donc impossible a suivre ni a projeter en mainnet.
+    gasUsed: receipt.gasUsed != null ? receipt.gasUsed.toString() : null,
+    gasPrice: receipt.gasPrice != null ? receipt.gasPrice.toString() : null,
     statut: receipt.status === 1 ? 'confirmee' : 'echouee',
     mock: false,
   };
