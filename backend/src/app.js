@@ -20,6 +20,9 @@ import ministereRoutes from './routes/ministere.routes.js';
 import verificationRoutes from './routes/verification.routes.js';
 import portefeuilleRoutes from './routes/portefeuille.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import referentielRoutes from './routes/referentiel.routes.js';
+import structureRoutes from './routes/structure.routes.js';
+import promotionRoutes from './routes/promotion.routes.js';
 import { UPLOADS_DIR, UPLOADS_URL_PREFIX, assurerDossierUploads } from './config/storage.js';
 
 dotenv.config();
@@ -65,6 +68,9 @@ app.use('/api/ministere', ministereRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/candidat', portefeuilleRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/referentiel', referentielRoutes);
+app.use('/api/structure', structureRoutes);
+app.use('/api/promotions', promotionRoutes);
 
 // ── Gestion des erreurs (toujours en dernier) ──────────────────────
 app.use(nonTrouve);

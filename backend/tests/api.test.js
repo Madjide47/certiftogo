@@ -572,3 +572,319 @@ describe('Référentiel académique', () => {
     await pool.query('DELETE FROM annees_academiques WHERE id = $1', [annee]);
   });
 });
+
+// ── API du référentiel : années et sessions (ministère) ────────
+describe('API référentiel — années et sessions', () => {
+  const ANNEE_SEED = '50000000-0000-0000-0000-000000000001';
+  let anneeFuture;
+
+  test('la lecture est ouverte à un établissement, l\'écriture non', async () => {
+    const etablissement = await login('+22890000002');
+
+    const lecture = await api().get('/api/referentiel/annees').set(auth(etablissement));
+    assert.equal(lecture.status, 200);
+    assert.ok(lecture.body.data.annees.length >= 1);
+
+    const ecriture = await api().post('/api/referentiel/annees').set(auth(etablissement)).send({
+      libelle: '2030-2031', date_debut: '2030-10-01', date_fin: '2031-07-31',
+    });
+    assert.equal(ecriture.status, 403);
+    assert.equal(ecriture.body.error.code, 'ACCES_REFUSE');
+  });
+
+  test('le ministère crée une année en préparation', async () => {
+    const t = await login('+22890000001');
+    const res = await api().post('/api/referentiel/annees').set(auth(t)).send({
+      libelle: '2026-2027', date_debut: '2026-10-01', date_fin: '2027-07-31',
+    });
+    assert.equal(res.status, 201);
+    assert.equal(res.body.data.annee.statut, 'preparation');
+    anneeFuture = res.body.data.annee.id;
+  });
+
+  test('refuse une seconde année ouverte (409) et un libellé mal formé (400)', async () => {
+    const t = await login('+22890000001');
+
+    const deuxiemeOuverte = await api().post('/api/referentiel/annees').set(auth(t)).send({
+      libelle: '2027-2028', date_debut: '2027-10-01', date_fin: '2028-07-31', statut: 'ouverte',
+    });
+    assert.equal(deuxiemeOuverte.status, 409);
+    assert.equal(deuxiemeOuverte.body.error.code, 'ANNEE_OUVERTE_EXISTE');
+
+    for (const libelle of ['2025/26', '2024-2026']) {
+      const res = await api().post('/api/referentiel/annees').set(auth(t)).send({
+        libelle, date_debut: '2025-10-01', date_fin: '2026-07-31',
+      });
+      assert.equal(res.status, 400, `libellé ${libelle}`);
+      assert.equal(res.body.error.code, 'LIBELLE_INVALIDE');
+    }
+  });
+
+  test('refuse une période incohérente (400)', async () => {
+    const t = await login('+22890000001');
+    const res = await api().post('/api/referentiel/annees').set(auth(t)).send({
+      libelle: '2028-2029', date_debut: '2029-07-31', date_fin: '2028-10-01',
+    });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'PERIODE_INVALIDE');
+  });
+
+  test('un identifiant qui n\'est pas un UUID donne 404, jamais 500', async () => {
+    const t = await login('+22890000001');
+    const res = await api().get('/api/referentiel/annees/pas-un-uuid').set(auth(t));
+    assert.equal(res.status, 404);
+    assert.equal(res.body.error.code, 'ANNEE_INTROUVABLE');
+  });
+
+  test('refuse une transition de statut interdite (409)', async () => {
+    const t = await login('+22890000001');
+
+    const cloture = await api()
+      .patch(`/api/referentiel/annees/${anneeFuture}/statut`)
+      .set(auth(t)).send({ statut: 'cloturee' });
+    assert.equal(cloture.status, 200);
+
+    const reouverture = await api()
+      .patch(`/api/referentiel/annees/${anneeFuture}/statut`)
+      .set(auth(t)).send({ statut: 'ouverte' });
+    assert.equal(reouverture.status, 409);
+    assert.equal(reouverture.body.error.code, 'TRANSITION_INTERDITE');
+  });
+
+  test('refuse une session en double et un type inconnu', async () => {
+    const t = await login('+22890000001');
+
+    const doublon = await api()
+      .post(`/api/referentiel/annees/${ANNEE_SEED}/sessions`)
+      .set(auth(t)).send({ type: 'normale' });
+    assert.equal(doublon.status, 409);
+    assert.equal(doublon.body.error.code, 'SESSION_DUPLIQUEE');
+
+    const typeInconnu = await api()
+      .post(`/api/referentiel/annees/${ANNEE_SEED}/sessions`)
+      .set(auth(t)).send({ type: 'finale' });
+    assert.equal(typeInconnu.status, 400);
+    assert.equal(typeInconnu.body.error.code, 'TYPE_INVALIDE');
+  });
+
+  test('refuse de supprimer une année portant des promotions (409)', async () => {
+    const t = await login('+22890000001');
+    const res = await api().delete(`/api/referentiel/annees/${ANNEE_SEED}`).set(auth(t));
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'ANNEE_UTILISEE');
+  });
+});
+
+// ── API structure : facultés et filières (établissement) ───────
+describe('API structure — facultés et filières', () => {
+  const FACULTE_SEED = '60000000-0000-0000-0000-000000000001';
+  let faculteId;
+
+  test('crée une faculté et normalise son code en majuscules', async () => {
+    const t = await login('+22890000002');
+    const res = await api().post('/api/structure/facultes').set(auth(t)).send({
+      nom: 'Faculté des Sciences et Techniques', code: 'fst',
+    });
+    assert.equal(res.status, 201);
+    assert.equal(res.body.data.faculte.code, 'FST');
+    faculteId = res.body.data.faculte.id;
+  });
+
+  test('refuse un code de faculté déjà pris dans l\'établissement (409)', async () => {
+    const t = await login('+22890000002');
+    const res = await api().post('/api/structure/facultes').set(auth(t)).send({
+      nom: 'Doublon', code: 'FST',
+    });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'CODE_DUPLIQUE');
+  });
+
+  test('refuse une filière sans faculté, ou avec une durée hors bornes', async () => {
+    const t = await login('+22890000002');
+
+    const sansFaculte = await api().post('/api/structure/filieres').set(auth(t)).send({
+      nom: 'Orpheline', code: 'ORP', type_diplome: 'licence',
+    });
+    assert.equal(sansFaculte.status, 400);
+    assert.equal(sansFaculte.body.error.code, 'CHAMP_REQUIS');
+
+    const dureeFolle = await api().post('/api/structure/filieres').set(auth(t)).send({
+      faculte_id: faculteId, nom: 'Longue', code: 'LNG', type_diplome: 'licence', duree_annees: 12,
+    });
+    assert.equal(dureeFolle.status, 400);
+    assert.equal(dureeFolle.body.error.code, 'DUREE_INVALIDE');
+  });
+
+  test('refuse de supprimer une faculté portant des filières (409)', async () => {
+    const t = await login('+22890000002');
+    const res = await api().delete(`/api/structure/facultes/${FACULTE_SEED}`).set(auth(t));
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'FACULTE_UTILISEE');
+  });
+
+  test('un autre établissement ne voit pas cette faculté (404, pas 403)', async () => {
+    const t = await login('+22890000200'); // agent de l'établissement B
+    const res = await api().get(`/api/structure/facultes/${FACULTE_SEED}`).set(auth(t));
+    assert.equal(res.status, 404);
+    assert.equal(res.body.error.code, 'FACULTE_INTROUVABLE');
+  });
+});
+
+// ── API promotions et inscriptions (établissement) ─────────────
+describe('API promotions — cycle de vie et inscriptions', () => {
+  const ANNEE_SEED = '50000000-0000-0000-0000-000000000001';
+  const FILIERE_GL = '70000000-0000-0000-0000-000000000001';
+  const KOFFI = '30000000-0000-0000-0000-000000000001';
+  let promotionId;
+  let inscriptionId;
+
+  test('refuse un niveau supérieur à la durée du cursus (400)', async () => {
+    const t = await login('+22890000002');
+    const res = await api().post('/api/promotions').set(auth(t)).send({
+      filiere_id: FILIERE_GL, annee_id: ANNEE_SEED, libelle: 'Licence 5 GL', niveau: 5,
+    });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'NIVEAU_HORS_CURSUS');
+  });
+
+  test('refuse une promotion en doublon sur (filière, niveau, année) — 409', async () => {
+    const t = await login('+22890000002');
+    const res = await api().post('/api/promotions').set(auth(t)).send({
+      filiere_id: FILIERE_GL, annee_id: ANNEE_SEED, libelle: 'Doublon L3', niveau: 3,
+    });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'PROMOTION_DUPLIQUEE');
+  });
+
+  test('refuse une session appartenant à une autre année (400)', async () => {
+    const ministere = await login('+22890000001');
+    const autreAnnee = await api().post('/api/referentiel/annees').set(auth(ministere)).send({
+      libelle: '2029-2030', date_debut: '2029-10-01', date_fin: '2030-07-31',
+    });
+    const sessionAilleurs = await api()
+      .post(`/api/referentiel/annees/${autreAnnee.body.data.annee.id}/sessions`)
+      .set(auth(ministere)).send({ type: 'normale' });
+
+    const t = await login('+22890000002');
+    const res = await api().post('/api/promotions').set(auth(t)).send({
+      filiere_id: FILIERE_GL, annee_id: ANNEE_SEED, libelle: 'Licence 2 GL', niveau: 2,
+      session_id: sessionAilleurs.body.data.session.id,
+    });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'SESSION_HORS_ANNEE');
+  });
+
+  test('crée une promotion en brouillon', async () => {
+    const t = await login('+22890000002');
+    const res = await api().post('/api/promotions').set(auth(t)).send({
+      filiere_id: FILIERE_GL, annee_id: ANNEE_SEED,
+      libelle: 'Licence 1 Génie Logiciel — 2024-2025', niveau: 1, effectif_prevu: 40,
+    });
+    assert.equal(res.status, 201);
+    assert.equal(res.body.data.promotion.statut, 'brouillon');
+    assert.equal(res.body.data.promotion.effectif_inscrit, 0);
+    promotionId = res.body.data.promotion.id;
+  });
+
+  test('refuse une transition qui saute des étapes (409)', async () => {
+    const t = await login('+22890000002');
+    const res = await api()
+      .patch(`/api/promotions/${promotionId}/statut`)
+      .set(auth(t)).send({ statut: 'certifiee' });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'TRANSITION_INTERDITE');
+  });
+
+  test('refuse de transmettre une promotion sans aucun inscrit (409)', async () => {
+    const t = await login('+22890000002');
+    await api().patch(`/api/promotions/${promotionId}/statut`).set(auth(t)).send({ statut: 'ouverte' });
+
+    const res = await api()
+      .patch(`/api/promotions/${promotionId}/statut`)
+      .set(auth(t)).send({ statut: 'transmise' });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'PROMOTION_VIDE');
+  });
+
+  test('n\'inscrit que les étudiants de son propre établissement', async () => {
+    const autreEtab = await login('+22890000200');
+    const intrus = await api()
+      .post(`/api/promotions/${promotionId}/inscriptions`)
+      .set(auth(autreEtab)).send({ candidat_id: KOFFI });
+    // La promotion elle-même appartient à un autre établissement.
+    assert.equal(intrus.status, 404);
+    assert.equal(intrus.body.error.code, 'PROMOTION_INTROUVABLE');
+
+    const t = await login('+22890000002');
+    const ok = await api()
+      .post(`/api/promotions/${promotionId}/inscriptions`)
+      .set(auth(t)).send({ candidat_id: KOFFI });
+    assert.equal(ok.status, 201);
+    assert.equal(ok.body.data.inscription.statut, 'inscrit');
+    inscriptionId = ok.body.data.inscription.id;
+
+    const doublon = await api()
+      .post(`/api/promotions/${promotionId}/inscriptions`)
+      .set(auth(t)).send({ candidat_id: KOFFI });
+    assert.equal(doublon.status, 409);
+    assert.equal(doublon.body.error.code, 'INSCRIPTION_DUPLIQUEE');
+  });
+
+  test('refuse une mention sans admission et une moyenne hors barème', async () => {
+    const t = await login('+22890000002');
+
+    const mention = await api()
+      .put(`/api/promotions/${promotionId}/inscriptions/${inscriptionId}`)
+      .set(auth(t)).send({ statut: 'ajourne', mention: 'bien' });
+    assert.equal(mention.status, 400);
+    assert.equal(mention.body.error.code, 'MENTION_NON_AUTORISEE');
+
+    const moyenne = await api()
+      .put(`/api/promotions/${promotionId}/inscriptions/${inscriptionId}`)
+      .set(auth(t)).send({ statut: 'admis', moyenne: 25 });
+    assert.equal(moyenne.status, 400);
+    assert.equal(moyenne.body.error.code, 'MOYENNE_INVALIDE');
+
+    const ok = await api()
+      .put(`/api/promotions/${promotionId}/inscriptions/${inscriptionId}`)
+      .set(auth(t)).send({ statut: 'admis', moyenne: 15.5, mention: 'bien' });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.body.data.inscription.mention, 'bien');
+  });
+
+  test('fige la composition dès que la promotion est transmise (409)', async () => {
+    const t = await login('+22890000002');
+
+    const transmise = await api()
+      .patch(`/api/promotions/${promotionId}/statut`)
+      .set(auth(t)).send({ statut: 'transmise' });
+    assert.equal(transmise.status, 200);
+    assert.equal(transmise.body.data.promotion.effectif_inscrit, 1);
+
+    const ajout = await api()
+      .post(`/api/promotions/${promotionId}/inscriptions`)
+      .set(auth(t)).send({ candidat_id: '30000000-0000-0000-0000-000000000002' });
+    assert.equal(ajout.status, 409);
+    assert.equal(ajout.body.error.code, 'PROMOTION_FIGEE');
+
+    const suppression = await api().delete(`/api/promotions/${promotionId}`).set(auth(t));
+    assert.equal(suppression.status, 409);
+    assert.equal(suppression.body.error.code, 'PROMOTION_FIGEE');
+  });
+
+  test('restitue le parcours pluriannuel d\'un étudiant', async () => {
+    const t = await login('+22890000002');
+    const res = await api().get(`/api/promotions/parcours/${KOFFI}`).set(auth(t));
+    assert.equal(res.status, 200);
+
+    const niveaux = res.body.data.parcours.map((p) => p.niveau);
+    assert.deepEqual(niveaux, [1, 3], 'les deux inscriptions de Koffi, triées par année puis niveau');
+  });
+
+  test('un étudiant d\'un autre établissement reste introuvable (404)', async () => {
+    const t = await login('+22890000200');
+    const res = await api().get(`/api/promotions/parcours/${KOFFI}`).set(auth(t));
+    assert.equal(res.status, 404);
+    assert.equal(res.body.error.code, 'CANDIDAT_INTROUVABLE');
+  });
+});

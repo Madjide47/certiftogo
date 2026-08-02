@@ -74,6 +74,10 @@ etablissement → faculte → filiere → promotion → inscription → candidat
                      annee_academique + session_academique
 ```
 
+**`003_coherence_promotion_session.sql`** — clé étrangère composite
+`(session_id, annee_id)` : la session d'une promotion doit appartenir à l'année
+de cette promotion, ce que 002 laissait passer.
+
 > Le lien étudiant↔promotion passe par `inscriptions` (et non par une colonne
 > sur `candidats`) afin de conserver le **parcours complet** : un étudiant
 > cumule une inscription par année d'études.
@@ -143,7 +147,7 @@ npm run db:demo    # reset + seed + démo (données riches pour présentation)
 cd backend
 npm install
 npm run dev       # http://localhost:4000  (nodemon)
-npm test          # 49 tests (intégration + référentiel + WhatsApp + signature)
+npm test          # 73 tests (intégration + référentiel + WhatsApp + signature)
 ```
 
 ### Frontends
@@ -261,6 +265,28 @@ Connexion par OTP (le code s'affiche dans la **console du backend**) :
     `admin` + extensions `utilisateur`.
   - Back-office : pages Tableau de bord (compteurs globaux), Utilisateurs et
     Établissements (rôle admin dans `config/pages.jsx` + entrée sidebar).
+- ✅ **Référentiel académique (V2, backend)** : socle de la transmission par
+  promotion.
+  - Schéma : `annees_academiques`, `sessions_academiques`, `facultes`,
+    `filieres`, `promotions`, `inscriptions` (migrations 002 et 003).
+  - `/api/referentiel` — années et sessions. **Lecture ouverte à tout compte
+    authentifié, écriture réservée au ministère** (les établissements doivent
+    lire l'année ouverte pour rattacher leurs promotions).
+  - `/api/structure` — facultés et filières, **isolées par établissement**.
+  - `/api/promotions` — promotions, inscriptions, résultats et parcours
+    pluriannuel d'un étudiant.
+  - Cycle de vie d'une promotion : `brouillon → ouverte → transmise →
+    certifiee → cloturee` (retours en arrière limités, sauts interdits).
+  - Règles métier refusées côté service, pas seulement en base : niveau
+    supérieur à la durée du cursus, session appartenant à une autre année,
+    transmission d'une promotion vide, modification d'une promotion figée,
+    mention sans admission, moyenne hors barème.
+  - Exceptions : `traduireErreurSql()` (`utils/errors.js`) convertit les
+    SQLSTATE PostgreSQL en erreurs métier, et le middleware d'erreurs sert de
+    filet — **plus aucune contrainte violée ne remonte en 500**. Un
+    identifiant qui n'est pas un UUID donne 404, plus 500.
+  - ⏳ *Pas encore d'interface : aucune page back-office ne consomme ces
+    endpoints.*
 - ✅ **Pages complémentaires** : ministère (tableau de bord, statistiques,
   annuaire établissements), candidat (paramètres), admin (configuration).
   **Plus aucun `PlaceholderPage` métier.**
@@ -273,13 +299,15 @@ Connexion par OTP (le code s'affiche dans la **console du backend**) :
 - ✅ **Seed de démo** (`npm run seed:demo`) : ~6 établissements, ~36 candidats,
   ~40 dossiers (tous statuts), ~20 diplômes (PDF/QR/hash réels), vérifications.
 - ✅ **Tests automatisés (Phase 8)** :
-  - Backend : `cd backend && npm test` — 49 tests. 27 tests d'intégration sur
+  - Backend : `cd backend && npm test` — 73 tests. 27 tests d'intégration sur
     une base dédiée `certiftogo_test` (recréée avant chaque exécution) couvrant
     auth OTP, RBAC, cycle de vie du dossier, certification, vérification
     publique, portefeuille candidat, admin et isolation inter-établissements ;
     8 tests du référentiel académique (règles métier portées par le schéma :
     année ouverte unique, sessions, mention réservée aux admis, historique
-    des inscriptions) ; 7 tests unitaires du service WhatsApp (`fetch` doublé,
+    des inscriptions) ; 24 tests des API du référentiel (RBAC, isolation
+    inter-établissements, transitions de statut, cohérence session/année,
+    validation) ; 7 tests unitaires du service WhatsApp (`fetch` doublé,
     aucun appel réseau) ; 7 tests du service de signature (dont le refus de
     démarrer en production sans `MINISTERE_SIGNING_SECRET`).
   - Blockchain : `cd blockchain && npm test` — 16 tests du contrat.
