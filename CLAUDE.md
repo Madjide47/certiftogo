@@ -285,8 +285,12 @@ Connexion par OTP (le code s'affiche dans la **console du backend**) :
     SQLSTATE PostgreSQL en erreurs métier, et le middleware d'erreurs sert de
     filet — **plus aucune contrainte violée ne remonte en 500**. Un
     identifiant qui n'est pas un UUID donne 404, plus 500.
-  - ⏳ *Pas encore d'interface : aucune page back-office ne consomme ces
-    endpoints.*
+  - Back-office : trois pages réelles branchées dans `config/pages.jsx` —
+    **Structure** et **Promotions** (rôle établissement), **Années
+    académiques** (rôle ministère), avec leurs entrées de sidebar.
+    La page Promotions gère les inscriptions et la saisie des résultats ;
+    l'interface ne propose que les transitions plausibles, le serveur reste
+    seul juge.
 - ✅ **Pages complémentaires** : ministère (tableau de bord, statistiques,
   annuaire établissements), candidat (paramètres), admin (configuration).
   **Plus aucun `PlaceholderPage` métier.**

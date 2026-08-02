@@ -14,12 +14,15 @@ export const LIBELLES_ROLES = {
 export const NAVIGATION_PAR_ROLE = {
   etablissement: [
     { libelle: 'Tableau de bord', chemin: '/', icone: 'dashboard' },
+    { libelle: 'Structure', chemin: '/structure', icone: 'account_tree' },
     { libelle: 'Candidats', chemin: '/candidats', icone: 'group' },
+    { libelle: 'Promotions', chemin: '/promotions', icone: 'groups' },
     { libelle: 'Dossiers', chemin: '/dossiers', icone: 'folder' },
     { libelle: 'Statistiques', chemin: '/statistiques', icone: 'bar_chart' },
   ],
   ministere: [
     { libelle: 'Tableau de bord', chemin: '/', icone: 'dashboard' },
+    { libelle: 'Années académiques', chemin: '/annees', icone: 'calendar_month' },
     { libelle: 'Dossiers reçus', chemin: '/dossiers-recus', icone: 'inbox' },
     { libelle: 'Diplômes certifiés', chemin: '/diplomes', icone: 'school' },
     { libelle: 'Établissements', chemin: '/etablissements', icone: 'account_balance' },

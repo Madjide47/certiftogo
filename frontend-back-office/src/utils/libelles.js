@@ -101,6 +101,92 @@ export const BADGE_STATUT_ETABLISSEMENT = {
   archive: 'bg-slate-100 text-slate-600',
 };
 
+// ── Référentiel académique ─────────────────────────────────────────
+export const LIBELLES_STATUT_ANNEE = {
+  preparation: 'En préparation',
+  ouverte: 'Ouverte',
+  cloturee: 'Clôturée',
+};
+
+export const BADGE_STATUT_ANNEE = {
+  preparation: 'bg-slate-100 text-slate-600',
+  ouverte: 'bg-emerald-100 text-emerald-700',
+  cloturee: 'bg-slate-200 text-slate-700',
+};
+
+export const LIBELLES_TYPE_SESSION = {
+  normale: 'Normale',
+  rattrapage: 'Rattrapage',
+  exceptionnelle: 'Exceptionnelle',
+};
+
+export const OPTIONS_TYPE_SESSION = Object.entries(LIBELLES_TYPE_SESSION).map(([value, label]) => ({
+  value,
+  label,
+}));
+
+export const LIBELLES_STATUT_STRUCTURE = {
+  active: 'Active',
+  archivee: 'Archivée',
+};
+
+export const BADGE_STATUT_STRUCTURE = {
+  active: 'bg-emerald-100 text-emerald-700',
+  archivee: 'bg-slate-100 text-slate-600',
+};
+
+export const LIBELLES_STATUT_PROMOTION = {
+  brouillon: 'Brouillon',
+  ouverte: 'Ouverte',
+  transmise: 'Transmise',
+  certifiee: 'Certifiée',
+  cloturee: 'Clôturée',
+};
+
+export const BADGE_STATUT_PROMOTION = {
+  brouillon: 'bg-slate-100 text-slate-600',
+  ouverte: 'bg-blue-100 text-blue-700',
+  transmise: 'bg-amber-100 text-amber-700',
+  certifiee: 'bg-togo-green/10 text-togo-green',
+  cloturee: 'bg-slate-200 text-slate-700',
+};
+
+/**
+ * Transitions proposées à l'écran — miroir de TRANSITIONS_PROMOTION côté
+ * backend. Le serveur reste seul juge : l'interface n'affiche que les
+ * actions plausibles, elle ne décide pas.
+ */
+export const ACTIONS_PROMOTION = {
+  brouillon: [{ statut: 'ouverte', libelle: 'Ouvrir' }],
+  ouverte: [
+    { statut: 'transmise', libelle: 'Transmettre au ministère' },
+    { statut: 'brouillon', libelle: 'Repasser en brouillon' },
+  ],
+  transmise: [{ statut: 'ouverte', libelle: 'Rouvrir' }],
+  certifiee: [{ statut: 'cloturee', libelle: 'Clôturer' }],
+  cloturee: [],
+};
+
+export const LIBELLES_STATUT_INSCRIPTION = {
+  inscrit: 'Inscrit',
+  admis: 'Admis',
+  ajourne: 'Ajourné',
+  abandon: 'Abandon',
+  exclu: 'Exclu',
+};
+
+export const BADGE_STATUT_INSCRIPTION = {
+  inscrit: 'bg-blue-100 text-blue-700',
+  admis: 'bg-emerald-100 text-emerald-700',
+  ajourne: 'bg-amber-100 text-amber-700',
+  abandon: 'bg-slate-100 text-slate-600',
+  exclu: 'bg-red-100 text-red-700',
+};
+
+export const OPTIONS_STATUT_INSCRIPTION = Object.entries(LIBELLES_STATUT_INSCRIPTION).map(
+  ([value, label]) => ({ value, label })
+);
+
 /** Extrait un message d'erreur lisible d'une erreur axios. */
 export function messageErreur(err, defaut = 'Une erreur est survenue.') {
   return err?.response?.data?.error?.message || defaut;

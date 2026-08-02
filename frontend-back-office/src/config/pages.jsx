@@ -7,6 +7,9 @@ import DashboardPage from '../pages/etablissement/DashboardPage.jsx';
 import CandidatsPage from '../pages/etablissement/CandidatsPage.jsx';
 import DossiersPage from '../pages/etablissement/DossiersPage.jsx';
 import StatistiquesPage from '../pages/etablissement/StatistiquesPage.jsx';
+import StructurePage from '../pages/etablissement/StructurePage.jsx';
+import PromotionsPage from '../pages/etablissement/PromotionsPage.jsx';
+import AnneesAcademiquesPage from '../pages/ministere/AnneesAcademiquesPage.jsx';
 import DossiersRecusPage from '../pages/ministere/DossiersRecusPage.jsx';
 import MinistereDiplomesPage from '../pages/ministere/DiplomesPage.jsx';
 import MinistereDashboardPage from '../pages/ministere/DashboardPage.jsx';
@@ -23,12 +26,15 @@ import ConfigurationPage from '../pages/admin/ConfigurationPage.jsx';
 export const PAGES_PAR_ROLE = {
   etablissement: {
     '/': DashboardPage,
+    '/structure': StructurePage,
     '/candidats': CandidatsPage,
+    '/promotions': PromotionsPage,
     '/dossiers': DossiersPage,
     '/statistiques': StatistiquesPage,
   },
   ministere: {
     '/': MinistereDashboardPage,
+    '/annees': AnneesAcademiquesPage,
     '/dossiers-recus': DossiersRecusPage,
     '/diplomes': MinistereDiplomesPage,
     '/etablissements': MinistereEtablissementsPage,
