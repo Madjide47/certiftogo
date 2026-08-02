@@ -58,7 +58,7 @@ Dernière mise à jour : 2 août 2026.
 | C-05 | Promotions (filière, niveau, année, session) | ✅ |
 | C-06 | Inscriptions historisées → parcours pluriannuel | ✅ |
 | C-07 | Cycle de vie de la promotion (brouillon → … → clôturée) | ✅ |
-| C-08 | **Date de délibération** sur la promotion | ⬜ |
+| C-08 | **Date de délibération** sur la promotion | ✅ |
 | C-09 | Saisie manuelle d'un étudiant | ✅ |
 | C-10 | **Import Excel d'une promotion entière** | ✅ |
 | C-11 | **Rapport d'import ligne à ligne** avec erreurs localisées | ✅ |
@@ -72,30 +72,30 @@ Dernière mise à jour : 2 août 2026.
 
 | # | Élément | Statut |
 |---|---|---|
-| D-01 | **Table `lots_transmission`** : horodatage, agent émetteur, établissement, promotion | ⬜ |
-| D-02 | **Transmission d'une promotion entière en un clic** | ⬜ *statut change, aucun dossier créé* |
-| D-03 | **Génération automatique des dossiers** à la transmission | ⬜ |
+| D-01 | **Table `lots_transmission`** : horodatage, agent émetteur, établissement, promotion | ✅ |
+| D-02 | **Transmission d'une promotion entière en un clic** | ✅ |
+| D-03 | **Génération automatique des dossiers** à la transmission | ✅ |
 | D-04 | **Écran de confirmation** « transmettre 250 étudiants ? » | ⬜ |
-| D-05 | Transmission de **données structurées**, jamais de PDF | ✅ *par construction* |
-| D-06 | **File d'attente du ministère par lot** (et non dossier par dossier) | ⬜ |
-| D-07 | **Rejet partiel** : le lot avance, les dossiers fautifs reviennent | ⬜ |
-| D-08 | Statut `partiellement_traite` sur un lot | ⬜ |
+| D-05 | Transmission de **données structurées**, jamais de PDF | ✅ |
+| D-06 | **File d'attente du ministère par lot** (et non dossier par dossier) | ✅ |
+| D-07 | **Rejet partiel** : le lot avance, les dossiers fautifs reviennent | ✅ |
+| D-08 | Statut `partiellement_traite` sur un lot | ✅ |
 
 ## E. Contrôles à la réception (ministère)
 
 | # | Élément | Statut |
 |---|---|---|
-| E-01 | Contrôle auto : champs obligatoires | ⬜ |
-| E-02 | Contrôle auto : doublons | ⬜ |
-| E-03 | Contrôle auto : cohérence des dates | ⬜ |
-| E-04 | Contrôle auto : établissement habilité | ⬜ *dépend de A-09* |
-| E-05 | Contrôle auto : diplôme autorisé pour cet établissement | ⬜ *dépend de A-09* |
-| E-06 | Contrôle auto : format du téléphone | ⬜ |
-| E-07 | Contrôle auto : cohérence de la promotion | ⬜ |
-| E-08 | Contrôle auto : format du matricule | ⬜ |
-| E-09 | **Détection d'anomalies statistiques** (ex. 250 étudiants nés la même année) | ⬜ |
-| E-10 | Tableau de synthèse d'un lot avant validation humaine | ⬜ |
-| E-11 | Validation officielle du lot | ⬜ |
+| E-01 | Contrôle auto : champs obligatoires | ✅ |
+| E-02 | Contrôle auto : doublons | ✅ |
+| E-03 | Contrôle auto : cohérence des dates | ✅ |
+| E-04 | Contrôle auto : établissement habilité | ✅ |
+| E-05 | Contrôle auto : diplôme autorisé pour cet établissement | ✅ |
+| E-06 | Contrôle auto : format du téléphone | ✅ |
+| E-07 | Contrôle auto : cohérence de la promotion | ✅ |
+| E-08 | Contrôle auto : format du matricule | ✅ |
+| E-09 | **Détection d'anomalies statistiques** (ex. 250 étudiants nés la même année) | ✅ |
+| E-10 | Tableau de synthèse d'un lot avant validation humaine | ✅ |
+| E-11 | Validation officielle du lot | ✅ |
 
 ## F. Certification et diplôme
 
@@ -298,9 +298,9 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 44 |
+| ✅ fait et testé | 63 |
 | 🔨 partiel ou en cours | 13 |
-| ⬜ à faire | 117 |
+| ⬜ à faire | 98 |
 | **Total** | **174** |
 
 ## Ordre d'implémentation proposé

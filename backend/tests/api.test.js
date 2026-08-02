@@ -833,10 +833,19 @@ describe('API promotions — cycle de vie et inscriptions', () => {
     await api().patch(`/api/promotions/${promotionId}/statut`).set(auth(t)).send({ statut: 'ouverte' });
 
     const res = await api()
+      .post(`/api/promotions/${promotionId}/transmettre`)
+      .set(auth(t)).send({ date_deliberation: '2025-07-15' });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'PROMOTION_VIDE');
+  });
+
+  test('le statut « transmise » n\'est pas atteignable par un simple PATCH', async () => {
+    const t = await login('+22890000002');
+    const res = await api()
       .patch(`/api/promotions/${promotionId}/statut`)
       .set(auth(t)).send({ statut: 'transmise' });
     assert.equal(res.status, 409);
-    assert.equal(res.body.error.code, 'PROMOTION_VIDE');
+    assert.equal(res.body.error.code, 'TRANSMISSION_DEDIEE');
   });
 
   test('n\'inscrit que les étudiants de son propre établissement', async () => {
@@ -889,10 +898,10 @@ describe('API promotions — cycle de vie et inscriptions', () => {
     const t = await login('+22890000002');
 
     const transmise = await api()
-      .patch(`/api/promotions/${promotionId}/statut`)
-      .set(auth(t)).send({ statut: 'transmise' });
-    assert.equal(transmise.status, 200);
-    assert.equal(transmise.body.data.promotion.effectif_inscrit, 1);
+      .post(`/api/promotions/${promotionId}/transmettre`)
+      .set(auth(t)).send({ date_deliberation: '2025-07-15' });
+    assert.equal(transmise.status, 201);
+    assert.equal(transmise.body.data.transmis, 1, 'seul l\'étudiant admis est transmis');
 
     const ajout = await api()
       .post(`/api/promotions/${promotionId}/inscriptions`)
@@ -1435,5 +1444,279 @@ describe('Import Excel — promotion entière', () => {
     const res = await envoyer(t, buffer);
     assert.equal(res.status, 404);
     assert.equal(res.body.error.code, 'PROMOTION_INTROUVABLE');
+  });
+});
+
+// ── Transmission par lot et instruction par le ministère ────────
+// Le chaînon qui manquait : la promotion passait « transmise » sans que
+// le ministère ne reçoive quoi que ce soit.
+describe('Lot de transmission — émission, contrôles, rejet partiel', () => {
+  const FILIERE_GL = '70000000-0000-0000-0000-000000000001';
+  const FILIERE_SR = '70000000-0000-0000-0000-000000000002';
+  const FACULTE_CII = '60000000-0000-0000-0000-000000000001';
+  const ANNEE = '50000000-0000-0000-0000-000000000001';
+  const DELIBERATION = '2025-07-15';
+
+  let promoGL;
+  let lotGL;
+  let dossiersGL;
+
+  /** Crée une promotion peuplée, avec les résultats demandés. */
+  async function preparerPromotion(token, { filiere_id, niveau, libelle, etudiants }) {
+    const promo = await api().post('/api/promotions').set(auth(token)).send({
+      filiere_id, annee_id: ANNEE, libelle, niveau,
+    });
+    assert.equal(promo.status, 201, JSON.stringify(promo.body));
+    const promotionId = promo.body.data.promotion.id;
+
+    for (const etudiant of etudiants) {
+      const candidat = await api().post('/api/candidats').set(auth(token)).send({
+        numero_etudiant: etudiant.matricule,
+        nom: etudiant.nom,
+        prenom: etudiant.prenom,
+        telephone: etudiant.telephone,
+        date_naissance: etudiant.date_naissance || '2000-01-01',
+      });
+      assert.equal(candidat.status, 201, JSON.stringify(candidat.body));
+
+      const inscription = await api()
+        .post(`/api/promotions/${promotionId}/inscriptions`)
+        .set(auth(token))
+        .send({ candidat_id: candidat.body.data.candidat.id });
+      assert.equal(inscription.status, 201);
+
+      await api()
+        .put(`/api/promotions/${promotionId}/inscriptions/${inscription.body.data.inscription.id}`)
+        .set(auth(token))
+        .send({ statut: etudiant.statut, mention: etudiant.mention, moyenne: etudiant.moyenne });
+    }
+
+    await api()
+      .patch(`/api/promotions/${promotionId}/statut`)
+      .set(auth(token))
+      .send({ statut: 'ouverte' });
+    return promotionId;
+  }
+
+  test('ne transmet que les étudiants admis et crée un dossier par étudiant', async () => {
+    const t = await login('+22890000002');
+
+    promoGL = await preparerPromotion(t, {
+      filiere_id: FILIERE_GL,
+      niveau: 2,
+      libelle: 'Licence 2 Génie Logiciel — lot',
+      etudiants: [
+        { matricule: 'LOT-001', nom: 'ADJO', prenom: 'Yawa', telephone: '+22892000001', statut: 'admis', mention: 'bien', moyenne: 14 },
+        { matricule: 'LOT-002', nom: 'BEDJA', prenom: 'Komi', telephone: '+22892000002', statut: 'admis', mention: 'assez_bien', moyenne: 12 },
+        { matricule: 'LOT-003', nom: 'CODJO', prenom: 'Ama', telephone: '+22892000003', statut: 'ajourne', moyenne: 8 },
+      ],
+    });
+
+    const res = await api()
+      .post(`/api/promotions/${promoGL}/transmettre`)
+      .set(auth(t))
+      .send({ date_deliberation: DELIBERATION });
+
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    assert.equal(res.body.data.transmis, 2, 'les deux admis');
+    assert.equal(res.body.data.non_transmis, 1, 'l\'ajourné reste en dehors');
+    assert.match(res.body.data.lot.reference, /^LOT-\d{4}-\d{5}$/);
+    assert.equal(res.body.data.lot.statut, 'transmis');
+    lotGL = res.body.data.lot.id;
+
+    const promo = await api().get(`/api/promotions/${promoGL}`).set(auth(t));
+    assert.equal(promo.body.data.promotion.statut, 'transmise');
+  });
+
+  test('refuse une transmission sans date de délibération', async () => {
+    const t = await login('+22890000002');
+    const promo = await preparerPromotion(t, {
+      filiere_id: FILIERE_SR, niveau: 1, libelle: 'L1 SR — sans délibération',
+      etudiants: [
+        { matricule: 'LOT-010', nom: 'SANS', prenom: 'Date', telephone: '+22892000010', statut: 'admis', mention: 'bien' },
+      ],
+    });
+
+    const res = await api().post(`/api/promotions/${promo}/transmettre`).set(auth(t)).send({});
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'DELIBERATION_REQUISE');
+  });
+
+  test('refuse une transmission quand aucun étudiant n\'est admis', async () => {
+    const t = await login('+22890000002');
+    const promo = await preparerPromotion(t, {
+      filiere_id: FILIERE_SR, niveau: 2, libelle: 'L2 SR — tous ajournés',
+      etudiants: [
+        { matricule: 'LOT-020', nom: 'AJOURNE', prenom: 'Un', telephone: '+22892000020', statut: 'ajourne', moyenne: 7 },
+      ],
+    });
+
+    const res = await api()
+      .post(`/api/promotions/${promo}/transmettre`)
+      .set(auth(t)).send({ date_deliberation: DELIBERATION });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'AUCUN_ADMIS');
+  });
+
+  test('le lot apparaît dans la file du ministère, pas les dossiers isolés', async () => {
+    const t = await login('+22890000001');
+
+    const file = await api().get('/api/ministere/lots?statut=transmis').set(auth(t));
+    assert.equal(file.status, 200);
+    const lot = file.body.data.lots.find((l) => l.id === lotGL);
+    assert.ok(lot, 'le lot est en attente');
+    assert.equal(lot.effectif, 2);
+    assert.equal(lot.dossiers_total, 2);
+    assert.equal(lot.etablissement_code, 'IAI001');
+    assert.equal(lot.agent_nom, 'KOUASSI', 'traçabilité nominative de l\'émetteur');
+  });
+
+  test('les contrôles automatiques passent sur un lot conforme', async () => {
+    const t = await login('+22890000001');
+
+    const detail = await api().get(`/api/ministere/lots/${lotGL}`).set(auth(t));
+    assert.equal(detail.status, 200);
+    dossiersGL = detail.body.data.dossiers;
+
+    const { controles } = detail.body.data;
+    assert.equal(controles.synthese.dossiers_recus, 2);
+    assert.equal(controles.synthese.dossiers_conformes, 2);
+    assert.equal(controles.bloquants.length, 0, JSON.stringify(controles.bloquants));
+    assert.deepEqual(controles.synthese.repartition_mentions, { bien: 1, assez_bien: 1 });
+  });
+
+  test('signale un établissement non habilité pour le type de diplôme', async () => {
+    const tEtab = await login('+22890000002');
+    const tMin = await login('+22890000001');
+
+    // L'IAI est habilité pour licence et master, pas pour doctorat.
+    const filiere = await api().post('/api/structure/filieres').set(auth(tEtab)).send({
+      faculte_id: FACULTE_CII, nom: 'Doctorat Informatique', code: 'DOC',
+      type_diplome: 'doctorat', duree_annees: 3,
+    });
+    assert.equal(filiere.status, 201);
+
+    const promo = await preparerPromotion(tEtab, {
+      filiere_id: filiere.body.data.filiere.id, niveau: 3, libelle: 'Doctorat — non habilité',
+      etudiants: [
+        { matricule: 'LOT-030', nom: 'DOCTEUR', prenom: 'Ami', telephone: '+22892000030', statut: 'admis', mention: 'tres_bien' },
+      ],
+    });
+
+    const transmission = await api()
+      .post(`/api/promotions/${promo}/transmettre`)
+      .set(auth(tEtab)).send({ date_deliberation: DELIBERATION });
+    assert.equal(transmission.status, 201, 'la transmission passe : le contrôle est côté ministère');
+
+    const detail = await api()
+      .get(`/api/ministere/lots/${transmission.body.data.lot.id}`)
+      .set(auth(tMin));
+    const { bloquants } = detail.body.data.controles;
+    assert.equal(bloquants.length, 1);
+    assert.match(bloquants[0].erreurs.join(' '), /non habilité/);
+
+    const validation = await api()
+      .post(`/api/ministere/lots/${transmission.body.data.lot.id}/valider`)
+      .set(auth(tMin)).send({});
+    assert.equal(validation.status, 409);
+    assert.equal(validation.body.error.code, 'AUCUN_DOSSIER_VALIDABLE');
+  });
+
+  test('valide le lot en rejetant une partie des dossiers', async () => {
+    const t = await login('+22890000001');
+
+    const examen = await api().post(`/api/ministere/lots/${lotGL}/examiner`).set(auth(t));
+    assert.equal(examen.status, 200);
+    assert.equal(examen.body.data.lot.statut, 'en_examen');
+
+    const aRejeter = dossiersGL[0];
+    const res = await api()
+      .post(`/api/ministere/lots/${lotGL}/valider`)
+      .set(auth(t))
+      .send({ dossiers_rejetes: [{ dossier_id: aRejeter.id, motif: 'Relevé de notes manquant.' }] });
+
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.data.valides, 1);
+    assert.equal(res.body.data.rejetes, 1);
+    assert.equal(
+      res.body.data.lot.statut,
+      'partiellement_traite',
+      'le lot avance sans être bloqué par un seul dossier'
+    );
+
+    const { rows } = await pool.query(`SELECT statut, motif_rejet FROM dossiers WHERE id = $1`, [
+      aRejeter.id,
+    ]);
+    assert.equal(rows[0].statut, 'rejete');
+    assert.match(rows[0].motif_rejet, /Relevé de notes/);
+
+    const { rows: valides } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM dossiers WHERE lot_id = $1 AND statut = 'valide'`,
+      [lotGL]
+    );
+    assert.equal(valides[0].n, 1, 'le dossier conforme est validé et certifiable');
+  });
+
+  test('un lot déjà traité ne se réinstruit pas', async () => {
+    const t = await login('+22890000001');
+    const res = await api()
+      .post(`/api/ministere/lots/${lotGL}/valider`)
+      .set(auth(t))
+      .send({ dossiers_rejetes: [{ dossier_id: dossiersGL[1].id, motif: 'Trop tard.' }] });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'LOT_NON_INSTRUISABLE');
+  });
+
+  test('le rejet complet renvoie la promotion en correction', async () => {
+    const tEtab = await login('+22890000002');
+    const tMin = await login('+22890000001');
+
+    const promo = await preparerPromotion(tEtab, {
+      filiere_id: FILIERE_SR, niveau: 3, libelle: 'L3 SR — à rejeter',
+      etudiants: [
+        { matricule: 'LOT-040', nom: 'REJET', prenom: 'Complet', telephone: '+22892000040', statut: 'admis', mention: 'passable' },
+      ],
+    });
+    const transmission = await api()
+      .post(`/api/promotions/${promo}/transmettre`)
+      .set(auth(tEtab)).send({ date_deliberation: DELIBERATION });
+    const lotId = transmission.body.data.lot.id;
+
+    const sansMotif = await api().post(`/api/ministere/lots/${lotId}/rejeter`).set(auth(tMin)).send({});
+    assert.equal(sansMotif.status, 400);
+    assert.equal(sansMotif.body.error.code, 'MOTIF_REQUIS');
+
+    const rejet = await api()
+      .post(`/api/ministere/lots/${lotId}/rejeter`)
+      .set(auth(tMin)).send({ motif: 'Procès-verbal de délibération non conforme.' });
+    assert.equal(rejet.status, 200);
+    assert.equal(rejet.body.data.lot.statut, 'rejete');
+
+    // La promotion redevient modifiable pour correction puis retransmission.
+    const apres = await api().get(`/api/promotions/${promo}`).set(auth(tEtab));
+    assert.equal(apres.body.data.promotion.statut, 'ouverte');
+
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM dossiers WHERE lot_id = $1 AND statut = 'rejete'`,
+      [lotId]
+    );
+    assert.equal(rows[0].n, 1);
+  });
+
+  test('l\'établissement suit ses lots, un autre ne les voit pas', async () => {
+    const mien = await login('+22890000002');
+    const autre = await login('+22890000200');
+
+    const liste = await api().get('/api/lots').set(auth(mien));
+    assert.equal(liste.status, 200);
+    assert.ok(liste.body.data.lots.some((l) => l.id === lotGL));
+
+    const detail = await api().get(`/api/lots/${lotGL}`).set(auth(mien));
+    assert.equal(detail.status, 200);
+    assert.equal(detail.body.data.dossiers.length, 2);
+
+    const intrus = await api().get(`/api/lots/${lotGL}`).set(auth(autre));
+    assert.equal(intrus.status, 404);
+    assert.equal(intrus.body.error.code, 'LOT_INTROUVABLE');
   });
 });

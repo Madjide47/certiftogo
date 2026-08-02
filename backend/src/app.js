@@ -24,6 +24,7 @@ import demandeRoutes from './routes/demande.routes.js';
 import referentielRoutes from './routes/referentiel.routes.js';
 import structureRoutes from './routes/structure.routes.js';
 import promotionRoutes from './routes/promotion.routes.js';
+import lotRoutes from './routes/lot.routes.js';
 import { UPLOADS_DIR, UPLOADS_URL_PREFIX, assurerDossierUploads } from './config/storage.js';
 
 dotenv.config();
@@ -73,6 +74,7 @@ app.use('/api/demandes-integration', demandeRoutes);
 app.use('/api/referentiel', referentielRoutes);
 app.use('/api/structure', structureRoutes);
 app.use('/api/promotions', promotionRoutes);
+app.use('/api/lots', lotRoutes);
 
 // ── Gestion des erreurs (toujours en dernier) ──────────────────────
 app.use(nonTrouve);

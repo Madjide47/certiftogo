@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import * as promotionController from '../controllers/promotion.controller.js';
+import * as lotController from '../controllers/lot.controller.js';
 import { authJWT } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/role.middleware.js';
 import { ErreurApp } from '../utils/errors.js';
@@ -62,5 +63,9 @@ router.delete('/:id/inscriptions/:inscriptionId', promotionController.desinscrir
 
 // Import d'une promotion entière. `?simulation=true` valide sans écrire.
 router.post('/:id/import', recevoirFichier, promotionController.importer);
+
+// Transmission de la promotion entière au ministère : génère un lot et
+// un dossier par étudiant admis.
+router.post('/:id/transmettre', lotController.transmettre);
 
 export default router;

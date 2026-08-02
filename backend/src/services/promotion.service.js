@@ -232,21 +232,22 @@ export async function changerStatut(id, etablissement_id, statut) {
   }
   if (cible === promotion.statut) return promotion;
 
+  // « transmise » n'est pas un simple changement d'état : la transmission
+  // génère un lot et un dossier par étudiant admis. Y passer par ce point
+  // d'entrée laisserait une promotion transmise sans rien côté ministère.
+  if (cible === 'transmise') {
+    throw new ErreurApp(
+      409,
+      'TRANSMISSION_DEDIEE',
+      'Utilisez POST /api/promotions/:id/transmettre : la transmission crée un lot et les dossiers.'
+    );
+  }
+
   if (!TRANSITIONS_PROMOTION[promotion.statut].includes(cible)) {
     throw new ErreurApp(
       409,
       'TRANSITION_INTERDITE',
       `Une promotion « ${promotion.statut} » ne peut pas passer à « ${cible} ».`
-    );
-  }
-
-  // Transmettre une promotion vide n'a pas de sens : le ministère
-  // recevrait un lot sans aucun étudiant à instruire.
-  if (cible === 'transmise' && promotion.effectif_inscrit === 0) {
-    throw new ErreurApp(
-      409,
-      'PROMOTION_VIDE',
-      'Impossible de transmettre une promotion ne comptant aucun étudiant inscrit.'
     );
   }
 

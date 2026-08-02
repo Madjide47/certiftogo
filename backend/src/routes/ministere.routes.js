@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import * as ministereController from '../controllers/ministere.controller.js';
 import * as gouvernanceController from '../controllers/gouvernance.controller.js';
+import * as lotController from '../controllers/lot.controller.js';
 import { authJWT } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/role.middleware.js';
 
@@ -32,6 +33,14 @@ router.post('/etablissements', gouvernanceController.creerEtablissement);
 router.get('/etablissements/:id/habilitations', gouvernanceController.listerHabilitations);
 router.post('/etablissements/:id/habilitations', gouvernanceController.accorderHabilitation);
 router.patch('/habilitations/:id/statut', gouvernanceController.changerStatutHabilitation);
+
+// ── Lots de transmission : la file d'attente est faite de lots, pas de
+// dossiers isolés. L'instruction porte sur le lot, la décision sur le dossier.
+router.get('/lots', lotController.lister);
+router.get('/lots/:id', lotController.detailler);
+router.post('/lots/:id/examiner', lotController.examiner);
+router.post('/lots/:id/valider', lotController.valider);
+router.post('/lots/:id/rejeter', lotController.rejeter);
 
 router.get('/demandes', gouvernanceController.listerDemandes);
 router.post('/demandes/:id/examiner', gouvernanceController.examinerDemande);
