@@ -2043,6 +2043,112 @@ describe('Lot de transmission — émission, contrôles, rejet partiel', () => {
   });
 });
 
+// ── Tableaux de bord ───────────────────────────────────────────
+// Un seul chemin, quatre vues : chaque rôle reçoit ses indicateurs.
+describe('Tableaux de bord par rôle', () => {
+  test('le ministère voit les volumes, le classement et le coût blockchain', async () => {
+    const t = await login('+22890000001');
+    const res = await api().get('/api/tableau-bord').set(auth(t));
+    assert.equal(res.status, 200);
+
+    const { tableau } = res.body.data;
+    assert.equal(tableau.role, 'ministere');
+    assert.ok(tableau.certifications.total > 0);
+    assert.ok(tableau.certifications.ce_mois >= 0);
+
+    assert.ok(Array.isArray(tableau.top_etablissements));
+    assert.ok(tableau.top_etablissements.length > 0, 'le classement est alimenté');
+    assert.ok(tableau.top_etablissements[0].code, 'identifié par son code officiel');
+    // Le classement est bien ordonné.
+    const volumes = tableau.top_etablissements.map((e) => e.diplomes);
+    assert.deepEqual(volumes, [...volumes].sort((a, b) => b - a));
+
+    assert.ok(tableau.delai_certification.echantillon > 0, 'délai mesuré sur des cas réels');
+    assert.ok(Number(tableau.rejet.total_instruits) > 0);
+    assert.ok(Number(tableau.cout_blockchain.gas_total) > 0, 'le gaz consommé est chiffré');
+  });
+
+  test('l\'établissement voit ses lots et les motifs de rejet à corriger', async () => {
+    const t = await login('+22890000002');
+    const res = await api().get('/api/tableau-bord').set(auth(t));
+    assert.equal(res.status, 200);
+
+    const { tableau } = res.body.data;
+    assert.equal(tableau.role, 'etablissement');
+    assert.ok(tableau.lots.par_statut, 'répartition des lots transmis');
+    assert.ok(tableau.promotions, 'répartition des promotions');
+    assert.ok(Array.isArray(tableau.motifs_rejet));
+    assert.ok(
+      tableau.motifs_rejet.some((m) => /Relevé de notes|Procès-verbal/.test(m.motif)),
+      'les motifs réels remontent, agrégés'
+    );
+  });
+
+  test('le candidat voit combien son diplôme a été consulté', async () => {
+    const t = await login('+22890000011');
+    const res = await api().get('/api/tableau-bord').set(auth(t));
+    assert.equal(res.status, 200);
+
+    const { tableau } = res.body.data;
+    assert.equal(tableau.role, 'candidat');
+    assert.ok(tableau.total_diplomes >= 1);
+    assert.equal(typeof tableau.total_verifications, 'number');
+    assert.ok(tableau.diplomes[0].reference);
+  });
+
+  test('l\'administrateur voit la santé du système et la file d\'ancrage', async () => {
+    const t = await login('+22890000003');
+    const res = await api().get('/api/tableau-bord').set(auth(t));
+    assert.equal(res.status, 200);
+
+    const { tableau } = res.body.data;
+    assert.equal(tableau.role, 'admin_systeme');
+    assert.ok(tableau.sante.comptes_actifs > 0);
+    assert.ok(tableau.sante.sessions_ouvertes >= 1, 'la session courante est comptée');
+    assert.ok(tableau.sante.taille_base_mo > 0);
+
+    // Métriques d'API mesurées par le middleware.
+    assert.ok(tableau.api.requetes_total > 0);
+    assert.ok(tableau.api.temps_reponse_ms.median !== null);
+    assert.ok(Array.isArray(tableau.api.routes_les_plus_appelees));
+
+    assert.equal(typeof tableau.blockchain.taux_succes_pourcent, 'number');
+    assert.ok(tableau.file_ancrage, 'état de la file');
+  });
+
+  test('cloisonne : deux établissements ne voient pas les mêmes chiffres', async () => {
+    const iai = await login('+22890000002');
+    const autre = await login('+22890000200');
+
+    const a = (await api().get('/api/tableau-bord').set(auth(iai))).body.data.tableau;
+    const b = (await api().get('/api/tableau-bord').set(auth(autre))).body.data.tableau;
+
+    assert.notDeepEqual(a.lots.par_statut, b.lots.par_statut);
+    assert.equal(Object.keys(b.lots.par_statut).length, 0, 'aucun lot transmis par cet établissement');
+  });
+
+  test('exporte le tableau de bord en CSV', async () => {
+    const t = await login('+22890000001');
+    const res = await api()
+      .get('/api/tableau-bord/export')
+      .set(auth(t))
+      .responseType('blob');
+    assert.equal(res.status, 200);
+    assert.match(res.headers['content-type'], /text\/csv/);
+
+    const csv = res.body.toString('utf8');
+    assert.match(csv.split('\n')[0], /"indicateur","valeur"/);
+    assert.match(csv, /certifications\.total/);
+  });
+
+  test('borne la fenêtre d\'analyse demandée', async () => {
+    const t = await login('+22890000002');
+    const res = await api().get('/api/tableau-bord?jours=99999').set(auth(t));
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.tableau.fenetre_jours, 365, 'plafonnée à un an');
+  });
+});
+
 // ── Sessions et anti-force brute ───────────────────────────────
 describe('Sécurité — sessions révocables et OTP', () => {
   const AGENT = '+22890000002';

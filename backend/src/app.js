@@ -27,6 +27,8 @@ import promotionRoutes from './routes/promotion.routes.js';
 import lotRoutes from './routes/lot.routes.js';
 import { journalRouter, corbeilleRouter } from './routes/journal.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
+import tableauBordRoutes from './routes/tableau-bord.routes.js';
+import { metriques } from './middlewares/metriques.middleware.js';
 import { contexteRequete } from './config/contexte.js';
 import { UPLOADS_DIR, UPLOADS_URL_PREFIX, assurerDossierUploads } from './config/storage.js';
 
@@ -46,6 +48,8 @@ app.use(cors({ origin: originsAutorisees, credentials: true }));
 // Contexte de requête : transporte auteur, IP et user-agent jusqu'aux
 // services, sans polluer leurs signatures. Doit précéder les routes.
 app.set('trust proxy', 1);
+// Mesure des temps de réponse : doit envelopper les routes, donc venir tôt.
+app.use(metriques);
 app.use(contexteRequete);
 
 app.use(express.json());
@@ -86,6 +90,7 @@ app.use('/api/lots', lotRoutes);
 app.use('/api/journal', journalRouter);
 app.use('/api/corbeille', corbeilleRouter);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/tableau-bord', tableauBordRoutes);
 
 // ── Gestion des erreurs (toujours en dernier) ──────────────────────
 app.use(nonTrouve);

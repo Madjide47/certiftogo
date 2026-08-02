@@ -180,20 +180,20 @@ Dernière mise à jour : 2 août 2026.
 
 | # | Élément | Statut |
 |---|---|---|
-| K-01 | Ministère : total certifiés, aujourd'hui / semaine / mois | 🔨 *stats partielles* |
-| K-02 | Ministère : **top 10 des établissements les plus actifs** | ⬜ |
-| K-03 | Ministère : **délai moyen soumission → certification** | ⬜ |
-| K-04 | Ministère : taux de rejet | 🔨 |
-| K-05 | Ministère : répartition par filière et type de diplôme | 🔨 |
-| K-06 | Ministère : **coût gas cumulé** | ⬜ |
-| K-07 | Ministère : vérifications publiques par jour | ⬜ |
-| K-08 | Établissement : promotions transmises / en attente / rejetées | ⬜ |
-| K-09 | Établissement : délai moyen avant certification | ⬜ |
-| K-10 | Établissement : **motifs de rejet agrégés** | ⬜ |
-| K-11 | Candidat : nombre de vérifications de ses diplômes | ⬜ |
-| K-12 | Candidat : **alertes de consultation** | ⬜ |
-| K-13 | Admin : santé système, taux de succès blockchain, taille de file, temps de réponse, charge base | ⬜ |
-| K-14 | Exports et rapports planifiés | ⬜ |
+| K-01 | Ministère : total certifiés, aujourd'hui / semaine / mois | ✅ |
+| K-02 | Ministère : **top 10 des établissements les plus actifs** | ✅ |
+| K-03 | Ministère : **délai moyen soumission → certification** | ✅ |
+| K-04 | Ministère : taux de rejet | ✅ |
+| K-05 | Ministère : répartition par filière et type de diplôme | ✅ |
+| K-06 | Ministère : **coût gas cumulé** | ✅ |
+| K-07 | Ministère : vérifications publiques par jour | ✅ |
+| K-08 | Établissement : promotions transmises / en attente / rejetées | ✅ |
+| K-09 | Établissement : délai moyen avant certification | ✅ |
+| K-10 | Établissement : **motifs de rejet agrégés** | ✅ |
+| K-11 | Candidat : nombre de vérifications de ses diplômes | ✅ |
+| K-12 | Candidat : **alertes de consultation** | 🔨 *compteur exposé, alerte à brancher* |
+| K-13 | Admin : santé système, taux de succès blockchain, taille de file, temps de réponse, charge base | ✅ |
+| K-14 | Exports et rapports planifiés | ✅ |
 
 ## L. Sécurité
 
@@ -298,9 +298,9 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 108 |
+| ✅ fait et testé | 121 |
 | 🔨 partiel ou en cours | 17 |
-| ⬜ à faire | 49 |
+| ⬜ à faire | 36 |
 | **Total** | **174** |
 
 ## Ordre d'implémentation proposé
