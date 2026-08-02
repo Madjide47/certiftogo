@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────
 import { query } from '../config/database.js';
 
-const COLONNES = `id, numero_etudiant, nom, prenom, date_naissance, lieu_naissance,
+const COLONNES = `id, personne_id, numero_etudiant, nom, prenom, date_naissance, lieu_naissance,
                   sexe, telephone, email, etablissement_id, date_creation`;
 
 /**
@@ -74,11 +74,12 @@ export async function numeroExiste(etablissement_id, numero_etudiant, exclureId 
 export async function creer(data) {
   const { rows } = await query(
     `INSERT INTO candidats
-       (numero_etudiant, nom, prenom, date_naissance, lieu_naissance,
+       (personne_id, numero_etudiant, nom, prenom, date_naissance, lieu_naissance,
         sexe, telephone, email, etablissement_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING ${COLONNES}`,
     [
+      data.personne_id,
       data.numero_etudiant,
       data.nom,
       data.prenom,

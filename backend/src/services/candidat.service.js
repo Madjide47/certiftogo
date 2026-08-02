@@ -3,6 +3,8 @@
 // Contrôle l'appartenance à l'établissement et la validation.
 // ─────────────────────────────────────────────────────────────
 import * as candidatModel from '../models/candidat.model.js';
+import * as personneModel from '../models/personne.model.js';
+import * as utilisateurModel from '../models/utilisateur.model.js';
 import { ErreurApp } from '../utils/errors.js';
 import { nettoyerTexte, estEmailValide, estDansEnum, SEXES } from '../utils/validators.js';
 
@@ -48,6 +50,40 @@ function validerDonnees(donnees) {
   };
 }
 
+/**
+ * Rattache la fiche à une personne : on réutilise l'identité existante si
+ * le numéro est déjà connu, sinon on en crée une. C'est ce qui permet à un
+ * diplômé de deux établissements de n'avoir qu'un seul portefeuille.
+ */
+async function resoudrePersonne(data) {
+  if (data.telephone) {
+    const existante = await personneModel.trouverParTelephone(data.telephone);
+    if (existante) return existante;
+  }
+  return personneModel.creer(data);
+}
+
+/**
+ * Crée le compte de connexion, désactivé.
+ * Décision métier : le compte naît avec la saisie mais reste fermé tant
+ * qu'aucun diplôme n'est certifié — la certification l'active. Cela évite
+ * de créer des milliers de comptes pendant une certification de masse.
+ */
+async function assurerCompte(personne) {
+  if (!personne.telephone) return null; // sans numéro, pas de connexion possible
+  const existant = await utilisateurModel.trouverParTelephone(personne.telephone);
+  if (existant) return existant;
+
+  return utilisateurModel.creer({
+    nom: personne.nom,
+    prenom: personne.prenom,
+    telephone: personne.telephone,
+    role: 'candidat',
+    personne_id: personne.id,
+    actif: false,
+  });
+}
+
 /** Crée un candidat pour l'établissement courant. */
 export async function creer(etablissement_id, donnees) {
   const data = validerDonnees(donnees);
@@ -56,7 +92,10 @@ export async function creer(etablissement_id, donnees) {
     throw new ErreurApp(409, 'NUMERO_DUPLIQUE', 'Ce numéro étudiant existe déjà.');
   }
 
-  return candidatModel.creer({ ...data, etablissement_id });
+  const personne = await resoudrePersonne(data);
+  await assurerCompte(personne);
+
+  return candidatModel.creer({ ...data, personne_id: personne.id, etablissement_id });
 }
 
 /** Met à jour un candidat de l'établissement courant. */

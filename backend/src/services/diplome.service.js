@@ -145,6 +145,20 @@ export async function certifier(dossier_id, ministere_id) {
       client
     );
     await dossierModel.definirStatut(dossier_id, 'certifie', client);
+
+    // Le compte du diplômé, créé fermé à la saisie, s'ouvre ici : le
+    // diplôme est désormais officiel, il a quelque chose à consulter.
+    await client.query(
+      `UPDATE utilisateurs u
+          SET actif = TRUE
+         FROM candidats c
+        WHERE c.id = $1
+          AND u.personne_id = c.personne_id
+          AND u.role = 'candidat'
+          AND u.actif = FALSE`,
+      [dossier.candidat_id]
+    );
+
     return cree;
   });
 

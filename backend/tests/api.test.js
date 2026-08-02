@@ -888,3 +888,121 @@ describe('API promotions — cycle de vie et inscriptions', () => {
     assert.equal(res.body.error.code, 'CANDIDAT_INTROUVABLE');
   });
 });
+
+// ── Identité nationale : une personne, plusieurs établissements ─
+// C'est le cas que l'ancien modèle rendait impossible : un diplômé de deux
+// établissements ne pouvait pas voir ses deux diplômes au même endroit.
+describe('Identité nationale et portefeuille multi-établissements', () => {
+  const TEL_KOFFI = '+22890000011';
+  const TEL_NOUVEAU = '+22890000777';
+  let ficheKoffiEtabB;
+  let ficheNouveau;
+
+  test('regroupe sous une même personne deux fiches d\'établissements différents', async () => {
+    const tB = await login('+22890000200'); // agent de l'établissement B
+
+    const res = await api().post('/api/candidats').set(auth(tB)).send({
+      numero_etudiant: 'EST-2024-001',
+      nom: 'AGBEKO',
+      prenom: 'Koffi',
+      telephone: TEL_KOFFI, // même numéro que sa fiche IAI
+      date_naissance: '2000-03-15',
+    });
+    assert.equal(res.status, 201);
+    ficheKoffiEtabB = res.body.data.candidat.id;
+
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS fiches, COUNT(DISTINCT personne_id)::int AS personnes
+         FROM candidats WHERE telephone = $1`,
+      [TEL_KOFFI]
+    );
+    assert.equal(rows[0].fiches, 2, 'deux fiches étudiant');
+    assert.equal(rows[0].personnes, 1, 'mais une seule personne');
+  });
+
+  test('crée le compte de connexion désactivé dès la saisie', async () => {
+    const tB = await login('+22890000200');
+
+    const res = await api().post('/api/candidats').set(auth(tB)).send({
+      numero_etudiant: 'EST-2024-002',
+      nom: 'TCHALLA',
+      prenom: 'Essi',
+      telephone: TEL_NOUVEAU,
+    });
+    assert.equal(res.status, 201);
+    ficheNouveau = res.body.data.candidat.id;
+
+    const { rows } = await pool.query(
+      `SELECT actif, role FROM utilisateurs WHERE telephone = $1`,
+      [TEL_NOUVEAU]
+    );
+    assert.equal(rows.length, 1, 'un compte a été créé');
+    assert.equal(rows[0].role, 'candidat');
+    assert.equal(rows[0].actif, false, 'mais il est fermé');
+
+    // Tant qu'aucun diplôme n'est certifié, la connexion est refusée.
+    const otp = await api().post('/api/auth/request-otp').send({ telephone: TEL_NOUVEAU });
+    assert.equal(otp.status, 403);
+    assert.equal(otp.body.error.code, 'COMPTE_INACTIF');
+  });
+
+  test('la certification ouvre le compte du diplômé', async () => {
+    const tB = await login('+22890000200');
+    const tMin = await login('+22890000001');
+
+    const dossier = await api().post('/api/dossiers').set(auth(tB)).send({
+      candidat_id: ficheNouveau,
+      type_diplome: 'master',
+      mention: 'tres_bien',
+      filiere: 'Réseaux',
+      date_obtention: '2025-07-01',
+    });
+    assert.equal(dossier.status, 201);
+    const id = dossier.body.data.dossier.id;
+
+    await api().post(`/api/dossiers/${id}/transmettre`).set(auth(tB));
+    await api().post(`/api/ministere/dossiers/${id}/valider`).set(auth(tMin));
+    const cert = await api().post(`/api/ministere/dossiers/${id}/certifier`).set(auth(tMin));
+    assert.equal(cert.status, 201);
+
+    const { rows } = await pool.query(`SELECT actif FROM utilisateurs WHERE telephone = $1`, [
+      TEL_NOUVEAU,
+    ]);
+    assert.equal(rows[0].actif, true, 'le compte est désormais ouvert');
+
+    // Et la connexion fonctionne.
+    assert.ok(await login(TEL_NOUVEAU));
+  });
+
+  test('le portefeuille agrège les diplômes des deux établissements', async () => {
+    const tB = await login('+22890000200');
+    const tMin = await login('+22890000001');
+
+    // Un second diplôme pour Koffi, délivré cette fois par l'établissement B.
+    const dossier = await api().post('/api/dossiers').set(auth(tB)).send({
+      candidat_id: ficheKoffiEtabB,
+      type_diplome: 'master',
+      mention: 'bien',
+      filiere: 'Systèmes d\'information',
+      date_obtention: '2026-07-01',
+    });
+    const id = dossier.body.data.dossier.id;
+    await api().post(`/api/dossiers/${id}/transmettre`).set(auth(tB));
+    await api().post(`/api/ministere/dossiers/${id}/valider`).set(auth(tMin));
+    assert.equal(
+      (await api().post(`/api/ministere/dossiers/${id}/certifier`).set(auth(tMin))).status,
+      201
+    );
+
+    const tKoffi = await login(TEL_KOFFI);
+    const res = await api().get('/api/candidat/diplomes').set(auth(tKoffi));
+    assert.equal(res.status, 200);
+
+    const etablissements = new Set(res.body.data.diplomes.map((d) => d.etablissement));
+    assert.ok(
+      etablissements.size >= 2,
+      `le portefeuille doit couvrir plusieurs établissements, reçu : ${[...etablissements].join(', ')}`
+    );
+    assert.ok(etablissements.has('École Supérieure de Test'));
+  });
+});

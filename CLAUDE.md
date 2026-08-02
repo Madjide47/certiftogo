@@ -74,6 +74,25 @@ etablissement → faculte → filiere → promotion → inscription → candidat
                      annee_academique + session_academique
 ```
 
+**`004_identite_nationale.sql`** — table `personnes`. Sépare l'**identité**
+(nationale, unique, porteuse du compte et du portefeuille) de ses **fiches
+étudiant** (une par établissement fréquenté) :
+
+```
+personnes ──< candidats ──< dossiers ──< diplomes
+    ↑
+utilisateurs (compte de connexion)
+```
+
+> Avant cette migration, un diplômé de deux établissements ne pouvait pas
+> exister : deux fiches `candidats`, mais un seul téléphone donc un seul
+> compte possible. Son portefeuille n'aurait jamais montré que la moitié de
+> ses diplômes. `utilisateurs.candidat_id` est remplacé par `personne_id`.
+
+> **Cycle du compte candidat** : créé **à la saisie** mais `actif = false` ;
+> la **certification l'active** (`diplome.service.js`). Un compte fermé ne
+> peut pas demander d'OTP (403 `COMPTE_INACTIF`).
+
 **`003_coherence_promotion_session.sql`** — clé étrangère composite
 `(session_id, annee_id)` : la session d'une promotion doit appartenir à l'année
 de cette promotion, ce que 002 laissait passer.
@@ -147,7 +166,7 @@ npm run db:demo    # reset + seed + démo (données riches pour présentation)
 cd backend
 npm install
 npm run dev       # http://localhost:4000  (nodemon)
-npm test          # 73 tests (intégration + référentiel + WhatsApp + signature)
+npm test          # 77 tests (intégration + référentiel + WhatsApp + signature)
 ```
 
 ### Frontends
@@ -303,7 +322,7 @@ Connexion par OTP (le code s'affiche dans la **console du backend**) :
 - ✅ **Seed de démo** (`npm run seed:demo`) : ~6 établissements, ~36 candidats,
   ~40 dossiers (tous statuts), ~20 diplômes (PDF/QR/hash réels), vérifications.
 - ✅ **Tests automatisés (Phase 8)** :
-  - Backend : `cd backend && npm test` — 73 tests. 27 tests d'intégration sur
+  - Backend : `cd backend && npm test` — 77 tests. 27 tests d'intégration sur
     une base dédiée `certiftogo_test` (recréée avant chaque exécution) couvrant
     auth OTP, RBAC, cycle de vie du dossier, certification, vérification
     publique, portefeuille candidat, admin et isolation inter-établissements ;

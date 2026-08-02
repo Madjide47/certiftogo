@@ -17,7 +17,7 @@ export function authJWT(req, res, next) {
   }
 
   try {
-    // payload : { utilisateur_id, role, etablissement_id, ministere_id, candidat_id }
+    // payload : { utilisateur_id, role, etablissement_id, ministere_id, personne_id }
     req.utilisateur = verifierToken(token);
     return next();
   } catch {

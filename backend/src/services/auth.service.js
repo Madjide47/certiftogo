@@ -97,7 +97,7 @@ export async function verifierOtp(telephone, code) {
     role: utilisateur.role,
     etablissement_id: utilisateur.etablissement_id,
     ministere_id: utilisateur.ministere_id,
-    candidat_id: utilisateur.candidat_id,
+    personne_id: utilisateur.personne_id,
   });
 
   return { token, utilisateur: formaterUtilisateur(utilisateur) };
@@ -113,7 +113,7 @@ export function formaterUtilisateur(u) {
     role: u.role,
     etablissement_id: u.etablissement_id,
     ministere_id: u.ministere_id,
-    candidat_id: u.candidat_id,
+    personne_id: u.personne_id,
     actif: u.actif,
   };
 }

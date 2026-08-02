@@ -66,7 +66,7 @@ export async function creerUtilisateur(donnees) {
   }
 
   // Cohérence rôle ↔ FK de rattachement (miroir de chk_role_rattachement).
-  const rattachement = { etablissement_id: null, ministere_id: null, candidat_id: null };
+  const rattachement = { etablissement_id: null, ministere_id: null, personne_id: null };
   if (role === 'etablissement') {
     if (!donnees.etablissement_id) {
       throw new ErreurApp(400, 'RATTACHEMENT_REQUIS', 'Un établissement est requis pour ce rôle.');
@@ -78,10 +78,12 @@ export async function creerUtilisateur(donnees) {
     }
     rattachement.ministere_id = donnees.ministere_id;
   } else if (role === 'candidat') {
-    if (!donnees.candidat_id) {
-      throw new ErreurApp(400, 'RATTACHEMENT_REQUIS', 'Un candidat est requis pour ce rôle.');
+    // Le compte candidat est rattaché à la PERSONNE, pas à sa fiche dans un
+    // établissement : c'est ce qui rend son portefeuille national.
+    if (!donnees.personne_id) {
+      throw new ErreurApp(400, 'RATTACHEMENT_REQUIS', 'Une personne est requise pour ce rôle.');
     }
-    rattachement.candidat_id = donnees.candidat_id;
+    rattachement.personne_id = donnees.personne_id;
   }
 
   const existant = await utilisateurModel.trouverParTelephone(telephone);

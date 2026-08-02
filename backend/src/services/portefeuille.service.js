@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────────────────────
-// Service "portefeuille" — diplômes d'un candidat (module candidat, Phase 6).
-// Le candidat ne voit que ses propres diplômes (isolation par candidat_id).
+// Service "portefeuille" — diplômes d'une personne (module candidat).
+// Isolation par personne_id : le portefeuille est national, il agrège les
+// diplômes de tous les établissements fréquentés.
 // ─────────────────────────────────────────────────────────────
 import * as diplomeModel from '../models/diplome.model.js';
 import { ErreurApp } from '../utils/errors.js';
@@ -26,21 +27,21 @@ function vue(d) {
   };
 }
 
-/** Liste les diplômes du candidat courant. */
-export async function lister(candidat_id) {
-  if (!candidat_id) {
+/** Liste les diplômes de la personne connectée. */
+export async function lister(personne_id) {
+  if (!personne_id) {
     throw new ErreurApp(403, 'CANDIDAT_REQUIS', 'Compte candidat requis.');
   }
-  const diplomes = await diplomeModel.listerParCandidat(candidat_id);
+  const diplomes = await diplomeModel.listerParPersonne(personne_id);
   return diplomes.map(vue);
 }
 
 /** Statistiques du portefeuille (répartition par statut). */
-export async function statistiques(candidat_id) {
-  if (!candidat_id) {
+export async function statistiques(personne_id) {
+  if (!personne_id) {
     throw new ErreurApp(403, 'CANDIDAT_REQUIS', 'Compte candidat requis.');
   }
-  const repartition = await diplomeModel.compterParCandidat(candidat_id);
+  const repartition = await diplomeModel.compterParPersonne(personne_id);
   const parStatut = Object.fromEntries(STATUTS.map((s) => [s, 0]));
   let total = 0;
   for (const { statut, total: n } of repartition) {

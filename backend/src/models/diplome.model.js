@@ -71,25 +71,29 @@ export async function trouverParReference(reference) {
   return rows[0] || null;
 }
 
-/** Liste les diplômes d'un candidat (son portefeuille). */
-export async function listerParCandidat(candidat_id) {
+/**
+ * Portefeuille d'une personne : tous ses diplômes, quel que soit
+ * l'établissement d'origine. Le passage par `candidats` est ce qui rend
+ * le portefeuille national — une personne peut avoir étudié ailleurs.
+ */
+export async function listerParPersonne(personne_id) {
   const { rows } = await query(
     `SELECT ${SELECT_DIPLOME} ${FROM_DIPLOME}
-      WHERE d.candidat_id = $1
+      WHERE d.candidat_id IN (SELECT id FROM candidats WHERE personne_id = $1)
       ORDER BY d.date_certification DESC`,
-    [candidat_id]
+    [personne_id]
   );
   return rows;
 }
 
-/** Répartition des diplômes d'un candidat par statut. */
-export async function compterParCandidat(candidat_id) {
+/** Répartition par statut des diplômes d'une personne. */
+export async function compterParPersonne(personne_id) {
   const { rows } = await query(
     `SELECT statut, COUNT(*)::int AS total
        FROM diplomes
-      WHERE candidat_id = $1
+      WHERE candidat_id IN (SELECT id FROM candidats WHERE personne_id = $1)
       GROUP BY statut`,
-    [candidat_id]
+    [personne_id]
   );
   return rows;
 }

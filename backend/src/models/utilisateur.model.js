@@ -11,7 +11,7 @@ import { query } from '../config/database.js';
 export async function trouverParTelephone(telephone) {
   const { rows } = await query(
     `SELECT id, nom, prenom, telephone, role,
-            etablissement_id, ministere_id, candidat_id, actif, date_creation
+            etablissement_id, ministere_id, personne_id, actif, date_creation
        FROM utilisateurs
       WHERE telephone = $1`,
     [telephone]
@@ -27,7 +27,7 @@ export async function trouverParTelephone(telephone) {
 export async function trouverParId(id) {
   const { rows } = await query(
     `SELECT id, nom, prenom, telephone, role,
-            etablissement_id, ministere_id, candidat_id, actif, date_creation
+            etablissement_id, ministere_id, personne_id, actif, date_creation
        FROM utilisateurs
       WHERE id = $1`,
     [id]
@@ -49,7 +49,7 @@ export async function lister({ role = null } = {}) {
   }
   const { rows } = await query(
     `SELECT u.id, u.nom, u.prenom, u.telephone, u.role,
-            u.etablissement_id, u.ministere_id, u.candidat_id,
+            u.etablissement_id, u.ministere_id, u.personne_id,
             u.actif, u.date_creation,
             e.nom AS etablissement_nom, m.nom AS ministere_nom
        FROM utilisateurs u
@@ -66,10 +66,10 @@ export async function lister({ role = null } = {}) {
 export async function creer(data) {
   const { rows } = await query(
     `INSERT INTO utilisateurs
-       (nom, prenom, telephone, role, etablissement_id, ministere_id, candidat_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+       (nom, prenom, telephone, role, etablissement_id, ministere_id, personne_id, actif)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id, nom, prenom, telephone, role,
-               etablissement_id, ministere_id, candidat_id, actif, date_creation`,
+               etablissement_id, ministere_id, personne_id, actif, date_creation`,
     [
       data.nom,
       data.prenom,
@@ -77,7 +77,9 @@ export async function creer(data) {
       data.role,
       data.etablissement_id || null,
       data.ministere_id || null,
-      data.candidat_id || null,
+      data.personne_id || null,
+      // Un compte candidat naît fermé : la certification l'ouvrira.
+      data.actif === undefined ? true : data.actif,
     ]
   );
   return rows[0];
@@ -88,7 +90,7 @@ export async function definirActif(id, actif) {
   const { rows } = await query(
     `UPDATE utilisateurs SET actif = $2 WHERE id = $1
      RETURNING id, nom, prenom, telephone, role,
-               etablissement_id, ministere_id, candidat_id, actif, date_creation`,
+               etablissement_id, ministere_id, personne_id, actif, date_creation`,
     [id, actif]
   );
   return rows[0] || null;

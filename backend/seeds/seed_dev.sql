@@ -19,7 +19,7 @@
 TRUNCATE journal_audit, verifications_log, transactions_blockchain,
          diplomes, dossiers, codes_otp, utilisateurs,
          inscriptions, promotions, filieres, facultes,
-         sessions_academiques, annees_academiques, candidats,
+         sessions_academiques, annees_academiques, candidats, personnes,
          ministeres, etablissements
     RESTART IDENTITY CASCADE;
 
@@ -47,12 +47,19 @@ VALUES (
     'actif'
 );
 
--- ── Candidats de test ──────────────────────────────────────────────
-INSERT INTO candidats (id, numero_etudiant, nom, prenom, date_naissance, lieu_naissance, sexe, telephone, email, etablissement_id)
+-- ── Personnes (identité nationale, indépendante des établissements) ─
+INSERT INTO personnes (id, nom, prenom, date_naissance, lieu_naissance, sexe, telephone, email)
 VALUES
-    ('30000000-0000-0000-0000-000000000001', 'IAI-2021-001', 'AGBEKO', 'Koffi',   '2000-03-15', 'Lomé',    'M', '+22890000011', 'koffi.agbeko@example.tg',  '20000000-0000-0000-0000-000000000001'),
-    ('30000000-0000-0000-0000-000000000002', 'IAI-2021-002', 'MENSAH', 'Ama',     '2001-07-22', 'Kpalimé', 'F', '+22890000012', 'ama.mensah@example.tg',    '20000000-0000-0000-0000-000000000001'),
-    ('30000000-0000-0000-0000-000000000003', 'IAI-2021-003', 'DOSSEH', 'Yao',     '1999-11-05', 'Sokodé',  'M', '+22890000013', 'yao.dosseh@example.tg',    '20000000-0000-0000-0000-000000000001');
+    ('35000000-0000-0000-0000-000000000001', 'AGBEKO', 'Koffi', '2000-03-15', 'Lomé',    'M', '+22890000011', 'koffi.agbeko@example.tg'),
+    ('35000000-0000-0000-0000-000000000002', 'MENSAH', 'Ama',   '2001-07-22', 'Kpalimé', 'F', '+22890000012', 'ama.mensah@example.tg'),
+    ('35000000-0000-0000-0000-000000000003', 'DOSSEH', 'Yao',   '1999-11-05', 'Sokodé',  'M', '+22890000013', 'yao.dosseh@example.tg');
+
+-- ── Fiches étudiant (une par établissement fréquenté) ──────────────
+INSERT INTO candidats (id, personne_id, numero_etudiant, nom, prenom, date_naissance, lieu_naissance, sexe, telephone, email, etablissement_id)
+VALUES
+    ('30000000-0000-0000-0000-000000000001', '35000000-0000-0000-0000-000000000001', 'IAI-2021-001', 'AGBEKO', 'Koffi',   '2000-03-15', 'Lomé',    'M', '+22890000011', 'koffi.agbeko@example.tg',  '20000000-0000-0000-0000-000000000001'),
+    ('30000000-0000-0000-0000-000000000002', '35000000-0000-0000-0000-000000000002', 'IAI-2021-002', 'MENSAH', 'Ama',     '2001-07-22', 'Kpalimé', 'F', '+22890000012', 'ama.mensah@example.tg',    '20000000-0000-0000-0000-000000000001'),
+    ('30000000-0000-0000-0000-000000000003', '35000000-0000-0000-0000-000000000003', 'IAI-2021-003', 'DOSSEH', 'Yao',     '1999-11-05', 'Sokodé',  'M', '+22890000013', 'yao.dosseh@example.tg',    '20000000-0000-0000-0000-000000000001');
 
 -- ── Comptes utilisateurs ───────────────────────────────────────────
 -- Agent du ministère
@@ -67,12 +74,12 @@ VALUES ('40000000-0000-0000-0000-000000000002', 'KOUASSI', 'Edem', '+22890000002
 INSERT INTO utilisateurs (id, nom, prenom, telephone, role)
 VALUES ('40000000-0000-0000-0000-000000000003', 'ADMIN', 'Système', '+22890000003', 'admin_systeme');
 
--- Comptes candidats (rattachés à leur fiche candidat)
-INSERT INTO utilisateurs (id, nom, prenom, telephone, role, candidat_id)
+-- Comptes candidats (rattachés à la PERSONNE : portefeuille national)
+INSERT INTO utilisateurs (id, nom, prenom, telephone, role, personne_id)
 VALUES
-    ('40000000-0000-0000-0000-000000000011', 'AGBEKO', 'Koffi', '+22890000011', 'candidat', '30000000-0000-0000-0000-000000000001'),
-    ('40000000-0000-0000-0000-000000000012', 'MENSAH', 'Ama',   '+22890000012', 'candidat', '30000000-0000-0000-0000-000000000002'),
-    ('40000000-0000-0000-0000-000000000013', 'DOSSEH', 'Yao',   '+22890000013', 'candidat', '30000000-0000-0000-0000-000000000003');
+    ('40000000-0000-0000-0000-000000000011', 'AGBEKO', 'Koffi', '+22890000011', 'candidat', '35000000-0000-0000-0000-000000000001'),
+    ('40000000-0000-0000-0000-000000000012', 'MENSAH', 'Ama',   '+22890000012', 'candidat', '35000000-0000-0000-0000-000000000002'),
+    ('40000000-0000-0000-0000-000000000013', 'DOSSEH', 'Yao',   '+22890000013', 'candidat', '35000000-0000-0000-0000-000000000003');
 
 -- ── Référentiel académique (migration 002) ─────────────────────────
 -- Année en cours + ses deux sessions.
