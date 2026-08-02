@@ -65,15 +65,10 @@ export async function listerEtablissements(req, res, next) {
   }
 }
 
-/** POST /api/admin/etablissements */
-export async function creerEtablissement(req, res, next) {
-  try {
-    const etablissement = await adminService.creerEtablissement(req.body || {});
-    return res.status(201).json({ success: true, data: { etablissement } });
-  } catch (err) {
-    return next(err);
-  }
-}
+// La création d'un établissement appartient au MINISTÈRE : c'est un acte
+// d'agrément, pas une opération d'exploitation. Voir
+// POST /api/ministere/etablissements. L'administrateur conserve la
+// suspension et la supervision, mais n'agrée pas.
 
 /** PATCH /api/admin/etablissements/:id/statut  body: { statut } */
 export async function definirStatutEtablissement(req, res, next) {

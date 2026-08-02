@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────
 import { query } from '../config/database.js';
 
-const COLONNES = `id, nom, type, ville, email, telephone, adresse, statut, date_creation`;
+const COLONNES = `id, code, nom, type, ville, email, telephone, adresse, statut, date_creation`;
 
 /** Liste tous les établissements. */
 export async function lister() {
@@ -20,15 +20,31 @@ export async function trouverParId(id) {
   return rows[0] || null;
 }
 
-/** Crée un établissement. */
-export async function creer(data) {
-  const { rows } = await query(
-    `INSERT INTO etablissements (nom, type, ville, email, telephone, adresse)
-     VALUES ($1, $2, $3, $4, $5, $6)
+/** Crée un établissement. `client` permet de l'inscrire dans une transaction. */
+export async function creer(data, client = null) {
+  const executer = client ? client.query.bind(client) : query;
+  const { rows } = await executer(
+    `INSERT INTO etablissements (code, nom, type, ville, email, telephone, adresse)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING ${COLONNES}`,
-    [data.nom, data.type, data.ville, data.email || null, data.telephone || null, data.adresse || null]
+    [
+      data.code,
+      data.nom,
+      data.type,
+      data.ville,
+      data.email || null,
+      data.telephone || null,
+      data.adresse || null,
+    ]
   );
   return rows[0];
+}
+
+/** Vérifie si un code officiel est déjà attribué. */
+export async function codeExiste(code, client = null) {
+  const executer = client ? client.query.bind(client) : query;
+  const { rows } = await executer(`SELECT 1 FROM etablissements WHERE code = $1 LIMIT 1`, [code]);
+  return rows.length > 0;
 }
 
 /** Change le statut d'un établissement (actif/suspendu/archive). */

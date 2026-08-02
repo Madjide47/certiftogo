@@ -1,0 +1,436 @@
+// ─────────────────────────────────────────────────────────────
+// Service "gouvernance" — entrée d'un établissement dans CertifTOGO.
+//
+// Chaîne officielle : demande d'intégration → instruction par le
+// ministère → création de l'établissement, de son code, de ses
+// habilitations et de son agent principal.
+//
+// Répartition des responsabilités : le ministère AGRÉE (acte métier),
+// l'administrateur système EXPLOITE la plateforme. L'administrateur ne
+// certifie jamais ; le ministère n'administre pas la plateforme.
+// ─────────────────────────────────────────────────────────────
+import { withTransaction } from '../config/database.js';
+import * as etablissementModel from '../models/etablissement.model.js';
+import * as habilitationModel from '../models/habilitation.model.js';
+import * as demandeModel from '../models/demande-integration.model.js';
+import * as utilisateurModel from '../models/utilisateur.model.js';
+import { ErreurApp, avecErreursSql } from '../utils/errors.js';
+import { genererReferenceDemande, initialesEtablissement } from '../utils/reference-generator.js';
+import {
+  nettoyerTexte,
+  estUuidValide,
+  estEmailValide,
+  estDansEnum,
+  canoniserTelephone,
+  estTelephoneValide,
+  estDateValide,
+  TYPES_DIPLOME,
+  TYPES_ETABLISSEMENT,
+} from '../utils/validators.js';
+
+const STATUTS_HABILITATION = ['active', 'suspendue', 'expiree'];
+
+const CONTRAINTES = {
+  uq_etablissements_code: [409, 'CODE_DUPLIQUE', 'Ce code établissement est déjà attribué.'],
+  idx_habilitation_active: [
+    409,
+    'HABILITATION_EXISTANTE',
+    'Cet établissement est déjà habilité pour ce type de diplôme.',
+  ],
+  utilisateurs_telephone_key: [409, 'TELEPHONE_EXISTANT', 'Ce numéro est déjà utilisé.'],
+  demandes_integration_reference_key: [409, 'REFERENCE_DUPLIQUEE', 'Référence déjà utilisée.'],
+};
+
+// ── Code officiel ──────────────────────────────────────────────────
+
+/**
+ * Attribue le premier code libre de la forme INITIALES + compteur.
+ * Reproduit la logique de la migration 005, pour que les établissements
+ * créés aujourd'hui soient indiscernables de ceux repris.
+ */
+async function attribuerCode(nom, client) {
+  const base = initialesEtablissement(nom);
+  for (let compteur = 1; compteur < 1000; compteur += 1) {
+    const propose = `${base}${String(compteur).padStart(3, '0')}`;
+    if (!(await etablissementModel.codeExiste(propose, client))) return propose;
+  }
+  throw new ErreurApp(
+    409,
+    'CODE_INDISPONIBLE',
+    `Aucun code libre pour « ${base} ». Renseignez un code manuellement.`
+  );
+}
+
+// ── Validation ─────────────────────────────────────────────────────
+
+function validerEtablissement(donnees) {
+  const nom = nettoyerTexte(donnees.nom);
+  const type = nettoyerTexte(donnees.type);
+  const ville = nettoyerTexte(donnees.ville);
+  const email = nettoyerTexte(donnees.email);
+
+  if (!nom) throw new ErreurApp(400, 'CHAMP_REQUIS', 'Le nom est requis.');
+  if (!ville) throw new ErreurApp(400, 'CHAMP_REQUIS', 'La ville est requise.');
+  if (!type || !TYPES_ETABLISSEMENT.includes(type)) {
+    throw new ErreurApp(400, 'TYPE_INVALIDE', "Type d'établissement invalide.");
+  }
+  if (!estEmailValide(email)) throw new ErreurApp(400, 'EMAIL_INVALIDE', 'Email invalide.');
+
+  return {
+    nom,
+    type,
+    ville,
+    email,
+    telephone: canoniserTelephone(donnees.telephone || ''),
+    adresse: nettoyerTexte(donnees.adresse),
+  };
+}
+
+function validerAgent(donnees, champ = 'agent') {
+  const nom = nettoyerTexte(donnees?.nom);
+  const prenom = nettoyerTexte(donnees?.prenom);
+  const telephone = canoniserTelephone(donnees?.telephone || '');
+
+  if (!nom || !prenom) {
+    throw new ErreurApp(400, 'CHAMP_REQUIS', `Nom et prénom de l'${champ} sont requis.`);
+  }
+  if (!telephone || !estTelephoneValide(telephone)) {
+    throw new ErreurApp(400, 'TELEPHONE_INVALIDE', `Numéro de l'${champ} invalide.`);
+  }
+  return { nom, prenom, telephone };
+}
+
+function validerTypesDiplomes(valeur) {
+  const liste = Array.isArray(valeur)
+    ? valeur
+    : String(valeur || '')
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean);
+
+  for (const type of liste) {
+    if (!TYPES_DIPLOME.includes(type)) {
+      throw new ErreurApp(
+        400,
+        'TYPE_DIPLOME_INVALIDE',
+        `Type de diplôme inconnu : ${type}. Valeurs : ${TYPES_DIPLOME.join(', ')}.`
+      );
+    }
+  }
+  return [...new Set(liste)];
+}
+
+// ── Création d'un établissement par le ministère ───────────────────
+
+/**
+ * Crée d'un seul geste l'établissement, son code, ses habilitations et
+ * son agent principal. Atomique : un établissement sans agent serait
+ * inexploitable, personne ne pourrait s'y connecter.
+ */
+export async function creerEtablissement(donnees, agent_ministere_id = null) {
+  const etab = validerEtablissement(donnees);
+  const agent = validerAgent(donnees.agent_principal, 'agent principal');
+  const habilitations = validerTypesDiplomes(donnees.types_diplomes);
+
+  if (habilitations.length === 0) {
+    throw new ErreurApp(
+      400,
+      'HABILITATION_REQUISE',
+      'Précisez au moins un type de diplôme que cet établissement est habilité à délivrer.'
+    );
+  }
+
+  const existant = await utilisateurModel.trouverParTelephone(agent.telephone);
+  if (existant) {
+    throw new ErreurApp(409, 'TELEPHONE_EXISTANT', 'Ce numéro est déjà utilisé par un compte.');
+  }
+
+  const codeImpose = nettoyerTexte(donnees.code);
+
+  return avecErreursSql(
+    () =>
+      withTransaction(async (client) => {
+        const code = codeImpose
+          ? codeImpose.toUpperCase()
+          : await attribuerCode(etab.nom, client);
+
+        const etablissement = await etablissementModel.creer({ ...etab, code }, client);
+
+        for (const type_diplome of habilitations) {
+          await habilitationModel.creer(
+            {
+              etablissement_id: etablissement.id,
+              type_diplome,
+              reference_arrete: nettoyerTexte(donnees.reference_arrete),
+            },
+            client
+          );
+        }
+
+        const compte = await utilisateurModel.creer(
+          {
+            ...agent,
+            role: 'etablissement',
+            etablissement_id: etablissement.id,
+            est_agent_principal: true,
+            actif: true,
+          },
+          client
+        );
+
+        return { etablissement, agent_principal: compte, habilitations };
+      }),
+    CONTRAINTES
+  );
+}
+
+// ── Habilitations ──────────────────────────────────────────────────
+
+export async function listerHabilitations(etablissement_id) {
+  if (!estUuidValide(etablissement_id)) {
+    throw new ErreurApp(404, 'ETABLISSEMENT_INTROUVABLE', 'Établissement introuvable.');
+  }
+  const etablissement = await etablissementModel.trouverParId(etablissement_id);
+  if (!etablissement) {
+    throw new ErreurApp(404, 'ETABLISSEMENT_INTROUVABLE', 'Établissement introuvable.');
+  }
+  return habilitationModel.lister(etablissement_id);
+}
+
+export async function accorderHabilitation(etablissement_id, donnees) {
+  await listerHabilitations(etablissement_id); // valide l'existence
+
+  const type_diplome = nettoyerTexte(donnees.type_diplome);
+  if (!type_diplome || !TYPES_DIPLOME.includes(type_diplome)) {
+    throw new ErreurApp(
+      400,
+      'TYPE_DIPLOME_INVALIDE',
+      `Type de diplôme inconnu. Valeurs : ${TYPES_DIPLOME.join(', ')}.`
+    );
+  }
+
+  const date_debut = nettoyerTexte(donnees.date_debut);
+  const date_fin = nettoyerTexte(donnees.date_fin);
+  if ((date_debut && !estDateValide(date_debut)) || (date_fin && !estDateValide(date_fin))) {
+    throw new ErreurApp(400, 'DATE_INVALIDE', 'Les dates doivent être au format AAAA-MM-JJ.');
+  }
+  if (date_debut && date_fin && date_fin <= date_debut) {
+    throw new ErreurApp(
+      400,
+      'PERIODE_INVALIDE',
+      "La fin d'habilitation doit être postérieure à son début."
+    );
+  }
+
+  return avecErreursSql(
+    () =>
+      habilitationModel.creer({
+        etablissement_id,
+        type_diplome,
+        reference_arrete: nettoyerTexte(donnees.reference_arrete),
+        date_debut,
+        date_fin,
+      }),
+    CONTRAINTES
+  );
+}
+
+export async function changerStatutHabilitation(id, statut) {
+  if (!estUuidValide(id)) {
+    throw new ErreurApp(404, 'HABILITATION_INTROUVABLE', 'Habilitation introuvable.');
+  }
+  const cible = nettoyerTexte(statut);
+  if (!cible || !STATUTS_HABILITATION.includes(cible)) {
+    throw new ErreurApp(400, 'STATUT_INVALIDE', 'Statut d\'habilitation inconnu.');
+  }
+
+  const habilitation = await habilitationModel.trouverParId(id);
+  if (!habilitation) {
+    throw new ErreurApp(404, 'HABILITATION_INTROUVABLE', 'Habilitation introuvable.');
+  }
+
+  return avecErreursSql(() => habilitationModel.changerStatut(id, cible), CONTRAINTES);
+}
+
+// ── Demandes d'intégration ─────────────────────────────────────────
+
+/** Dépôt public : l'établissement n'a pas encore de compte. */
+export async function deposerDemande(donnees) {
+  const etab = validerEtablissement(donnees);
+  const responsable = validerAgent(
+    {
+      nom: donnees.responsable_nom,
+      prenom: donnees.responsable_prenom,
+      telephone: donnees.responsable_telephone,
+    },
+    'responsable'
+  );
+
+  if (!etab.email) {
+    throw new ErreurApp(400, 'CHAMP_REQUIS', 'Un email de contact est requis.');
+  }
+  if (!etab.telephone || !estTelephoneValide(etab.telephone)) {
+    throw new ErreurApp(400, 'TELEPHONE_INVALIDE', "Numéro de l'établissement invalide.");
+  }
+
+  const types = validerTypesDiplomes(donnees.types_diplomes_demandes);
+
+  return avecErreursSql(
+    () =>
+      demandeModel.creer({
+        reference: genererReferenceDemande(),
+        ...etab,
+        responsable_nom: responsable.nom,
+        responsable_prenom: responsable.prenom,
+        responsable_telephone: responsable.telephone,
+        types_diplomes_demandes: types.join(','),
+        message: nettoyerTexte(donnees.message),
+      }),
+    CONTRAINTES
+  );
+}
+
+/** Suivi public par référence — vue volontairement restreinte. */
+export async function suivreDemande(reference) {
+  const demande = await demandeModel.trouverParReference(nettoyerTexte(reference) || '');
+  if (!demande) {
+    throw new ErreurApp(404, 'DEMANDE_INTROUVABLE', 'Aucune demande ne porte cette référence.');
+  }
+  return {
+    reference: demande.reference,
+    nom: demande.nom,
+    statut: demande.statut,
+    motif_refus: demande.statut === 'refusee' ? demande.motif_refus : null,
+    date_soumission: demande.date_soumission,
+    date_traitement: demande.date_traitement,
+  };
+}
+
+export async function listerDemandes({ statut } = {}) {
+  const filtre = nettoyerTexte(statut);
+  if (!estDansEnum(filtre, ['soumise', 'en_examen', 'acceptee', 'refusee'])) {
+    throw new ErreurApp(400, 'STATUT_INVALIDE', 'Statut de demande inconnu.');
+  }
+  const demandes = await demandeModel.lister({ statut: filtre });
+  const repartition = await demandeModel.compterParStatut();
+  return { demandes, repartition };
+}
+
+async function recupererDemande(id) {
+  if (!estUuidValide(id)) {
+    throw new ErreurApp(404, 'DEMANDE_INTROUVABLE', 'Demande introuvable.');
+  }
+  const demande = await demandeModel.trouverParId(id);
+  if (!demande) throw new ErreurApp(404, 'DEMANDE_INTROUVABLE', 'Demande introuvable.');
+  return demande;
+}
+
+/** Une décision est définitive : on n'instruit pas deux fois. */
+function assurerInstruisable(demande) {
+  if (demande.statut === 'acceptee' || demande.statut === 'refusee') {
+    throw new ErreurApp(
+      409,
+      'DEMANDE_DEJA_TRAITEE',
+      `Cette demande a déjà été ${demande.statut === 'acceptee' ? 'acceptée' : 'refusée'}.`
+    );
+  }
+}
+
+export async function examinerDemande(id, agent_ministere_id) {
+  const demande = await recupererDemande(id);
+  assurerInstruisable(demande);
+  return demandeModel.statuer(id, { statut: 'en_examen', agent_ministere_id });
+}
+
+/**
+ * Acceptation : crée l'établissement et son agent principal, puis lie la
+ * demande à l'établissement créé — la décision reste traçable.
+ */
+export async function accepterDemande(id, agent_ministere_id, donnees = {}) {
+  const demande = await recupererDemande(id);
+  assurerInstruisable(demande);
+
+  // Les données de la demande servent de base ; le ministère peut les
+  // corriger au moment de l'agrément (nom officiel, types accordés…).
+  const resultat = await creerEtablissement(
+    {
+      nom: donnees.nom || demande.nom,
+      type: donnees.type || demande.type,
+      ville: donnees.ville || demande.ville,
+      adresse: donnees.adresse || demande.adresse,
+      email: donnees.email || demande.email,
+      telephone: donnees.telephone || demande.telephone,
+      code: donnees.code,
+      reference_arrete: donnees.reference_arrete,
+      types_diplomes: donnees.types_diplomes || demande.types_diplomes_demandes,
+      agent_principal: donnees.agent_principal || {
+        nom: demande.responsable_nom,
+        prenom: demande.responsable_prenom,
+        telephone: demande.responsable_telephone,
+      },
+    },
+    agent_ministere_id
+  );
+
+  const majDemande = await demandeModel.statuer(id, {
+    statut: 'acceptee',
+    etablissement_id: resultat.etablissement.id,
+    agent_ministere_id,
+  });
+
+  return { ...resultat, demande: majDemande };
+}
+
+export async function refuserDemande(id, agent_ministere_id, motif) {
+  const demande = await recupererDemande(id);
+  assurerInstruisable(demande);
+
+  const motif_refus = nettoyerTexte(motif);
+  if (!motif_refus) {
+    throw new ErreurApp(400, 'MOTIF_REQUIS', 'Un motif de refus est obligatoire.');
+  }
+
+  return demandeModel.statuer(id, { statut: 'refusee', motif_refus, agent_ministere_id });
+}
+
+// ── Agents d'un établissement ──────────────────────────────────────
+
+export async function listerAgents(etablissement_id) {
+  return utilisateurModel.listerParEtablissement(etablissement_id);
+}
+
+/**
+ * Création d'un agent par l'agent principal de son propre établissement.
+ * Décharge le ministère sans ouvrir l'inscription libre : le créateur est
+ * lui-même un compte agréé, et son action est rattachable à son identité.
+ */
+export async function creerAgent(demandeur, donnees) {
+  if (!demandeur.est_agent_principal) {
+    throw new ErreurApp(
+      403,
+      'AGENT_PRINCIPAL_REQUIS',
+      'Seul l\'agent principal de l\'établissement peut créer des comptes.'
+    );
+  }
+
+  const agent = validerAgent(donnees);
+
+  const existant = await utilisateurModel.trouverParTelephone(agent.telephone);
+  if (existant) {
+    throw new ErreurApp(409, 'TELEPHONE_EXISTANT', 'Ce numéro est déjà utilisé par un compte.');
+  }
+
+  return avecErreursSql(
+    () =>
+      utilisateurModel.creer({
+        ...agent,
+        role: 'etablissement',
+        etablissement_id: demandeur.etablissement_id,
+        // Un seul agent principal par établissement : celui désigné par le
+        // ministère à l'agrément. Les agents créés ici sont ordinaires.
+        est_agent_principal: false,
+        actif: true,
+      }),
+    CONTRAINTES
+  );
+}

@@ -17,18 +17,18 @@ Dernière mise à jour : 2 août 2026.
 | A-02 | Comptes ministère créés par l'administrateur système | ✅ |
 | A-03 | Connexion par téléphone + OTP pour les 4 rôles | ✅ |
 | A-04 | UUID interne stable, téléphone comme identifiant mutable | ✅ |
-| A-05 | **Établissement créé par le ministère** (aujourd'hui : admin système) | ⬜ |
-| A-06 | **Code établissement officiel** (`IAI001`, `UL002`) distinct des comptes agents | ⬜ |
-| A-07 | **Création du premier agent par le ministère**, en même temps que l'établissement | ⬜ |
-| A-08 | **Demande d'intégration** d'un établissement : formulaire, instruction, acceptation/refus | ⬜ |
-| A-09 | **Vérification d'habilitation** : types de diplômes qu'un établissement peut délivrer | ⬜ |
-| A-10 | **Un agent principal peut créer d'autres agents** de son établissement | ⬜ |
+| A-05 | **Établissement créé par le ministère** (aujourd'hui : admin système) | ✅ |
+| A-06 | **Code établissement officiel** (`IAI001`, `UL002`) distinct des comptes agents | ✅ |
+| A-07 | **Création du premier agent par le ministère**, en même temps que l'établissement | ✅ |
+| A-08 | **Demande d'intégration** d'un établissement : formulaire, instruction, acceptation/refus | ✅ |
+| A-09 | **Vérification d'habilitation** : types de diplômes qu'un établissement peut délivrer | ✅ |
+| A-10 | **Un agent principal peut créer d'autres agents** de son établissement | ✅ |
 | A-11 | Message de bienvenue à la création d'un compte (WhatsApp/SMS) | ⬜ |
 | A-12 | Compte candidat créé à la saisie, activé à la certification | ✅ |
 | A-13 | Identité nationale : une personne, plusieurs fiches établissement | ✅ |
 | A-14 | **Changement de numéro volontaire** : OTP ancien numéro puis nouveau | ⬜ |
 | A-15 | **Récupération après perte du téléphone** : procédure médiée par un agent | ⬜ |
-| A-16 | **Normalisation du téléphone à la saisie** (sinon le regroupement d'identité fuit) | ⬜ |
+| A-16 | **Normalisation du téléphone à la saisie** (sinon le regroupement d'identité fuit) | ✅ |
 | A-17 | **Téléphone obligatoire** pour un candidat (option A) avec statut « en attente de numéro » | ⬜ |
 | A-18 | **Désactivation immédiate** d'un agent qui quitte son établissement | 🔨 *`actif` existe, pas de procédure* |
 | A-19 | **Révocation des sessions actives** à la désactivation | ⬜ *aucune gestion de session* |
@@ -45,7 +45,7 @@ Dernière mise à jour : 2 août 2026.
 | B-05 | Matrice permissions × actions par sous-rôle | ⬜ |
 | B-06 | **Mode simple** : établissement sans hiérarchie, sous-rôle configurable | ⬜ |
 | B-07 | Remplacer les 4 rôles figés par un vrai modèle rôles/permissions | ⬜ |
-| B-08 | Séparation nette **ministère (certifie) / admin (exploite)** — l'admin ne certifie jamais | 🔨 *vrai dans le code, non formalisé* |
+| B-08 | Séparation nette **ministère (certifie) / admin (exploite)** — l'admin ne certifie jamais | ✅ |
 
 ## C. Structure académique et promotions
 
@@ -60,11 +60,11 @@ Dernière mise à jour : 2 août 2026.
 | C-07 | Cycle de vie de la promotion (brouillon → … → clôturée) | ✅ |
 | C-08 | **Date de délibération** sur la promotion | ⬜ |
 | C-09 | Saisie manuelle d'un étudiant | ✅ |
-| C-10 | **Import Excel d'une promotion entière** | 🔨 *en cours* |
-| C-11 | **Rapport d'import ligne à ligne** avec erreurs localisées | 🔨 *en cours* |
-| C-12 | **Simulation avant import** (dry run) | 🔨 *en cours* |
-| C-13 | **Détection des doublons** dans le fichier et avec l'existant | 🔨 *en cours* |
-| C-14 | **Modèle de fichier Excel téléchargeable** | ⬜ |
+| C-10 | **Import Excel d'une promotion entière** | ✅ |
+| C-11 | **Rapport d'import ligne à ligne** avec erreurs localisées | ✅ |
+| C-12 | **Simulation avant import** (dry run) | ✅ |
+| C-13 | **Détection des doublons** dans le fichier et avec l'existant | ✅ |
+| C-14 | **Modèle de fichier Excel téléchargeable** | ✅ |
 | C-15 | Validation interne avant transmission | ⬜ *voir B-04* |
 | C-16 | Effectifs prévus / inscrits et réconciliation | 🔨 *compteurs affichés* |
 
@@ -262,6 +262,7 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | # | Élément | Chapitre | Statut |
 |---|---|---|---|
+| P-00 | **Refonte complète du frontend** — l'UI actuelle ne fait pas « plateforme gouvernementale ». Décidé le 2 août 2026, à mener une fois le backend terminé. Jusque-là, écrans fonctionnels et minimaux. | 26 | ⬜ |
 | P-01 | **Description écran par écran** : composition, actions, états vides, états d'erreur | 26.4 | ⬜ |
 | P-02 | **Accessibilité et affichage mobile** | 26.5 | ⬜ |
 | P-03 | **Tests de charge** : promotion de 12 000 diplômés | 31.4 | ⬜ |
@@ -297,9 +298,9 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 27 |
-| 🔨 partiel ou en cours | 17 |
-| ⬜ à faire | 130 |
+| ✅ fait et testé | 44 |
+| 🔨 partiel ou en cours | 13 |
+| ⬜ à faire | 117 |
 | **Total** | **174** |
 
 ## Ordre d'implémentation proposé

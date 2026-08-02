@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────────
 import { Router } from 'express';
 import * as ministereController from '../controllers/ministere.controller.js';
+import * as gouvernanceController from '../controllers/gouvernance.controller.js';
 import { authJWT } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/role.middleware.js';
 
@@ -22,6 +23,20 @@ router.post('/dossiers/:id/certifier', ministereController.certifier);
 
 // Établissements (lecture seule)
 router.get('/etablissements', ministereController.listerEtablissements);
+
+// ── Gouvernance : agrément, habilitations, demandes d'intégration ──
+// C'est le ministère qui agrée un établissement — acte métier, pas
+// opération technique. L'administrateur système, lui, exploite la
+// plateforme et ne certifie jamais.
+router.post('/etablissements', gouvernanceController.creerEtablissement);
+router.get('/etablissements/:id/habilitations', gouvernanceController.listerHabilitations);
+router.post('/etablissements/:id/habilitations', gouvernanceController.accorderHabilitation);
+router.patch('/habilitations/:id/statut', gouvernanceController.changerStatutHabilitation);
+
+router.get('/demandes', gouvernanceController.listerDemandes);
+router.post('/demandes/:id/examiner', gouvernanceController.examinerDemande);
+router.post('/demandes/:id/accepter', gouvernanceController.accepterDemande);
+router.post('/demandes/:id/refuser', gouvernanceController.refuserDemande);
 
 // Diplômes certifiés
 router.get('/diplomes', ministereController.listerDiplomes);

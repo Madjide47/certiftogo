@@ -352,26 +352,62 @@ describe('Admin & isolation inter-établissements', () => {
   const AGENT_B = '+22890000200';
   const CANDIDAT_A = '30000000-0000-0000-0000-000000000001'; // Koffi (établissement IAI)
 
-  test('crée un établissement (201) et refuse un type invalide (400)', async () => {
-    const t = await login('+22890000003');
+  test('le ministère agrée un établissement, son code et son agent principal', async () => {
+    const t = await login('+22890000001');
 
-    const ok = await api().post('/api/admin/etablissements').set(auth(t)).send({
+    const ok = await api().post('/api/ministere/etablissements').set(auth(t)).send({
       nom: 'École Supérieure de Test',
       type: 'ecole',
       ville: 'Kara',
       email: 'contact@est.tg',
+      telephone: '+22890111222',
+      types_diplomes: ['licence', 'master'],
+      agent_principal: { nom: 'AGENT', prenom: 'B', telephone: AGENT_B },
     });
     assert.equal(ok.status, 201);
     etabBId = ok.body.data.etablissement.id;
 
-    const ko = await api().post('/api/admin/etablissements').set(auth(t)).send({
+    // Code officiel dérivé des initiales : « École Supérieure de Test ».
+    assert.match(ok.body.data.etablissement.code, /^EST\d{3}$/);
+    assert.equal(ok.body.data.agent_principal.est_agent_principal, true);
+    assert.deepEqual(ok.body.data.habilitations, ['licence', 'master']);
+
+    const ko = await api().post('/api/ministere/etablissements').set(auth(t)).send({
       nom: 'Type Invalide',
       type: 'garderie',
       ville: 'Lomé',
       email: 'x@y.tg',
+      types_diplomes: ['licence'],
+      agent_principal: { nom: 'X', prenom: 'Y', telephone: '+22890999888' },
     });
     assert.equal(ko.status, 400);
     assert.equal(ko.body.error.code, 'TYPE_INVALIDE');
+  });
+
+  test('refuse un agrément sans habilitation ni agent principal', async () => {
+    const t = await login('+22890000001');
+
+    const sansHabilitation = await api().post('/api/ministere/etablissements').set(auth(t)).send({
+      nom: 'Sans Habilitation', type: 'ecole', ville: 'Lomé', email: 'a@b.tg',
+      agent_principal: { nom: 'A', prenom: 'B', telephone: '+22890999777' },
+    });
+    assert.equal(sansHabilitation.status, 400);
+    assert.equal(sansHabilitation.body.error.code, 'HABILITATION_REQUISE');
+
+    const sansAgent = await api().post('/api/ministere/etablissements').set(auth(t)).send({
+      nom: 'Sans Agent', type: 'ecole', ville: 'Lomé', email: 'a@b.tg',
+      types_diplomes: ['licence'],
+    });
+    assert.equal(sansAgent.status, 400);
+    assert.equal(sansAgent.body.error.code, 'CHAMP_REQUIS');
+  });
+
+  test('l\'administrateur ne peut plus agréer un établissement (404)', async () => {
+    const t = await login('+22890000003');
+    const res = await api().post('/api/admin/etablissements').set(auth(t)).send({
+      nom: 'Par Admin', type: 'ecole', ville: 'Lomé', email: 'a@b.tg',
+    });
+    assert.equal(res.status, 404, 'la route a été retirée : l\'agrément revient au ministère');
   });
 
   test('refuse un rattachement manquant et un téléphone déjà utilisé', async () => {
@@ -391,17 +427,13 @@ describe('Admin & isolation inter-établissements', () => {
     assert.equal(telExistant.body.error.code, 'TELEPHONE_EXISTANT');
   });
 
-  test('crée un agent pour l\'établissement B qui peut se connecter', async () => {
-    const t = await login('+22890000003');
-    const res = await api().post('/api/admin/utilisateurs').set(auth(t)).send({
-      nom: 'AGENT', prenom: 'B', telephone: AGENT_B, role: 'etablissement',
-      etablissement_id: etabBId,
-    });
-    assert.equal(res.status, 201);
-    assert.equal(res.body.data.utilisateur.role, 'etablissement');
-
-    const token = await login(AGENT_B); // login OTP du nouveau compte
+  test('l\'agent principal créé avec l\'établissement peut se connecter', async () => {
+    const token = await login(AGENT_B); // login OTP du compte créé à l'agrément
     assert.ok(token);
+
+    const moi = await api().get('/api/auth/me').set(auth(token));
+    assert.equal(moi.body.data.utilisateur.role, 'etablissement');
+    assert.equal(moi.body.data.utilisateur.est_agent_principal, true);
   });
 
   test('l\'agent B est isolé des données de l\'établissement A', async () => {
@@ -1005,6 +1037,187 @@ describe('Identité nationale et portefeuille multi-établissements', () => {
       `le portefeuille doit couvrir plusieurs établissements, reçu : ${[...etablissements].join(', ')}`
     );
     assert.ok(etablissements.has('École Supérieure de Test'));
+  });
+});
+
+// ── Gouvernance : agrément, habilitations, agents ──────────────
+describe('Gouvernance — demandes d\'intégration et habilitations', () => {
+  const IAI = '20000000-0000-0000-0000-000000000001';
+  let demandeId;
+  let reference;
+  let agentOrdinaire;
+
+  test('un établissement dépose une demande sans posséder de compte', async () => {
+    const res = await api().post('/api/demandes-integration').send({
+      nom: 'Université Populaire du Nord',
+      type: 'universite',
+      ville: 'Dapaong',
+      email: 'contact@upn.tg',
+      telephone: '+22890222333',
+      responsable_nom: 'BAWA',
+      responsable_prenom: 'Fataou',
+      responsable_telephone: '+22890222334',
+      types_diplomes_demandes: ['licence', 'master'],
+      message: 'Nous souhaitons intégrer CertifTOGO.',
+    });
+    assert.equal(res.status, 201, 'aucune authentification requise');
+    assert.match(res.body.data.reference, /^DI-\d{4}-\d{5}$/);
+    reference = res.body.data.reference;
+  });
+
+  test('le suivi public expose le statut, pas les données internes', async () => {
+    const res = await api().get(`/api/demandes-integration/${reference}`);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.demande.statut, 'soumise');
+    assert.equal(res.body.data.demande.email, undefined, 'vue restreinte');
+
+    const inconnue = await api().get('/api/demandes-integration/DI-2000-00000');
+    assert.equal(inconnue.status, 404);
+  });
+
+  test('refuse une demande portant un type de diplôme inconnu', async () => {
+    const res = await api().post('/api/demandes-integration').send({
+      nom: 'École Fantaisie', type: 'ecole', ville: 'Lomé',
+      email: 'x@y.tg', telephone: '+22890222999',
+      responsable_nom: 'A', responsable_prenom: 'B', responsable_telephone: '+22890222998',
+      types_diplomes_demandes: ['licence', 'habilitation_magique'],
+    });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'TYPE_DIPLOME_INVALIDE');
+  });
+
+  test('le ministère instruit puis accepte la demande', async () => {
+    const t = await login('+22890000001');
+
+    const liste = await api().get('/api/ministere/demandes?statut=soumise').set(auth(t));
+    assert.equal(liste.status, 200);
+    const demande = liste.body.data.demandes.find((d) => d.reference === reference);
+    assert.ok(demande, 'la demande apparaît dans la file du ministère');
+    demandeId = demande.id;
+
+    const examen = await api()
+      .post(`/api/ministere/demandes/${demandeId}/examiner`)
+      .set(auth(t));
+    assert.equal(examen.body.data.demande.statut, 'en_examen');
+
+    const acceptation = await api()
+      .post(`/api/ministere/demandes/${demandeId}/accepter`)
+      .set(auth(t))
+      .send({ reference_arrete: 'ARR-2026-042' });
+    assert.equal(acceptation.status, 201);
+
+    // L'agrément crée l'établissement, son code et son agent principal.
+    assert.match(acceptation.body.data.etablissement.code, /^UPN\d{3}$/);
+    assert.equal(acceptation.body.data.agent_principal.telephone, '+22890222334');
+    assert.equal(acceptation.body.data.demande.statut, 'acceptee');
+    assert.equal(
+      acceptation.body.data.demande.etablissement_id,
+      acceptation.body.data.etablissement.id,
+      'la décision reste traçable jusqu\'à l\'établissement créé'
+    );
+
+    // Le responsable désigné peut désormais se connecter.
+    assert.ok(await login('+22890222334'));
+  });
+
+  test('une demande déjà traitée ne se réinstruit pas (409)', async () => {
+    const t = await login('+22890000001');
+    const res = await api().post(`/api/ministere/demandes/${demandeId}/refuser`).set(auth(t)).send({
+      motif: 'Changement d\'avis',
+    });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'DEMANDE_DEJA_TRAITEE');
+  });
+
+  test('un refus exige un motif', async () => {
+    const t = await login('+22890000001');
+
+    const depot = await api().post('/api/demandes-integration').send({
+      nom: 'Institut Douteux', type: 'institut', ville: 'Lomé',
+      email: 'x@douteux.tg', telephone: '+22890333444',
+      responsable_nom: 'C', responsable_prenom: 'D', responsable_telephone: '+22890333445',
+      types_diplomes_demandes: ['licence'],
+    });
+    const liste = await api().get('/api/ministere/demandes').set(auth(t));
+    const id = liste.body.data.demandes.find((d) => d.reference === depot.body.data.reference).id;
+
+    const sansMotif = await api().post(`/api/ministere/demandes/${id}/refuser`).set(auth(t)).send({});
+    assert.equal(sansMotif.status, 400);
+    assert.equal(sansMotif.body.error.code, 'MOTIF_REQUIS');
+
+    const avecMotif = await api()
+      .post(`/api/ministere/demandes/${id}/refuser`)
+      .set(auth(t))
+      .send({ motif: 'Établissement non reconnu par l\'État.' });
+    assert.equal(avecMotif.body.data.demande.statut, 'refusee');
+
+    // Le motif est visible dans le suivi public.
+    const suivi = await api().get(`/api/demandes-integration/${depot.body.data.reference}`);
+    assert.match(suivi.body.data.demande.motif_refus, /non reconnu/);
+  });
+
+  test('gère les habilitations d\'un établissement', async () => {
+    const t = await login('+22890000001');
+
+    const initiales = await api().get(`/api/ministere/etablissements/${IAI}/habilitations`).set(auth(t));
+    assert.equal(initiales.status, 200);
+    const types = initiales.body.data.habilitations.map((h) => h.type_diplome);
+    assert.ok(types.includes('licence'), 'reprise automatique à la migration');
+
+    // Doublon sur un type déjà actif.
+    const doublon = await api()
+      .post(`/api/ministere/etablissements/${IAI}/habilitations`)
+      .set(auth(t)).send({ type_diplome: 'licence' });
+    assert.equal(doublon.status, 409);
+    assert.equal(doublon.body.error.code, 'HABILITATION_EXISTANTE');
+
+    // Un type non encore accordé passe.
+    const manquant = ['licence', 'master', 'doctorat', 'certificat', 'bts'].find(
+      (t2) => !types.includes(t2)
+    );
+    if (manquant) {
+      const ajout = await api()
+        .post(`/api/ministere/etablissements/${IAI}/habilitations`)
+        .set(auth(t)).send({ type_diplome: manquant, reference_arrete: 'ARR-2026-100' });
+      assert.equal(ajout.status, 201);
+
+      // Une fois suspendue, la place se libère.
+      const suspension = await api()
+        .patch(`/api/ministere/habilitations/${ajout.body.data.habilitation.id}/statut`)
+        .set(auth(t)).send({ statut: 'suspendue' });
+      assert.equal(suspension.body.data.habilitation.statut, 'suspendue');
+    }
+  });
+
+  test('seul l\'agent principal peut créer des agents', async () => {
+    const principal = await login('+22890000002'); // agent principal de l'IAI
+
+    const cree = await api().post('/api/structure/agents').set(auth(principal)).send({
+      nom: 'AKOSSIWA', prenom: 'Adjo', telephone: '+22890444555',
+    });
+    assert.equal(cree.status, 201);
+    assert.equal(cree.body.data.agent.est_agent_principal, false, 'un agent créé reste ordinaire');
+    agentOrdinaire = cree.body.data.agent.telephone;
+
+    const liste = await api().get('/api/structure/agents').set(auth(principal));
+    assert.ok(liste.body.data.agents.some((a) => a.telephone === agentOrdinaire));
+
+    // L'agent ordinaire ne peut pas propager le droit.
+    const ordinaire = await login(agentOrdinaire);
+    const refus = await api().post('/api/structure/agents').set(auth(ordinaire)).send({
+      nom: 'AUTRE', prenom: 'Agent', telephone: '+22890444556',
+    });
+    assert.equal(refus.status, 403);
+    assert.equal(refus.body.error.code, 'AGENT_PRINCIPAL_REQUIS');
+  });
+
+  test('refuse un agent dont le numéro est déjà pris (409)', async () => {
+    const principal = await login('+22890000002');
+    const res = await api().post('/api/structure/agents').set(auth(principal)).send({
+      nom: 'DOUBLON', prenom: 'Tel', telephone: '+22890000001',
+    });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'TELEPHONE_EXISTANT');
   });
 });
 

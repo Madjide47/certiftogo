@@ -4,12 +4,17 @@
 // ─────────────────────────────────────────────────────────────
 import { Router } from 'express';
 import * as structureController from '../controllers/structure.controller.js';
+import * as gouvernanceController from '../controllers/gouvernance.controller.js';
 import { authJWT } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/role.middleware.js';
 
 const router = Router();
 
 router.use(authJWT, requireRole('etablissement'));
+
+// ── Agents de l'établissement (création réservée à l'agent principal) ──
+router.get('/agents', gouvernanceController.listerAgents);
+router.post('/agents', gouvernanceController.creerAgent);
 
 // ── Facultés ───────────────────────────────────────────────────────
 router.get('/facultes', structureController.listerFacultes);

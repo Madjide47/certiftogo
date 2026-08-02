@@ -18,7 +18,6 @@ router.post('/utilisateurs', adminController.creerUtilisateur);
 router.patch('/utilisateurs/:id/actif', adminController.definirActifUtilisateur);
 
 router.get('/etablissements', adminController.listerEtablissements);
-router.post('/etablissements', adminController.creerEtablissement);
 router.patch('/etablissements/:id/statut', adminController.definirStatutEtablissement);
 
 export default router;

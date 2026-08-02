@@ -109,31 +109,10 @@ export async function listerEtablissements() {
   return etablissementModel.lister();
 }
 
-export async function creerEtablissement(donnees) {
-  const nom = nettoyerTexte(donnees.nom);
-  const type = nettoyerTexte(donnees.type);
-  const ville = nettoyerTexte(donnees.ville);
-  const email = nettoyerTexte(donnees.email);
-
-  if (!nom || !ville) {
-    throw new ErreurApp(400, 'CHAMPS_REQUIS', 'Nom et ville sont requis.');
-  }
-  if (!estDansEnum(type, TYPES_ETABLISSEMENT) || !type) {
-    throw new ErreurApp(400, 'TYPE_INVALIDE', "Type d'établissement invalide.");
-  }
-  if (!estEmailValide(email)) {
-    throw new ErreurApp(400, 'EMAIL_INVALIDE', 'Email invalide.');
-  }
-
-  return etablissementModel.creer({
-    nom,
-    type,
-    ville,
-    email,
-    telephone: nettoyerTexte(donnees.telephone),
-    adresse: nettoyerTexte(donnees.adresse),
-  });
-}
+// `creerEtablissement` a été retirée d'ici : l'agrément d'un établissement
+// est un acte du ministère, pas de l'exploitant de la plateforme. Voir
+// `gouvernance.service.js`, qui crée l'établissement, son code officiel,
+// ses habilitations et son agent principal d'un seul geste.
 
 export async function definirStatutEtablissement(id, statut) {
   if (!estDansEnum(statut, STATUTS_ETABLISSEMENT) || !statut) {

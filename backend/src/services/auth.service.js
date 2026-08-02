@@ -98,6 +98,8 @@ export async function verifierOtp(telephone, code) {
     etablissement_id: utilisateur.etablissement_id,
     ministere_id: utilisateur.ministere_id,
     personne_id: utilisateur.personne_id,
+    // Porté par le jeton : détermine qui peut créer d'autres agents.
+    est_agent_principal: utilisateur.est_agent_principal === true,
   });
 
   return { token, utilisateur: formaterUtilisateur(utilisateur) };
@@ -115,5 +117,6 @@ export function formaterUtilisateur(u) {
     ministere_id: u.ministere_id,
     personne_id: u.personne_id,
     actif: u.actif,
+    est_agent_principal: u.est_agent_principal === true,
   };
 }

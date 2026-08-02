@@ -18,6 +18,7 @@
 
 TRUNCATE journal_audit, verifications_log, transactions_blockchain,
          diplomes, dossiers, codes_otp, utilisateurs,
+         demandes_integration, habilitations,
          inscriptions, promotions, filieres, facultes,
          sessions_academiques, annees_academiques, candidats, personnes,
          ministeres, etablissements
@@ -35,9 +36,10 @@ VALUES (
 );
 
 -- ── Établissement pilote ───────────────────────────────────────────
-INSERT INTO etablissements (id, nom, type, ville, email, telephone, adresse, statut)
+INSERT INTO etablissements (id, code, nom, type, ville, email, telephone, adresse, statut)
 VALUES (
     '20000000-0000-0000-0000-000000000001',
+    'IAI001',
     'Institut Africain d''Informatique',
     'institut',
     'Lomé',
@@ -46,6 +48,14 @@ VALUES (
     'Avenue de la Libération, Lomé, Togo',
     'actif'
 );
+
+-- ── Habilitations de l'établissement pilote ────────────────────────
+-- Sans habilitation, les contrôles automatiques du ministère rejetteraient
+-- tous les dossiers de cet établissement.
+INSERT INTO habilitations (etablissement_id, type_diplome, reference_arrete)
+VALUES
+    ('20000000-0000-0000-0000-000000000001', 'licence', 'ARR-2020-001'),
+    ('20000000-0000-0000-0000-000000000001', 'master',  'ARR-2020-001');
 
 -- ── Personnes (identité nationale, indépendante des établissements) ─
 INSERT INTO personnes (id, nom, prenom, date_naissance, lieu_naissance, sexe, telephone, email)
@@ -66,9 +76,9 @@ VALUES
 INSERT INTO utilisateurs (id, nom, prenom, telephone, role, ministere_id)
 VALUES ('40000000-0000-0000-0000-000000000001', 'ADJOVI', 'Sena', '+22890000001', 'ministere', '10000000-0000-0000-0000-000000000001');
 
--- Agent de l'établissement pilote
-INSERT INTO utilisateurs (id, nom, prenom, telephone, role, etablissement_id)
-VALUES ('40000000-0000-0000-0000-000000000002', 'KOUASSI', 'Edem', '+22890000002', 'etablissement', '20000000-0000-0000-0000-000000000001');
+-- Agent principal de l'établissement pilote (peut créer d'autres agents)
+INSERT INTO utilisateurs (id, nom, prenom, telephone, role, etablissement_id, est_agent_principal)
+VALUES ('40000000-0000-0000-0000-000000000002', 'KOUASSI', 'Edem', '+22890000002', 'etablissement', '20000000-0000-0000-0000-000000000001', TRUE);
 
 -- Administrateur système
 INSERT INTO utilisateurs (id, nom, prenom, telephone, role)
