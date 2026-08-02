@@ -26,6 +26,7 @@ import structureRoutes from './routes/structure.routes.js';
 import promotionRoutes from './routes/promotion.routes.js';
 import lotRoutes from './routes/lot.routes.js';
 import { journalRouter, corbeilleRouter } from './routes/journal.routes.js';
+import notificationRoutes from './routes/notification.routes.js';
 import { contexteRequete } from './config/contexte.js';
 import { UPLOADS_DIR, UPLOADS_URL_PREFIX, assurerDossierUploads } from './config/storage.js';
 
@@ -83,6 +84,7 @@ app.use('/api/promotions', promotionRoutes);
 app.use('/api/lots', lotRoutes);
 app.use('/api/journal', journalRouter);
 app.use('/api/corbeille', corbeilleRouter);
+app.use('/api/notifications', notificationRoutes);
 
 // ── Gestion des erreurs (toujours en dernier) ──────────────────────
 app.use(nonTrouve);

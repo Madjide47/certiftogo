@@ -17,6 +17,7 @@ import * as utilisateurModel from '../models/utilisateur.model.js';
 import { ErreurApp, avecErreursSql } from '../utils/errors.js';
 import { genererReferenceDemande, initialesEtablissement } from '../utils/reference-generator.js';
 import { journaliser, ACTIONS } from './audit.service.js';
+import * as notifications from './notification.service.js';
 import {
   nettoyerTexte,
   estUuidValide,
@@ -148,7 +149,7 @@ export async function creerEtablissement(donnees, agent_ministere_id = null) {
 
   const codeImpose = nettoyerTexte(donnees.code);
 
-  return avecErreursSql(
+  const resultat = await avecErreursSql(
     () =>
       withTransaction(async (client) => {
         const code = codeImpose
@@ -195,6 +196,21 @@ export async function creerEtablissement(donnees, agent_ministere_id = null) {
       }),
     CONTRAINTES
   );
+
+  // L'agent principal doit savoir que son compte existe : sans ce message,
+  // personne ne se connecte jamais à l'établissement qu'on vient d'agréer.
+  await notifications.notifier(
+    notifications.EVENEMENTS.COMPTE_CREE,
+    [{
+      id: resultat.agent_principal.id,
+      telephone: resultat.agent_principal.telephone,
+      nom: resultat.agent_principal.nom,
+      prenom: resultat.agent_principal.prenom,
+    }],
+    { etablissement: resultat.etablissement.nom, etablissement_id: resultat.etablissement.id }
+  );
+
+  return resultat;
 }
 
 // ── Habilitations ──────────────────────────────────────────────────
@@ -414,6 +430,16 @@ export async function accepterDemande(id, agent_ministere_id, donnees = {}) {
     agent_ministere_id,
   });
 
+  await notifications.notifier(
+    notifications.EVENEMENTS.DEMANDE_ACCEPTEE,
+    [{ telephone: demande.responsable_telephone, email: demande.email }],
+    {
+      etablissement: resultat.etablissement.nom,
+      code: resultat.etablissement.code,
+      telephone: demande.responsable_telephone,
+    }
+  );
+
   await journaliser({
     action: ACTIONS.DEMANDE_ACCEPTEE,
     entite: 'demandes_integration',
@@ -441,6 +467,12 @@ export async function refuserDemande(id, agent_ministere_id, motif) {
     motif_refus,
     agent_ministere_id,
   });
+
+  await notifications.notifier(
+    notifications.EVENEMENTS.DEMANDE_REFUSEE,
+    [{ telephone: demande.responsable_telephone, email: demande.email }],
+    { reference: demande.reference, motif: motif_refus }
+  );
 
   await journaliser({
     action: ACTIONS.DEMANDE_REFUSEE,
@@ -493,6 +525,12 @@ export async function creerAgent(demandeur, donnees) {
         actif: true,
       }),
     CONTRAINTES
+  );
+
+  await notifications.notifier(
+    notifications.EVENEMENTS.COMPTE_CREE,
+    [{ id: compte.id, telephone: compte.telephone, nom: compte.nom, prenom: compte.prenom }],
+    { etablissement_id: demandeur.etablissement_id }
   );
 
   await journaliser({

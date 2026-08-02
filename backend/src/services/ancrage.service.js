@@ -17,6 +17,7 @@ import * as txModel from '../models/transaction-blockchain.model.js';
 import * as lotModel from '../models/lot.model.js';
 import * as blockchain from './blockchain.service.js';
 import { journaliser, journaliserStatutDossier, ACTIONS } from './audit.service.js';
+import * as notifications from './notification.service.js';
 import { construireDiplomeDepuisDossier } from './diplome.service.js';
 import { ErreurApp } from '../utils/errors.js';
 import { estUuidValide, versEntier } from '../utils/validators.js';
@@ -212,6 +213,18 @@ export async function traiterTranche(taille = TAILLE_LOT_WORKER) {
         logger.error(
           `[ancrage] Tâche ${tache.id} abandonnée après ${etat.tentatives} tentatives : ${err.message}`
         );
+        await notifications.notifierRole(
+          notifications.EVENEMENTS.ANCRAGE_ECHOUE,
+          'admin_systeme',
+          {
+            reference: tache.charge_utile?.reference,
+            tentatives: etat.tentatives,
+            erreur: err.message,
+            entite: 'file_attente_ancrage',
+            entite_id: tache.id,
+          }
+        );
+
         await journaliser({
           action: ACTIONS.ANCRAGE_ABANDONNE,
           entite: 'file_attente_ancrage',

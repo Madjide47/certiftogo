@@ -165,3 +165,68 @@ export async function envoyerCodeOtp(telephone, code) {
   logger.info(`OTP WhatsApp envoyé à ${telephone} (message ${messageId})`);
   return { success: true, mock: false, messageId };
 }
+
+/**
+ * Envoie un message texte libre (notifications hors OTP).
+ *
+ * En mode `cloud`, Meta n'autorise le texte libre que dans la fenêtre de
+ * 24 h suivant un message de l'utilisateur : hors de cette fenêtre il
+ * faudrait un template approuvé. Tant que les templates métier ne sont
+ * pas validés, on trace l'intention plutôt que de prétendre avoir envoyé.
+ *
+ * @param {string} telephone
+ * @param {string} texte
+ */
+export async function envoyerMessage(telephone, texte) {
+  if (!telephone) {
+    throw new ErreurWhatsapp('Destinataire manquant.', { code: 'DESTINATAIRE_MANQUANT' });
+  }
+
+  if (MODE !== 'cloud') {
+    logger.info(`[whatsapp mock] → ${telephone} : ${texte}`);
+    return { success: true, mock: true };
+  }
+
+  if (!TOKEN || !PHONE_NUMBER_ID) {
+    throw new ErreurWhatsapp(
+      'Configuration WhatsApp incomplète : définir WHATSAPP_TOKEN et WHATSAPP_PHONE_NUMBER_ID.',
+      { code: 'CONFIG_INCOMPLETE' }
+    );
+  }
+
+  const url = `https://graph.facebook.com/${VERSION_API}/${PHONE_NUMBER_ID}/messages`;
+  const controleur = new AbortController();
+  const minuteur = setTimeout(() => controleur.abort(), TIMEOUT_MS);
+
+  try {
+    const reponse = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: versFormatMeta(telephone),
+        type: 'text',
+        text: { body: texte },
+      }),
+      signal: controleur.signal,
+    });
+
+    const charge = await reponse.json().catch(() => ({}));
+    if (!reponse.ok) {
+      throw new ErreurWhatsapp(
+        `Envoi WhatsApp refusé (${reponse.status}) : ${charge?.error?.message || 'raison inconnue'}`,
+        { code: 'REFUS_META' }
+      );
+    }
+    return { success: true, mock: false, messageId: charge?.messages?.[0]?.id };
+  } catch (err) {
+    if (err instanceof ErreurWhatsapp) throw err;
+    const raison = err.name === 'AbortError' ? `délai dépassé (${TIMEOUT_MS} ms)` : err.message;
+    throw new ErreurWhatsapp(`Envoi WhatsApp impossible : ${raison}`, { code: 'RESEAU' });
+  } finally {
+    clearTimeout(minuteur);
+  }
+}

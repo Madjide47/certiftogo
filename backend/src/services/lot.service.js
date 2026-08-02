@@ -19,6 +19,7 @@ import { controlerLot } from './controle.service.js';
 import { ErreurApp, avecErreursSql } from '../utils/errors.js';
 import { genererReferenceDossier } from '../utils/reference-generator.js';
 import { journaliser, journaliserStatutDossier, ACTIONS } from './audit.service.js';
+import * as notifications from './notification.service.js';
 import { nettoyerTexte, estUuidValide, estDansEnum, estDateValide } from '../utils/validators.js';
 
 const STATUTS_LOT = ['transmis', 'en_examen', 'valide', 'partiellement_traite', 'rejete', 'certifie'];
@@ -157,13 +158,25 @@ export async function transmettre(promotion_id, etablissement_id, agent, donnees
 
       return lot_id;
     })
-  ).then(async (lot_id) => ({
+  ).then(async (lot_id) => {
+    // Le ministere doit savoir qu'un lot l'attend : sans cela il faudrait
+    // consulter l'interface au hasard pour decouvrir le travail a faire.
+    await notifications.notifierRole(notifications.EVENEMENTS.LOT_RECU, 'ministere', {
+      etablissement: promotion.etablissement_nom || 'Un etablissement',
+      effectif: admis.length,
+      promotion: promotion.libelle,
+      reference: (await lotModel.trouverParId(lot_id))?.reference,
+      entite: 'lots_transmission',
+      entite_id: lot_id,
+    });
+    return {
     // Relu APRÈS le commit : `trouverParId` passe par le pool, donc par une
     // autre connexion, qui ne verrait pas encore la ligne non validée.
-    lot: await lotModel.trouverParId(lot_id),
-    transmis: admis.length,
-    non_transmis: inscriptions.length - admis.length,
-  }));
+      lot: await lotModel.trouverParId(lot_id),
+      transmis: admis.length,
+      non_transmis: inscriptions.length - admis.length,
+    };
+  });
 }
 
 // ── Instruction (ministère) ────────────────────────────────────────
@@ -217,6 +230,12 @@ export async function examiner(id, agent_ministere_id) {
     apres: { statut: 'en_examen' },
     message: `${controles.bloquants.length} dossier(s) bloquant(s), ${controles.anomalies.length} anomalie(s).`,
   });
+
+  await notifications.notifierEtablissement(
+    notifications.EVENEMENTS.LOT_EXAMINE,
+    lot.etablissement_id,
+    { reference: lot.reference, effectif: lot.effectif, entite: 'lots_transmission', entite_id: id }
+  );
 
   return { lot: await lotModel.trouverParId(id), controles };
 }
@@ -331,6 +350,18 @@ export async function valider(id, agent_ministere_id, donnees = {}) {
     );
   });
 
+  await notifications.notifierEtablissement(
+    notifications.EVENEMENTS.LOT_VALIDE,
+    lot.etablissement_id,
+    {
+      reference: lot.reference,
+      valides: aValider.length,
+      rejetes: aRejeter.size,
+      entite: 'lots_transmission',
+      entite_id: id,
+    }
+  );
+
   return {
     lot: await lotModel.trouverParId(id),
     valides: aValider.length,
@@ -391,6 +422,12 @@ export async function rejeter(id, agent_ministere_id, motif) {
     // L'établissement doit pouvoir corriger puis retransmettre.
     await client.query(`UPDATE promotions SET statut = 'ouverte' WHERE id = $1`, [lot.promotion_id]);
   });
+
+  await notifications.notifierEtablissement(
+    notifications.EVENEMENTS.LOT_REJETE,
+    lot.etablissement_id,
+    { reference: lot.reference, motif: motif_rejet, entite: 'lots_transmission', entite_id: id }
+  );
 
   return lotModel.trouverParId(id);
 }

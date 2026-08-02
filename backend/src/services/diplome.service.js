@@ -13,6 +13,7 @@ import * as dossierModel from '../models/dossier.model.js';
 import * as txModel from '../models/transaction-blockchain.model.js';
 import { withTransaction } from '../config/database.js';
 import { journaliser, journaliserStatutDossier, ACTIONS } from './audit.service.js';
+import * as notifications from './notification.service.js';
 import { ErreurApp } from '../utils/errors.js';
 import { genererReferenceDiplome } from '../utils/reference-generator.js';
 import { calculerHash } from './hash.service.js';
@@ -224,6 +225,18 @@ export async function certifier(dossier_id, ministere_id) {
 
     return cree;
   });
+
+  await notifications.notifierDiplome(
+    notifications.EVENEMENTS.DIPLOME_CERTIFIE,
+    dossier.candidat_id,
+    {
+      type_diplome: dossier.type_diplome,
+      reference,
+      entite: 'diplomes',
+      entite_id: diplome.id,
+      etablissement_id: dossier.etablissement_id,
+    }
+  );
 
   return diplome;
 }

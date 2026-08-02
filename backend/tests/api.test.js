@@ -2020,3 +2020,158 @@ describe('Lot de transmission — émission, contrôles, rejet partiel', () => {
     });
   });
 });
+
+// ── Notifications ──────────────────────────────────────────────
+// Le système n'envoyait que l'OTP : personne n'était averti de rien.
+describe('Notifications — catalogue, centre in-app et préférences', () => {
+  async function compter(evenement, canal = 'in_app') {
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM notifications WHERE evenement = $1 AND canal = $2`,
+      [evenement, canal]
+    );
+    return rows[0].n;
+  }
+
+  test('avertit le ministère qu\'un lot l\'attend', async () => {
+    assert.ok(await compter('lot_recu'), 'la transmission a produit une notification');
+
+    const { rows } = await pool.query(
+      `SELECT n.sujet, n.corps, n.priorite, u.role
+         FROM notifications n JOIN utilisateurs u ON u.id = n.destinataire_id
+        WHERE n.evenement = 'lot_recu' ORDER BY n.date_creation DESC LIMIT 1`
+    );
+    assert.equal(rows[0].role, 'ministere');
+    assert.match(rows[0].corps, /dossier\(s\)/);
+    assert.equal(
+      rows[0].corps.includes('{{'),
+      false,
+      'toutes les variables du modèle sont substituées'
+    );
+  });
+
+  test('avertit l\'établissement du sort de son lot', async () => {
+    assert.ok(await compter('lot_valide'), 'validation notifiée');
+    assert.ok(await compter('lot_rejete'), 'rejet notifié');
+
+    const { rows } = await pool.query(
+      `SELECT corps, priorite FROM notifications
+        WHERE evenement = 'lot_rejete' ORDER BY date_creation DESC LIMIT 1`
+    );
+    assert.equal(rows[0].priorite, 'haute');
+    assert.match(rows[0].corps, /Motif/);
+  });
+
+  test('avertit le diplômé de sa certification, sur deux canaux', async () => {
+    const { rows } = await pool.query(
+      `SELECT canal, statut, destinataire_telephone FROM notifications
+        WHERE evenement = 'diplome_certifie' ORDER BY date_creation DESC`
+    );
+    assert.ok(rows.length >= 2, 'in-app et WhatsApp');
+
+    const canaux = new Set(rows.map((r) => r.canal));
+    assert.ok(canaux.has('in_app'));
+    assert.ok(canaux.has('whatsapp'));
+
+    const whatsapp = rows.find((r) => r.canal === 'whatsapp');
+    assert.equal(whatsapp.statut, 'envoyee', 'expédiée en mode mock');
+    assert.ok(whatsapp.destinataire_telephone);
+  });
+
+  test('avertit l\'agent principal que son compte existe', async () => {
+    assert.ok(await compter('compte_cree'), 'agrément et création d\'agent notifiés');
+  });
+
+  test('sert le centre de notifications et son compteur', async () => {
+    const t = await login('+22890000001');
+
+    const boite = await api().get('/api/notifications').set(auth(t));
+    assert.equal(boite.status, 200);
+    assert.ok(boite.body.data.notifications.length > 0);
+    assert.ok(boite.body.data.non_lues > 0);
+    assert.ok(boite.body.data.notifications.every((n) => n.canal === 'in_app'));
+
+    const premiere = boite.body.data.notifications[0];
+    const lue = await api().patch(`/api/notifications/${premiere.id}/lue`).set(auth(t));
+    assert.equal(lue.status, 200);
+    assert.equal(lue.body.data.notification.lue, true);
+
+    const nonLues = await api().get('/api/notifications?non_lues=true').set(auth(t));
+    assert.ok(nonLues.body.data.notifications.every((n) => n.lue === false));
+
+    const tout = await api().post('/api/notifications/tout-lu').set(auth(t));
+    assert.ok(tout.body.data.marquees >= 1);
+    assert.equal((await api().get('/api/notifications').set(auth(t))).body.data.non_lues, 0);
+  });
+
+  test('ne livre la boîte que de son propre titulaire', async () => {
+    const t = await login('+22890000002');
+    const res = await api().get('/api/notifications').set(auth(t));
+    assert.equal(res.status, 200);
+
+    const { rows } = await pool.query(
+      `SELECT id FROM utilisateurs WHERE telephone = '+22890000002'`
+    );
+    const { rows: fuites } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM notifications
+        WHERE id = ANY($1::uuid[]) AND destinataire_id <> $2`,
+      [res.body.data.notifications.map((n) => n.id), rows[0].id]
+    );
+    assert.equal(fuites[0].n, 0);
+  });
+
+  test('expose le catalogue et accepte un désabonnement', async () => {
+    const t = await login('+22890000002');
+
+    const prefs = await api().get('/api/notifications/preferences').set(auth(t));
+    assert.equal(prefs.status, 200);
+    assert.ok(prefs.body.data.catalogue.length >= 15, 'le catalogue est exhaustif');
+
+    const examine = prefs.body.data.catalogue.find((c) => c.evenement === 'lot_examine');
+    assert.equal(examine.desactivable, true);
+
+    const refus = await api().put('/api/notifications/preferences').set(auth(t)).send({
+      evenement: 'lot_examine', canal: 'in_app', actif: false,
+    });
+    assert.equal(refus.status, 200);
+    assert.equal(refus.body.data.preference.actif, false);
+
+    const apres = await api().get('/api/notifications/preferences').set(auth(t));
+    assert.ok(apres.body.data.refus.some((r) => r.evenement === 'lot_examine'));
+  });
+
+  test('refuse de désactiver une notification critique', async () => {
+    const t = await login('+22890000011'); // un diplômé
+
+    const res = await api().put('/api/notifications/preferences').set(auth(t)).send({
+      evenement: 'diplome_revoque', canal: 'whatsapp', actif: false,
+    });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'NOTIFICATION_CRITIQUE');
+  });
+
+  test('rejette un événement ou un canal inconnu', async () => {
+    const t = await login('+22890000002');
+
+    const evenement = await api().put('/api/notifications/preferences').set(auth(t)).send({
+      evenement: 'fete_nationale', canal: 'in_app', actif: false,
+    });
+    assert.equal(evenement.status, 400);
+    assert.equal(evenement.body.error.code, 'EVENEMENT_INCONNU');
+
+    const canal = await api().put('/api/notifications/preferences').set(auth(t)).send({
+      evenement: 'lot_valide', canal: 'pigeon', actif: false,
+    });
+    assert.equal(canal.status, 400);
+    assert.equal(canal.body.error.code, 'CANAL_INCONNU');
+  });
+
+  test('réserve la supervision de la file à l\'administrateur', async () => {
+    const etab = await login('+22890000002');
+    assert.equal((await api().get('/api/notifications/supervision').set(auth(etab))).status, 403);
+
+    const admin = await login('+22890000003');
+    const res = await api().get('/api/notifications/supervision').set(auth(admin));
+    assert.equal(res.status, 200);
+    assert.ok(res.body.data.repartition.some((r) => r.canal === 'in_app'));
+  });
+});

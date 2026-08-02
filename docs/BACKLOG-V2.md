@@ -140,26 +140,26 @@ Dernière mise à jour : 2 août 2026.
 | # | Élément | Statut |
 |---|---|---|
 | I-01 | Envoi OTP (WhatsApp mock + Cloud API) | ✅ |
-| I-02 | **Catalogue événement × destinataire × canal × priorité × modèle** | ⬜ |
-| I-03 | Compte créé | ⬜ |
-| I-04 | Dossier / lot reçu par le ministère | ⬜ |
-| I-05 | Dossier examiné | ⬜ |
-| I-06 | Dossier validé | ⬜ |
-| I-07 | Dossier rejeté avec motif | ⬜ |
-| I-08 | **Diplôme certifié** (« connectez-vous à CertifTOGO ») | ⬜ |
-| I-09 | Diplôme révoqué | ⬜ |
-| I-10 | QR consulté par un tiers (option candidat) | ⬜ |
-| I-11 | Tentative de connexion échouée | ⬜ |
-| I-12 | Session suspecte | ⬜ |
-| I-13 | Établissement suspendu | ⬜ |
-| I-14 | Agent désactivé | ⬜ |
-| I-15 | Transaction blockchain échouée | ⬜ |
-| I-16 | Retry blockchain réussi | ⬜ |
-| I-17 | **Centre de notifications in-app** | ⬜ |
-| I-18 | Préférences et désabonnement | ⬜ |
-| I-19 | Reprise sur échec d'envoi | ⬜ |
-| I-20 | Canal **SMS** de secours (aujourd'hui WhatsApp seul) | ⬜ |
-| I-21 | Canal **email** | ⬜ |
+| I-02 | **Catalogue événement × destinataire × canal × priorité × modèle** | ✅ |
+| I-03 | Compte créé | ✅ |
+| I-04 | Dossier / lot reçu par le ministère | ✅ |
+| I-05 | Dossier examiné | ✅ |
+| I-06 | Dossier validé | ✅ |
+| I-07 | Dossier rejeté avec motif | ✅ |
+| I-08 | **Diplôme certifié** (« connectez-vous à CertifTOGO ») | ✅ |
+| I-09 | Diplôme révoqué | ✅ |
+| I-10 | QR consulté par un tiers (option candidat) | 🔨 *modèle prêt, déclencheur à brancher* |
+| I-11 | Tentative de connexion échouée | ✅ |
+| I-12 | Session suspecte | ✅ |
+| I-13 | Établissement suspendu | ✅ |
+| I-14 | Agent désactivé | ✅ |
+| I-15 | Transaction blockchain échouée | ✅ |
+| I-16 | Retry blockchain réussi | ✅ |
+| I-17 | **Centre de notifications in-app** | ✅ |
+| I-18 | Préférences et désabonnement | ✅ |
+| I-19 | Reprise sur échec d'envoi | ✅ |
+| I-20 | Canal **SMS** de secours (aujourd'hui WhatsApp seul) | 🔨 *canal tracé, opérateur non raccordé* |
+| I-21 | Canal **email** | 🔨 *canal tracé, SMTP non raccordé* |
 
 ## J. Journalisation et audit
 
@@ -298,9 +298,9 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 83 |
-| 🔨 partiel ou en cours | 13 |
-| ⬜ à faire | 78 |
+| ✅ fait et testé | 100 |
+| 🔨 partiel ou en cours | 16 |
+| ⬜ à faire | 58 |
 | **Total** | **174** |
 
 ## Ordre d'implémentation proposé
