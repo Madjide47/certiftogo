@@ -8,6 +8,10 @@ import { genererCodeOtp, calculerExpiration, OTP_EXPIRATION_MINUTES } from './ot
 import { envoyerCodeOtp, estActif as whatsappActif } from './whatsapp.service.js';
 import { genererToken } from '../config/jwt.js';
 import { journaliser, ACTIONS } from './audit.service.js';
+import * as sessions from './session.service.js';
+
+/** Essais autorisés sur un code OTP avant de le brûler (CDC §23.5). */
+export const TENTATIVES_OTP_MAX = Number(process.env.OTP_TENTATIVES_MAX || 5);
 
 /** Erreur métier avec code HTTP et code applicatif. */
 export class ErreurAuth extends Error {
@@ -26,11 +30,24 @@ export class ErreurAuth extends Error {
 export async function demanderOtp(telephone) {
   const utilisateur = await utilisateurModel.trouverParTelephone(telephone);
 
-  if (!utilisateur) {
-    throw new ErreurAuth(404, 'UTILISATEUR_INTROUVABLE', 'Aucun compte associé à ce numéro.');
-  }
-  if (!utilisateur.actif) {
-    throw new ErreurAuth(403, 'COMPTE_INACTIF', 'Ce compte est désactivé.');
+  // Réponse VOLONTAIREMENT identique que le compte existe ou non : un
+  // 404 sur numéro inconnu permettrait d'énumérer les comptes de la
+  // plateforme — donc de savoir qui travaille au ministère. On ne dit
+  // rien, on n'envoie simplement pas de code.
+  const reponseGenerique = {
+    message: `Si un compte est associé à ce numéro, un code de vérification vient d'être envoyé. Il expire dans ${OTP_EXPIRATION_MINUTES} minutes.`,
+    expiration_minutes: OTP_EXPIRATION_MINUTES,
+  };
+
+  if (!utilisateur || !utilisateur.actif) {
+    await journaliser({
+      action: ACTIONS.OTP_DEMANDE,
+      entite: 'utilisateurs',
+      resultat: 'echec',
+      auteur_libelle: telephone,
+      message: utilisateur ? 'Compte désactivé.' : 'Numéro inconnu.',
+    });
+    return reponseGenerique;
   }
 
   // On invalide les éventuels codes encore actifs avant d'en créer un nouveau.
@@ -59,10 +76,15 @@ export async function demanderOtp(telephone) {
     );
   }
 
-  const reponse = {
-    message: `Un code de vérification a été envoyé par WhatsApp. Il expire dans ${OTP_EXPIRATION_MINUTES} minutes.`,
-    expiration_minutes: OTP_EXPIRATION_MINUTES,
-  };
+  await journaliser({
+    action: ACTIONS.OTP_DEMANDE,
+    entite: 'utilisateurs',
+    entite_id: utilisateur.id,
+    utilisateur_id: utilisateur.id,
+    auteur_libelle: `${utilisateur.nom} ${utilisateur.prenom}`.trim(),
+  });
+
+  const reponse = { ...reponseGenerique };
 
   // Le code n'est renvoyé au front que si AUCUN envoi réel n'a eu lieu
   // (mode mock) et hors production. NE JAMAIS exposer autrement.
@@ -82,6 +104,30 @@ export async function verifierOtp(telephone, code) {
   const codeOtp = await otpModel.trouverCodeValide(telephone, code);
 
   if (!codeOtp) {
+    // Un code à 6 chiffres, c'est un million de possibilités : sans
+    // plafond d'essais il tombe en quelques minutes avec un script. On
+    // compte les échecs sur le code ACTIF du numéro, et on le brûle au
+    // plafond — l'attaquant doit alors en refaire émettre un.
+    const actif = await otpModel.trouverCodeActif(telephone);
+    if (actif) {
+      const etat = await otpModel.enregistrerEchec(actif.id, TENTATIVES_OTP_MAX);
+      if (etat?.bloque) {
+        await journaliser({
+          action: ACTIONS.CONNEXION_ECHOUEE,
+          entite: 'utilisateurs',
+          entite_id: actif.utilisateur_id,
+          resultat: 'echec',
+          auteur_libelle: telephone,
+          message: `Code brûlé après ${etat.tentatives} tentatives infructueuses.`,
+        });
+        throw new ErreurAuth(
+          429,
+          'TROP_DE_TENTATIVES',
+          'Trop de tentatives : ce code est désormais invalide. Demandez-en un nouveau.'
+        );
+      }
+    }
+
     // Une tentative infructueuse est tracée : c'est le premier signal
     // d'une attaque par force brute sur un numéro connu.
     await journaliser({
@@ -102,7 +148,12 @@ export async function verifierOtp(telephone, code) {
     throw new ErreurAuth(403, 'COMPTE_INACTIF', 'Ce compte est indisponible.');
   }
 
+  // Une session révocable adosse le jeton : désactiver un compte ferme
+  // désormais ses accès en cours, au lieu de les laisser vivre 24 h.
+  const { session, jeton_rafraichissement } = await sessions.ouvrir(utilisateur.id);
+
   const token = genererToken({
+    session_id: session.id,
     utilisateur_id: utilisateur.id,
     role: utilisateur.role,
     etablissement_id: utilisateur.etablissement_id,
@@ -120,6 +171,38 @@ export async function verifierOtp(telephone, code) {
     role: utilisateur.role,
     etablissement_id: utilisateur.etablissement_id,
     auteur_libelle: `${utilisateur.nom} ${utilisateur.prenom}`.trim(),
+  });
+
+  return {
+    token,
+    jeton_rafraichissement,
+    session_id: session.id,
+    utilisateur: formaterUtilisateur(utilisateur),
+  };
+}
+
+/**
+ * Renouvelle un jeton d'accès à partir d'un jeton de rafraîchissement.
+ * Le compte est revérifié à chaque fois : un compte désactivé entre-temps
+ * ne se renouvelle pas.
+ */
+export async function rafraichir(jeton_rafraichissement) {
+  const session = await sessions.resoudre(jeton_rafraichissement);
+  const utilisateur = await utilisateurModel.trouverParId(session.utilisateur_id);
+
+  if (!utilisateur || !utilisateur.actif) {
+    await sessions.revoquerCompte(session.utilisateur_id, { motif: 'compte_desactive' });
+    throw new ErreurAuth(403, 'COMPTE_INACTIF', 'Ce compte est indisponible.');
+  }
+
+  const token = genererToken({
+    session_id: session.id,
+    utilisateur_id: utilisateur.id,
+    role: utilisateur.role,
+    etablissement_id: utilisateur.etablissement_id,
+    ministere_id: utilisateur.ministere_id,
+    personne_id: utilisateur.personne_id,
+    est_agent_principal: utilisateur.est_agent_principal === true,
   });
 
   return { token, utilisateur: formaterUtilisateur(utilisateur) };

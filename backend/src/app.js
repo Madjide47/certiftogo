@@ -45,6 +45,7 @@ app.use(cors({ origin: originsAutorisees, credentials: true }));
 
 // Contexte de requête : transporte auteur, IP et user-agent jusqu'aux
 // services, sans polluer leurs signatures. Doit précéder les routes.
+app.set('trust proxy', 1);
 app.use(contexteRequete);
 
 app.use(express.json());

@@ -6,6 +6,7 @@ import * as adminModel from '../models/admin.model.js';
 import * as utilisateurModel from '../models/utilisateur.model.js';
 import * as etablissementModel from '../models/etablissement.model.js';
 import { ErreurApp } from '../utils/errors.js';
+import * as sessions from './session.service.js';
 import {
   nettoyerTexte,
   estDansEnum,
@@ -100,6 +101,14 @@ export async function definirActifUtilisateur(id, actif) {
   if (!maj) {
     throw new ErreurApp(404, 'UTILISATEUR_INTROUVABLE', 'Utilisateur introuvable.');
   }
+
+  // Désactiver un compte doit couper ses accès TOUT DE SUITE. Sans cette
+  // révocation, l'agent qui vient de quitter l'établissement resterait
+  // connecté jusqu'à l'expiration de son jeton.
+  if (!actif) {
+    await sessions.revoquerCompte(id, { motif: 'compte_desactive' });
+  }
+
   return maj;
 }
 

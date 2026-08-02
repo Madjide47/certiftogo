@@ -30,8 +30,8 @@ Dernière mise à jour : 2 août 2026.
 | A-15 | **Récupération après perte du téléphone** : procédure médiée par un agent | ⬜ |
 | A-16 | **Normalisation du téléphone à la saisie** (sinon le regroupement d'identité fuit) | ✅ |
 | A-17 | **Téléphone obligatoire** pour un candidat (option A) avec statut « en attente de numéro » | ⬜ |
-| A-18 | **Désactivation immédiate** d'un agent qui quitte son établissement | 🔨 *`actif` existe, pas de procédure* |
-| A-19 | **Révocation des sessions actives** à la désactivation | ⬜ *aucune gestion de session* |
+| A-18 | **Désactivation immédiate** d'un agent qui quitte son établissement | ✅ |
+| A-19 | **Révocation des sessions actives** à la désactivation | ✅ |
 | A-20 | **Transfert des dossiers en cours** d'un agent partant vers un autre | ⬜ |
 
 ## B. Rôles internes à un établissement
@@ -202,16 +202,16 @@ Dernière mise à jour : 2 août 2026.
 | L-01 | Requêtes SQL paramétrées | ✅ |
 | L-02 | Secrets hors du code, refus de démarrer sans secret en production | ✅ |
 | L-03 | Isolation par établissement | ✅ |
-| L-04 | **Rate limiting** : vérification publique, envoi d'OTP, tentatives de connexion | ⬜ |
-| L-05 | **Anti-brute force OTP** (nombre d'essais) | ⬜ |
-| L-06 | **Anti-énumération de comptes** | ⬜ *`request-otp` répond 404 sur numéro inconnu* |
-| L-07 | **Gestion de session** : refresh token, révocation, sessions concurrentes | ⬜ |
-| L-08 | **Double validation à quatre yeux** pour les actions critiques | ⬜ |
+| L-04 | **Rate limiting** : vérification publique, envoi d'OTP, tentatives de connexion | ✅ |
+| L-05 | **Anti-brute force OTP** (nombre d'essais) | ✅ |
+| L-06 | **Anti-énumération de comptes** | ✅ |
+| L-07 | **Gestion de session** : refresh token, révocation, sessions concurrentes | ✅ |
+| L-08 | **Double validation à quatre yeux** pour les actions critiques | 🔨 *table et contrainte à quatre yeux posées, activation à brancher* |
 | L-09 | **Clé privée du ministère hors serveur applicatif** (KMS / HSM) | ⬜ |
 | L-10 | Audit de chaque signature | ⬜ |
 | L-11 | **Rotation de clés** et procédure de compromission | ⬜ |
 | L-12 | Sort des diplômes signés avec l'ancienne clé | ⬜ |
-| L-13 | Protection CSRF | ⬜ |
+| L-13 | Protection CSRF | ✅ *sans objet : auth par en-tête Bearer, aucun cookie de session* |
 | L-14 | Dépendances vulnérables (`tar` critique, `body-parser`, `brace-expansion`) | ⬜ |
 
 ## M. Cas exceptionnels
@@ -276,7 +276,7 @@ ci-dessus : voici ce que seul le CDC mentionne.
 | P-11 | **Nomenclatures en base** : `types_diplome`, `mentions` (aujourd'hui des `CHECK` figés) | 24.3.4 | ⬜ |
 | P-12 | **Table `historique_statuts_dossier`** | 24.3.6 | ✅ |
 | P-13 | **Table `cles_publiques_ministere`** | 24.3.9 | ⬜ |
-| P-14 | **Table `sessions`** (jetons, révocation) | 24.3.2 | ⬜ |
+| P-14 | **Table `sessions`** (jetons, révocation) | ✅ | ✅ |
 | P-15 | Diagramme entité-association d'ensemble | 24.4 | ⬜ |
 | P-16 | Stratégie de migration depuis le schéma actuel | 24.6 | 🔨 |
 | P-17 | Passage en mainnet | 32.1 | ⬜ |
@@ -298,9 +298,9 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 100 |
-| 🔨 partiel ou en cours | 16 |
-| ⬜ à faire | 58 |
+| ✅ fait et testé | 108 |
+| 🔨 partiel ou en cours | 17 |
+| ⬜ à faire | 49 |
 | **Total** | **174** |
 
 ## Ordre d'implémentation proposé

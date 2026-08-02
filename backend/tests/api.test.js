@@ -56,9 +56,17 @@ before(async () => {
 });
 
 describe('Authentification OTP', () => {
-  test('refuse un numéro inconnu (404)', async () => {
+  test('ne révèle pas si un numéro est inconnu', async () => {
+    // Un 404 sur numéro inconnu permettrait d'énumérer les comptes de la
+    // plateforme — donc de savoir qui travaille au ministère.
     const res = await api().post('/api/auth/request-otp').send({ telephone: '+22800000000' });
-    assert.equal(res.status, 404);
+    assert.equal(res.status, 200, "réponse identique à celle d'un numéro connu");
+    assert.equal(res.body.data.code_dev, undefined, "mais aucun code n'est émis");
+
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM codes_otp WHERE telephone = '+22800000000'`
+    );
+    assert.equal(rows[0].n, 0);
   });
 
   test('connecte avec un code valide et expose le rôle via /me', async () => {
@@ -472,9 +480,16 @@ describe('Admin & isolation inter-établissements', () => {
       .send({ actif: false });
     assert.equal(maj.body.data.utilisateur.actif, false);
 
+    // Même réponse que pour un compte actif : un 403 signalerait que le
+    // compte existe. Aucun code n'est émis pour autant.
     const otp = await api().post('/api/auth/request-otp').send({ telephone: '+22890000201' });
-    assert.equal(otp.status, 403);
-    assert.equal(otp.body.error.code, 'COMPTE_INACTIF');
+    assert.equal(otp.status, 200);
+    assert.equal(otp.body.data.code_dev, undefined);
+
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM codes_otp WHERE telephone = '+22890000201'`
+    );
+    assert.equal(rows[0].n, 0, 'aucun code envoyé à un compte fermé');
   });
 });
 
@@ -982,10 +997,17 @@ describe('Identité nationale et portefeuille multi-établissements', () => {
     assert.equal(rows[0].role, 'candidat');
     assert.equal(rows[0].actif, false, 'mais il est fermé');
 
-    // Tant qu'aucun diplôme n'est certifié, la connexion est refusée.
+    // Tant qu'aucun diplôme n'est certifié, aucun code n'est émis — sans
+    // pour autant révéler que le compte existe.
     const otp = await api().post('/api/auth/request-otp').send({ telephone: TEL_NOUVEAU });
-    assert.equal(otp.status, 403);
-    assert.equal(otp.body.error.code, 'COMPTE_INACTIF');
+    assert.equal(otp.status, 200);
+    assert.equal(otp.body.data.code_dev, undefined);
+
+    const { rows: codes } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM codes_otp WHERE telephone = $1`,
+      [TEL_NOUVEAU]
+    );
+    assert.equal(codes[0].n, 0, 'compte fermé : pas de code');
   });
 
   test('la certification ouvre le compte du diplômé', async () => {
@@ -2018,6 +2040,142 @@ describe('Lot de transmission — émission, contrôles, rejet partiel', () => {
         .set(auth(t));
       assert.equal(deuxieme.status, 404);
     });
+  });
+});
+
+// ── Sessions et anti-force brute ───────────────────────────────
+describe('Sécurité — sessions révocables et OTP', () => {
+  const AGENT = '+22890000002';
+
+  /** Connexion complète, en récupérant aussi le jeton de rafraîchissement. */
+  async function connexion(telephone) {
+    await api().post('/api/auth/request-otp').send({ telephone });
+    const { rows } = await pool.query(
+      `SELECT code FROM codes_otp WHERE telephone=$1 AND utilise=FALSE
+         AND date_expiration>now() ORDER BY date_creation DESC LIMIT 1`,
+      [telephone]
+    );
+    const res = await api().post('/api/auth/verify-otp').send({ telephone, code: rows[0].code });
+    assert.equal(res.status, 200);
+    return res.body.data;
+  }
+
+  test('brûle le code OTP après cinq tentatives infructueuses', async () => {
+    const telephone = '+22890000013';
+    await api().post('/api/auth/request-otp').send({ telephone });
+
+    // Un code à 6 chiffres, c'est un million de possibilités : sans
+    // plafond, un script le trouve en quelques minutes.
+    for (let i = 0; i < 4; i += 1) {
+      const essai = await api()
+        .post('/api/auth/verify-otp')
+        .send({ telephone, code: '000000' });
+      assert.equal(essai.status, 401, `essai ${i + 1}`);
+    }
+
+    const cinquieme = await api().post('/api/auth/verify-otp').send({ telephone, code: '000000' });
+    assert.equal(cinquieme.status, 429);
+    assert.equal(cinquieme.body.error.code, 'TROP_DE_TENTATIVES');
+
+    const { rows } = await pool.query(
+      `SELECT bloque, utilise, tentatives FROM codes_otp
+        WHERE telephone = $1 ORDER BY date_creation DESC LIMIT 1`,
+      [telephone]
+    );
+    assert.equal(rows[0].bloque, true);
+    assert.equal(rows[0].utilise, true, 'le code est consommé, il faut en redemander un');
+  });
+
+  test('ouvre une session et délivre un jeton de rafraîchissement', async () => {
+    const data = await connexion(AGENT);
+    assert.ok(data.token);
+    assert.ok(data.jeton_rafraichissement, 'jeton de renouvellement fourni');
+    assert.ok(data.session_id);
+
+    const { rows } = await pool.query(`SELECT jeton_hash FROM sessions WHERE id = $1`, [
+      data.session_id,
+    ]);
+    assert.equal(rows[0].jeton_hash.length, 64, 'stocké sous forme d\'empreinte SHA-256');
+    assert.notEqual(rows[0].jeton_hash, data.jeton_rafraichissement, 'jamais en clair');
+  });
+
+  test('renouvelle un jeton d\'accès sans repasser par l\'OTP', async () => {
+    const data = await connexion(AGENT);
+
+    const refresh = await api()
+      .post('/api/auth/refresh')
+      .send({ jeton_rafraichissement: data.jeton_rafraichissement });
+    assert.equal(refresh.status, 200);
+    assert.ok(refresh.body.data.token);
+
+    const moi = await api().get('/api/auth/me').set(auth(refresh.body.data.token));
+    assert.equal(moi.status, 200);
+
+    const invalide = await api()
+      .post('/api/auth/refresh')
+      .send({ jeton_rafraichissement: 'a'.repeat(96) });
+    assert.equal(invalide.status, 401);
+    assert.equal(invalide.body.error.code, 'SESSION_EXPIREE');
+  });
+
+  test('la déconnexion invalide immédiatement le jeton', async () => {
+    const data = await connexion(AGENT);
+
+    assert.equal((await api().get('/api/auth/me').set(auth(data.token))).status, 200);
+
+    const sortie = await api().post('/api/auth/logout').set(auth(data.token));
+    assert.equal(sortie.status, 200);
+
+    // Le jeton est toujours cryptographiquement valide, mais sa session
+    // est close : c'est bien la session qui fait autorité.
+    const apres = await api().get('/api/auth/me').set(auth(data.token));
+    assert.equal(apres.status, 401);
+    assert.equal(apres.body.error.code, 'SESSION_REVOQUEE');
+  });
+
+  test('liste les appareils connectés et ferme les autres', async () => {
+    const premier = await connexion(AGENT);
+    const second = await connexion(AGENT);
+
+    const liste = await api().get('/api/auth/sessions').set(auth(second.token));
+    assert.equal(liste.status, 200);
+    assert.ok(liste.body.data.sessions.length >= 2);
+    assert.equal(
+      liste.body.data.sessions.find((s) => s.id === second.session_id).courante,
+      true
+    );
+
+    const fermeture = await api()
+      .post('/api/auth/sessions/fermer-autres')
+      .set(auth(second.token));
+    assert.ok(fermeture.body.data.fermees >= 1);
+
+    assert.equal((await api().get('/api/auth/me').set(auth(premier.token))).status, 401);
+    assert.equal((await api().get('/api/auth/me').set(auth(second.token))).status, 200);
+  });
+
+  test('désactiver un compte coupe ses accès en cours', async () => {
+    const admin = await login('+22890000003');
+
+    const creation = await api().post('/api/admin/utilisateurs').set(auth(admin)).send({
+      nom: 'PARTANT', prenom: 'Agent', telephone: '+22894000001', role: 'etablissement',
+      etablissement_id: '20000000-0000-0000-0000-000000000001',
+    });
+    assert.equal(creation.status, 201);
+
+    const agent = await connexion('+22894000001');
+    assert.equal((await api().get('/api/auth/me').set(auth(agent.token))).status, 200);
+
+    // Sans révocation des sessions, l'agent qui quitte l'établissement
+    // resterait connecté jusqu'à l'expiration de son jeton.
+    await api()
+      .patch(`/api/admin/utilisateurs/${creation.body.data.utilisateur.id}/actif`)
+      .set(auth(admin))
+      .send({ actif: false });
+
+    const apres = await api().get('/api/auth/me').set(auth(agent.token));
+    assert.equal(apres.status, 401);
+    assert.equal(apres.body.error.code, 'SESSION_REVOQUEE');
   });
 });
 

@@ -8,10 +8,11 @@
 // ─────────────────────────────────────────────────────────────
 import { Router } from 'express';
 import * as gouvernanceController from '../controllers/gouvernance.controller.js';
+import { limiteDemandeIntegration } from '../middlewares/rate-limit.middleware.js';
 
 const router = Router();
 
-router.post('/', gouvernanceController.deposerDemande);
+router.post('/', limiteDemandeIntegration, gouvernanceController.deposerDemande);
 router.get('/:reference', gouvernanceController.suivreDemande);
 
 export default router;
