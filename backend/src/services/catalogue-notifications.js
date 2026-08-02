@@ -26,6 +26,7 @@ export const EVENEMENTS = {
 
   DIPLOME_CERTIFIE: 'diplome_certifie',
   DIPLOME_REVOQUE: 'diplome_revoque',
+  DIPLOME_CORRIGE: 'diplome_corrige',
   QR_CONSULTE: 'qr_consulte',
 
   DEMANDE_ACCEPTEE: 'demande_acceptee',
@@ -130,6 +131,16 @@ export const CATALOGUE = {
     sujet: 'Votre diplôme a été révoqué',
     corps:
       'Le diplôme {{reference}} a été révoqué par le ministère. Motif : {{motif}}. Rapprochez-vous de votre établissement.',
+  },
+
+  [EVENEMENTS.DIPLOME_CORRIGE]: {
+    destinataire: 'diplômé',
+    canaux: ['in_app', 'whatsapp'],
+    priorite: 'haute',
+    critique: true,
+    sujet: 'Votre diplôme a été corrigé',
+    corps:
+      'Votre diplôme {{ancienne_reference}} a été remplacé par la version {{reference}}. Motif : {{motif}}. Téléchargez la nouvelle version sur CertifTOGO.',
   },
 
   [EVENEMENTS.QR_CONSULTE]: {

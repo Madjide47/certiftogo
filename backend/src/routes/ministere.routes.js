@@ -7,6 +7,7 @@ import * as ministereController from '../controllers/ministere.controller.js';
 import * as gouvernanceController from '../controllers/gouvernance.controller.js';
 import * as lotController from '../controllers/lot.controller.js';
 import * as ancrageController from '../controllers/ancrage.controller.js';
+import * as correctionService from '../services/correction.service.js';
 import { authJWT } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/role.middleware.js';
 
@@ -61,5 +62,31 @@ router.post('/demandes/:id/refuser', gouvernanceController.refuserDemande);
 router.get('/diplomes', ministereController.listerDiplomes);
 router.get('/diplomes/:id', ministereController.recupererDiplome);
 router.post('/diplomes/:id/revoquer', ministereController.revoquerDiplome);
+
+// ── Correction : émet une NOUVELLE VERSION plutôt que de modifier un
+// diplôme certifié, dont le hash est déjà ancré on-chain.
+router.post('/diplomes/:id/corriger', async (req, res, next) => {
+  try {
+    const data = await correctionService.corriger(
+      req.params.id,
+      req.utilisateur.ministere_id,
+      req.body || {}
+    );
+    return res.status(201).json({ success: true, data });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.get('/diplomes/:id/versions', async (req, res, next) => {
+  try {
+    return res.json({
+      success: true,
+      data: await correctionService.historiqueVersions(req.params.id),
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
 
 export default router;

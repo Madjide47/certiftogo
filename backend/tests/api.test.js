@@ -2043,6 +2043,169 @@ describe('Lot de transmission — émission, contrôles, rejet partiel', () => {
   });
 });
 
+// ── Correction et versionnement des diplômes ───────────────────
+// ERR-001 (mariage) et ERR-002 (erreur découverte après certification).
+describe('Correction d\'un diplôme certifié', () => {
+  let diplomeV1;
+  let diplomeV2;
+  let hashV1;
+
+  async function certifierUnDiplome(matricule, telephone) {
+    const tEtab = await login('+22890000002');
+    const tMin = await login('+22890000001');
+
+    const candidat = await api().post('/api/candidats').set(auth(tEtab)).send({
+      numero_etudiant: matricule, nom: 'KOUDJO', prenom: 'Adjoa',
+      telephone, date_naissance: '1999-05-20',
+    });
+    const dossier = await api().post('/api/dossiers').set(auth(tEtab)).send({
+      candidat_id: candidat.body.data.candidat.id,
+      type_diplome: 'licence', mention: 'bien',
+      filiere: 'Génie Logiciel', date_obtention: '2024-07-01',
+    });
+    const id = dossier.body.data.dossier.id;
+    await api().post(`/api/dossiers/${id}/transmettre`).set(auth(tEtab));
+    await api().post(`/api/ministere/dossiers/${id}/valider`).set(auth(tMin));
+    const cert = await api().post(`/api/ministere/dossiers/${id}/certifier`).set(auth(tMin));
+    assert.equal(cert.status, 201);
+    return cert.body.data.diplome;
+  }
+
+  test('émet une nouvelle version au lieu de modifier le diplôme', async () => {
+    const t = await login('+22890000001');
+    const initial = await certifierUnDiplome('CORR-001', '+22895000001');
+    diplomeV1 = initial.id;
+    hashV1 = initial.hash_sha256;
+
+    const res = await api()
+      .post(`/api/ministere/diplomes/${diplomeV1}/corriger`)
+      .set(auth(t))
+      .send({
+        type: 'erreur_donnees',
+        motif: 'Le jury avait prononcé Très Bien ; la mention saisie était Bien.',
+        corrections: { mention: 'tres_bien' },
+      });
+
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    diplomeV2 = res.body.data.nouveau.id;
+
+    assert.equal(res.body.data.nouveau.version, 2);
+    assert.equal(res.body.data.corrections.avant.mention, 'bien');
+    assert.equal(res.body.data.corrections.apres.mention, 'tres_bien');
+
+    // Le hash change : c'est tout l'intérêt: deux versions ne peuvent pas
+    // se faire passer l'une pour l'autre.
+    assert.notEqual(res.body.data.nouveau.hash_sha256, hashV1);
+
+    // Côté chaîne : révocation de l'ancien hash + certification du nouveau.
+    assert.ok(res.body.data.blockchain.revocation);
+    assert.ok(res.body.data.blockchain.emission);
+    assert.notEqual(res.body.data.blockchain.revocation, res.body.data.blockchain.emission);
+  });
+
+  test('marque l\'ancienne version « remplacée », pas « révoquée »', async () => {
+    const { rows } = await pool.query(
+      `SELECT statut, motif_version FROM diplomes WHERE id = $1`,
+      [diplomeV1]
+    );
+    // Confondre les deux ferait passer une diplômée pour une fraudeuse.
+    assert.equal(rows[0].statut, 'remplace');
+    assert.notEqual(rows[0].statut, 'revoque');
+    assert.match(rows[0].motif_version, /Remplacé par DIP-/);
+  });
+
+  test('renvoie le vérificateur d\'un ancien PDF vers la version en vigueur', async () => {
+    const res = await api().get(`/api/verification/${hashV1}`);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.resultat, 'remplace');
+    assert.match(res.body.data.message, /remplacé par une version corrigée/);
+
+    assert.ok(res.body.data.version_en_vigueur, 'la version courante est indiquée');
+    assert.equal(res.body.data.version_en_vigueur.version, 2);
+    assert.equal(res.body.data.version_en_vigueur.statut, 'actif');
+  });
+
+  test('restitue la chaîne complète des versions', async () => {
+    const t = await login('+22890000001');
+    // Interrogeable depuis n'importe quelle version de la chaîne.
+    const res = await api().get(`/api/ministere/diplomes/${diplomeV1}/versions`).set(auth(t));
+    assert.equal(res.status, 200);
+
+    assert.equal(res.body.data.versions.length, 2);
+    assert.deepEqual(res.body.data.versions.map((v) => v.version), [1, 2]);
+    assert.equal(res.body.data.version_courante.version, 2);
+
+    const correction = res.body.data.corrections[0];
+    assert.equal(correction.type, 'erreur_donnees');
+    assert.equal(correction.valeurs_avant.mention, 'bien');
+    assert.equal(correction.valeurs_apres.mention, 'tres_bien');
+    assert.ok(correction.hash_avant && correction.hash_apres);
+  });
+
+  test('propage un changement de nom sur l\'identité de la personne', async () => {
+    const t = await login('+22890000001');
+    const initial = await certifierUnDiplome('CORR-002', '+22895000002');
+
+    const res = await api()
+      .post(`/api/ministere/diplomes/${initial.id}/corriger`)
+      .set(auth(t))
+      .send({
+        type: 'changement_nom',
+        motif: 'Mariage — acte n° 2026/114.',
+        corrections: { nom: 'KOUDJO-AGBO' },
+      });
+    assert.equal(res.status, 201);
+    assert.equal(res.body.data.corrections.apres.nom, 'KOUDJO-AGBO');
+
+    // Un mariage concerne l'individu, pas une seule inscription : la
+    // personne change, donc toutes ses fiches suivent.
+    const { rows } = await pool.query(
+      `SELECT p.nom AS personne_nom, c.nom AS fiche_nom
+         FROM candidats c JOIN personnes p ON p.id = c.personne_id
+        WHERE c.numero_etudiant = 'CORR-002'`
+    );
+    assert.equal(rows[0].personne_nom, 'KOUDJO-AGBO');
+    assert.equal(rows[0].fiche_nom, 'KOUDJO-AGBO');
+  });
+
+  test('refuse de corriger une version déjà remplacée', async () => {
+    const t = await login('+22890000001');
+    const res = await api()
+      .post(`/api/ministere/diplomes/${diplomeV1}/corriger`)
+      .set(auth(t))
+      .send({ type: 'autre', motif: 'Test', corrections: { mention: 'bien' } });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'DIPLOME_DEJA_REMPLACE');
+  });
+
+  test('exige un motif et refuse un champ non corrigeable', async () => {
+    const t = await login('+22890000001');
+
+    const sansMotif = await api()
+      .post(`/api/ministere/diplomes/${diplomeV2}/corriger`)
+      .set(auth(t))
+      .send({ type: 'autre', corrections: { mention: 'bien' } });
+    assert.equal(sansMotif.status, 400);
+    assert.equal(sansMotif.body.error.code, 'MOTIF_REQUIS');
+
+    const champInterdit = await api()
+      .post(`/api/ministere/diplomes/${diplomeV2}/corriger`)
+      .set(auth(t))
+      .send({ type: 'autre', motif: 'Test', corrections: { hash_sha256: 'triche' } });
+    assert.equal(champInterdit.status, 400);
+    assert.equal(champInterdit.body.error.code, 'CHAMP_NON_CORRIGEABLE');
+  });
+
+  test('prévient le diplômé que son diplôme a été corrigé', async () => {
+    const { rows } = await pool.query(
+      `SELECT canal, corps FROM notifications
+        WHERE evenement = 'diplome_corrige' ORDER BY date_creation DESC`
+    );
+    assert.ok(rows.length >= 2, 'in-app et WhatsApp');
+    assert.match(rows[0].corps, /remplacé par la version DIP-/);
+  });
+});
+
 // ── Tableaux de bord ───────────────────────────────────────────
 // Un seul chemin, quatre vues : chaque rôle reçoit ses indicateurs.
 describe('Tableaux de bord par rôle', () => {

@@ -26,10 +26,13 @@ function vuePublique(d, resultat) {
     hash: d.hash_sha256,
     transaction_id: d.transaction_id,
     motif_revocation: d.statut === 'revoque' ? d.motif_revocation : null,
+    version: d.version,
     message:
       resultat === 'en_attente_ancrage'
         ? 'Diplôme délivré par le ministère. Son enregistrement sur la blockchain est en cours ; la preuve publique sera disponible sous peu.'
-        : null,
+        : resultat === 'remplace'
+          ? 'Ce document a été remplacé par une version corrigée. Le diplôme reste valide : demandez la version en vigueur à son titulaire.'
+          : null,
   };
 }
 
@@ -59,7 +62,9 @@ export async function verifier(valeur, { methode = 'hash', ip = null, userAgent 
       ? 'revoque'
       : diplome.statut === 'en_attente_ancrage'
         ? 'en_attente_ancrage'
-        : 'authentique';
+        : diplome.statut === 'remplace'
+          ? 'remplace'
+          : 'authentique';
 
   // Journalisation (best-effort : ne bloque pas la réponse en cas d'échec).
   try {
@@ -79,6 +84,16 @@ export async function verifier(valeur, { methode = 'hash', ip = null, userAgent 
 
   const vue = vuePublique(diplome, resultat);
   vue.ancrage_blockchain = await lireAncrage(diplome.hash_sha256);
+
+  // Un employeur qui scanne un ancien PDF doit être renvoyé vers la
+  // version en vigueur, pas laissé avec un document périmé.
+  if (resultat === 'remplace') {
+    const courante = await diplomeModel.versionCourante(diplome.id);
+    vue.version_en_vigueur = courante
+      ? { reference: courante.reference, version: courante.version, statut: courante.statut }
+      : null;
+  }
+
   return vue;
 }
 

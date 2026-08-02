@@ -166,7 +166,7 @@ npm run db:demo    # reset + seed + démo (données riches pour présentation)
 cd backend
 npm install
 npm run dev       # http://localhost:4000  (nodemon)
-npm test          # 155 tests (intégration + référentiel + WhatsApp + signature)
+npm test          # 163 tests (intégration + référentiel + WhatsApp + signature)
 ```
 
 ### Frontends
@@ -322,7 +322,7 @@ Connexion par OTP (le code s'affiche dans la **console du backend**) :
 - ✅ **Seed de démo** (`npm run seed:demo`) : ~6 établissements, ~36 candidats,
   ~40 dossiers (tous statuts), ~20 diplômes (PDF/QR/hash réels), vérifications.
 - ✅ **Tests automatisés (Phase 8)** :
-  - Backend : `cd backend && npm test` — 155 tests. 27 tests d'intégration sur
+  - Backend : `cd backend && npm test` — 163 tests. 27 tests d'intégration sur
     une base dédiée `certiftogo_test` (recréée avant chaque exécution) couvrant
     auth OTP, RBAC, cycle de vie du dossier, certification, vérification
     publique, portefeuille candidat, admin et isolation inter-établissements ;

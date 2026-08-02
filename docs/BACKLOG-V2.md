@@ -104,12 +104,12 @@ Dernière mise à jour : 2 août 2026.
 | F-01 | Distinction préparation (établissement) / création officielle (ministère) | ✅ |
 | F-02 | Chaîne hash → signature → blockchain → PDF → QR → portefeuille | ✅ |
 | F-03 | **Certification de masse d'un lot** | ✅ |
-| F-04 | **Versionnement d'un diplôme** (v1 → v2, chaînage) | ⬜ |
-| F-05 | **Révocation puis réémission** avec conservation de la trace | 🔨 *révocation seule* |
-| F-06 | **Changement de nom après mariage / décision de justice** | ⬜ |
-| F-07 | **Recalcul du hash** sur nouvelle version | ⬜ |
+| F-04 | **Versionnement d'un diplôme** (v1 → v2, chaînage) | ✅ |
+| F-05 | **Révocation puis réémission** avec conservation de la trace | ✅ |
+| F-06 | **Changement de nom après mariage / décision de justice** | ✅ |
+| F-07 | **Recalcul du hash** sur nouvelle version | ✅ |
 | F-08 | Détection de la **double certification** d'un même dossier | ✅ |
-| F-09 | Le contrat ne connaît pas le remplacement — décision d'évolution | ⬜ |
+| F-09 | Le contrat ne connaît pas le remplacement — décision d'évolution | ✅ *limite documentée : révocation + certification, lien hors chaîne* |
 
 ## G. Traitement asynchrone et passage à l'échelle
 
@@ -218,8 +218,8 @@ Dernière mise à jour : 2 août 2026.
 
 | # | Élément | Statut |
 |---|---|---|
-| M-01 | ERR-001 changement de nom | ⬜ |
-| M-02 | ERR-002 erreur après certification → révocation + réémission | 🔨 |
+| M-01 | ERR-001 changement de nom | ✅ |
+| M-02 | ERR-002 erreur après certification → révocation + réémission | ✅ |
 | M-03 | ERR-003 perte du téléphone | ⬜ |
 | M-04 | ERR-004 départ d'un agent | ⬜ |
 | M-05 | ERR-005 établissement suspendu ou fermé — effets sur dossiers, diplômes, agents | ⬜ |
@@ -298,9 +298,9 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 121 |
+| ✅ fait et testé | 128 |
 | 🔨 partiel ou en cours | 17 |
-| ⬜ à faire | 36 |
+| ⬜ à faire | 29 |
 | **Total** | **174** |
 
 ## Ordre d'implémentation proposé

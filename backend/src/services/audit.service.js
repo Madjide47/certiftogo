@@ -80,6 +80,7 @@ export const ACTIONS = {
   ANCRAGE_RELANCE: 'ancrage_relance',
   DIPLOME_CERTIFIE: 'diplome_certifie',
   DIPLOME_REVOQUE: 'diplome_revoque',
+  DIPLOME_CORRIGE: 'diplome_corrige',
 
   // Exploitation
   ELEMENT_SUPPRIME: 'element_supprime',
