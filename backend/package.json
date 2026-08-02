@@ -8,11 +8,12 @@
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
     "test": "node --import ./tests/setup-env.mjs --test tests/*.test.js",
-    "migrate": "node scripts/run-sql.js migrations/001_init_schema.sql",
+    "migrate": "node scripts/run-migrations.js",
+    "migrate:reset": "node scripts/run-migrations.js --reset",
     "seed": "node scripts/run-sql.js seeds/seed_dev.sql",
     "seed:demo": "node scripts/seed-demo.mjs",
-    "db:reset": "node scripts/run-sql.js migrations/001_init_schema.sql && node scripts/run-sql.js seeds/seed_dev.sql",
-    "db:demo": "node scripts/run-sql.js migrations/001_init_schema.sql && node scripts/run-sql.js seeds/seed_dev.sql && node scripts/seed-demo.mjs"
+    "db:reset": "node scripts/run-migrations.js --reset && node scripts/run-sql.js seeds/seed_dev.sql",
+    "db:demo": "node scripts/run-migrations.js --reset && node scripts/run-sql.js seeds/seed_dev.sql && node scripts/seed-demo.mjs"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
