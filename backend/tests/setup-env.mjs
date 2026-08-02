@@ -8,3 +8,6 @@ process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
 process.env.BLOCKCHAIN_MODE = 'mock';
 // Aucun appel réseau vers Meta pendant les tests.
 process.env.WHATSAPP_MODE = 'mock';
+// Secret de signature déterministe (aucune valeur par défaut dans le code).
+process.env.MINISTERE_SIGNING_SECRET =
+  process.env.MINISTERE_SIGNING_SECRET || 'secret_de_test_signature_ministere';

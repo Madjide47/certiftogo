@@ -114,10 +114,11 @@ Puis, dans un navigateur :
 
 - `JWT_SECRET` et `MINISTERE_SIGNING_SECRET` sont générés par Render
   (`generateValue: true`) — bien.
-- ⚠️ **`signature.service.js` contient un secret de repli en dur**
-  (`certiftogo_ministere_dev_secret`), et le dépôt est public. Tant que
-  `MINISTERE_SIGNING_SECRET` est défini, il n'est pas utilisé ; mais il faut le
-  retirer du code avant tout usage réel.
+- ✅ **Aucun secret de signature n'est codé en dur.** `signature.service.js`
+  n'accepte que `MINISTERE_SIGNING_SECRET` (16 caractères minimum) : en
+  production, l'application **refuse de démarrer** s'il est absent ou trop
+  court. Hors production, un secret aléatoire éphémère est généré à chaque
+  démarrage, avec un avertissement dans les logs.
 - Le portefeuille blockchain est un compte de **testnet**. Pour un déploiement
   réel, utiliser un compte dédié sur le mainnet et le protéger correctement
   (l'adresse du déployeur est propriétaire du contrat : elle peut certifier,
