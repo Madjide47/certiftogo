@@ -42,12 +42,13 @@ export async function trouverParId(id) {
   return rows[0] || null;
 }
 
-export async function creer({ candidat_id, promotion_id, statut }) {
-  const { rows } = await query(
-    `INSERT INTO inscriptions (candidat_id, promotion_id, statut)
-     VALUES ($1, $2, $3)
+export async function creer({ candidat_id, promotion_id, statut, moyenne, mention }, client = null) {
+  const executer = client ? client.query.bind(client) : query;
+  const { rows } = await executer(
+    `INSERT INTO inscriptions (candidat_id, promotion_id, statut, moyenne, mention)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING id, candidat_id, promotion_id, statut, moyenne, mention, date_inscription`,
-    [candidat_id, promotion_id, statut]
+    [candidat_id, promotion_id, statut, moyenne ?? null, mention ?? null]
   );
   return rows[0];
 }

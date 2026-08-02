@@ -6,7 +6,14 @@ import * as candidatModel from '../models/candidat.model.js';
 import * as personneModel from '../models/personne.model.js';
 import * as utilisateurModel from '../models/utilisateur.model.js';
 import { ErreurApp } from '../utils/errors.js';
-import { nettoyerTexte, estEmailValide, estDansEnum, SEXES } from '../utils/validators.js';
+import {
+  nettoyerTexte,
+  estEmailValide,
+  estDansEnum,
+  canoniserTelephone,
+  estTelephoneValide,
+  SEXES,
+} from '../utils/validators.js';
 
 /** Liste les candidats de l'établissement courant. */
 export async function lister(etablissement_id, { recherche, limit, offset } = {}) {
@@ -38,6 +45,14 @@ function validerDonnees(donnees) {
   const sexe = nettoyerTexte(donnees.sexe);
   if (!estDansEnum(sexe, SEXES)) throw new ErreurApp(400, 'SEXE_INVALIDE', 'Le sexe doit être M ou F.');
 
+  // Le téléphone est normalisé avant d'être stocké : sans cela
+  // « 90 00 00 11 » et « +22890000011 » désigneraient deux personnes
+  // distinctes, et le portefeuille national se fragmenterait.
+  const telephone = canoniserTelephone(donnees.telephone || '');
+  if (telephone && !estTelephoneValide(telephone)) {
+    throw new ErreurApp(400, 'TELEPHONE_INVALIDE', 'Numéro de téléphone invalide.');
+  }
+
   return {
     numero_etudiant,
     nom,
@@ -45,7 +60,7 @@ function validerDonnees(donnees) {
     date_naissance: nettoyerTexte(donnees.date_naissance),
     lieu_naissance: nettoyerTexte(donnees.lieu_naissance),
     sexe,
-    telephone: nettoyerTexte(donnees.telephone),
+    telephone,
     email,
   };
 }

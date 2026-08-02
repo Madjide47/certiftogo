@@ -63,8 +63,9 @@ export async function lister({ role = null } = {}) {
 }
 
 /** Crée un utilisateur (le rattachement est validé côté service). */
-export async function creer(data) {
-  const { rows } = await query(
+export async function creer(data, client = null) {
+  const executer = client ? client.query.bind(client) : query;
+  const { rows } = await executer(
     `INSERT INTO utilisateurs
        (nom, prenom, telephone, role, etablissement_id, ministere_id, personne_id, actif)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)

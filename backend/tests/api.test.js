@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import request from 'supertest';
+import ExcelJS from 'exceljs';
 import app from '../src/app.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1004,5 +1005,222 @@ describe('Identité nationale et portefeuille multi-établissements', () => {
       `le portefeuille doit couvrir plusieurs établissements, reçu : ${[...etablissements].join(', ')}`
     );
     assert.ok(etablissements.has('École Supérieure de Test'));
+  });
+});
+
+// ── Import Excel d'une promotion entière ───────────────────────
+describe('Import Excel — promotion entière', () => {
+  const PROMO_SEED = '80000000-0000-0000-0000-000000000001'; // L3 GL, statut « ouverte »
+  const ENTETES = ['matricule', 'nom', 'prenom', 'telephone', 'sexe', 'moyenne', 'mention'];
+
+  /** Construit un classeur .xlsx en mémoire. */
+  async function fichier(lignes, entetes = ENTETES) {
+    const classeur = new ExcelJS.Workbook();
+    const feuille = classeur.addWorksheet('Étudiants');
+    feuille.addRow(entetes);
+    lignes.forEach((l) => feuille.addRow(l));
+    return Buffer.from(await classeur.xlsx.writeBuffer());
+  }
+
+  const envoyer = (token, buffer, params = '') =>
+    api()
+      .post(`/api/promotions/${PROMO_SEED}/import${params}`)
+      .set(auth(token))
+      .attach('fichier', buffer, 'promotion.xlsx');
+
+  async function compterInscrits() {
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM inscriptions WHERE promotion_id = $1`,
+      [PROMO_SEED]
+    );
+    return rows[0].n;
+  }
+
+  test('la simulation signale chaque erreur avec son numéro de ligne', async () => {
+    const t = await login('+22890000002');
+    const avant = await compterInscrits();
+
+    const buffer = await fichier([
+      ['IMP-001', 'KODJO', 'Ayele', '+22891000001', 'F', 15, 'bien'],
+      ['', 'SANSMAT', 'Ricule', '+22891000002', 'M', 12, ''], // matricule manquant
+      ['IMP-001', 'DOUBLON', 'Matricule', '+22891000003', 'M', 11, ''], // doublon fichier
+      ['IMP-004', 'TEL', 'Invalide', 'abc', 'M', 10, ''], // téléphone invalide
+      ['IMP-005', 'MENTION', 'Inconnue', '+22891000005', 'M', 10, 'suprême'], // mention inconnue
+      ['IMP-006', 'MOYENNE', 'Folle', '+22891000006', 'M', 45, ''], // hors barème
+    ]);
+
+    const res = await envoyer(t, buffer, '?simulation=true');
+    assert.equal(res.status, 200);
+
+    const { rapport } = res.body.data;
+    assert.equal(res.body.data.simulation, true);
+    assert.equal(rapport.total, 6);
+    assert.equal(rapport.valides, 1, 'seule la première ligne est correcte');
+    assert.equal(rapport.erreurs.length, 5);
+
+    const lignes = rapport.erreurs.map((e) => e.ligne);
+    assert.deepEqual(lignes, [3, 4, 5, 6, 7], 'numéros de ligne du fichier, en-tête comprise');
+
+    const texte = JSON.stringify(rapport.erreurs);
+    assert.match(texte, /matricule manquant/);
+    assert.match(texte, /en double dans le fichier/);
+    assert.match(texte, /téléphone invalide/);
+    assert.match(texte, /mention inconnue/);
+    assert.match(texte, /moyenne hors barème/);
+
+    assert.equal(await compterInscrits(), avant, 'une simulation n\'écrit rien');
+  });
+
+  test('l\'import est strict : une erreur annule tout (422)', async () => {
+    const t = await login('+22890000002');
+    const avant = await compterInscrits();
+
+    const buffer = await fichier([
+      ['IMP-101', 'BONNE', 'Ligne', '+22891000101', 'F', 15, 'bien'],
+      ['IMP-102', '', 'SansNom', '+22891000102', 'M', 12, ''],
+    ]);
+
+    const res = await envoyer(t, buffer);
+    assert.equal(res.status, 422);
+    assert.equal(res.body.error.code, 'IMPORT_INVALIDE');
+
+    assert.equal(await compterInscrits(), avant, 'aucune ligne importée');
+    const { rows } = await pool.query(`SELECT 1 FROM candidats WHERE numero_etudiant = 'IMP-101'`);
+    assert.equal(rows.length, 0, 'même la ligne valide n\'est pas passée');
+  });
+
+  test('importe la promotion et crée fiches, inscriptions et comptes fermés', async () => {
+    const t = await login('+22890000002');
+    const avant = await compterInscrits();
+
+    const buffer = await fichier([
+      ['IMP-201', 'ATTAH', 'Kodjo', '+22891000201', 'M', 16.5, 'tres_bien'],
+      ['IMP-202', 'LAWSON', 'Afi', '+22891000202', 'F', 13, ''],
+      ['IMP-203', 'SANSTEL', 'Komi', '', 'M', 11, ''],
+    ]);
+
+    const res = await envoyer(t, buffer);
+    assert.equal(res.status, 201);
+    assert.equal(res.body.data.rapport.importes, 3);
+    assert.equal(await compterInscrits(), avant + 3);
+
+    // Une mention vaut délibération : l'inscription est « admis ».
+    const { rows: admis } = await pool.query(
+      `SELECT i.statut, i.mention, i.moyenne
+         FROM inscriptions i JOIN candidats c ON c.id = i.candidat_id
+        WHERE c.numero_etudiant = 'IMP-201'`
+    );
+    assert.equal(admis[0].statut, 'admis');
+    assert.equal(admis[0].mention, 'tres_bien');
+    assert.equal(Number(admis[0].moyenne), 16.5);
+
+    // Sans mention, l'étudiant reste simplement inscrit.
+    const { rows: inscrit } = await pool.query(
+      `SELECT i.statut FROM inscriptions i JOIN candidats c ON c.id = i.candidat_id
+        WHERE c.numero_etudiant = 'IMP-202'`
+    );
+    assert.equal(inscrit[0].statut, 'inscrit');
+
+    // Compte de connexion créé mais fermé.
+    const { rows: compte } = await pool.query(
+      `SELECT actif FROM utilisateurs WHERE telephone = '+22891000201'`
+    );
+    assert.equal(compte.length, 1);
+    assert.equal(compte[0].actif, false);
+
+    // Sans téléphone : fiche et inscription, mais aucun compte.
+    const { rows: sansTel } = await pool.query(
+      `SELECT p.telephone FROM candidats c JOIN personnes p ON p.id = c.personne_id
+        WHERE c.numero_etudiant = 'IMP-203'`
+    );
+    assert.equal(sansTel[0].telephone, null);
+  });
+
+  test('canonise les numéros locaux et rattache à la personne existante', async () => {
+    const t = await login('+22890000002');
+
+    // Ama existe déjà avec +22890000012 ; ici son numéro est saisi en local.
+    const buffer = await fichier([['IMP-301', 'MENSAH', 'Ama', '90 00 00 12', 'F', 14, '']]);
+
+    const res = await envoyer(t, buffer);
+    assert.equal(res.status, 201);
+
+    const { rows } = await pool.query(
+      `SELECT c.telephone, c.personne_id FROM candidats c WHERE c.numero_etudiant = 'IMP-301'`
+    );
+    assert.equal(rows[0].telephone, '+22890000012', 'numéro ramené en forme internationale');
+
+    const { rows: ama } = await pool.query(
+      `SELECT id FROM personnes WHERE telephone = '+22890000012'`
+    );
+    assert.equal(rows[0].personne_id, ama[0].id, 'rattaché à la personne déjà connue');
+  });
+
+  test('refuse un matricule déjà présent dans l\'établissement', async () => {
+    const t = await login('+22890000002');
+    const buffer = await fichier([['IAI-2021-001', 'AGBEKO', 'Koffi', '+22890000011', 'M', 15, '']]);
+
+    const res = await envoyer(t, buffer, '?simulation=true');
+    assert.equal(res.status, 200);
+    assert.match(JSON.stringify(res.body.data.rapport.erreurs), /déjà présent dans l'établissement/);
+  });
+
+  test('refuse un fichier sans les colonnes obligatoires', async () => {
+    const t = await login('+22890000002');
+    const buffer = await fichier([['x', 'y']], ['colonne_inconnue', 'autre']);
+
+    const res = await envoyer(t, buffer, '?simulation=true');
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'COLONNES_MANQUANTES');
+  });
+
+  test('refuse un format de fichier non supporté', async () => {
+    const t = await login('+22890000002');
+    const res = await api()
+      .post(`/api/promotions/${PROMO_SEED}/import`)
+      .set(auth(t))
+      .attach('fichier', Buffer.from('nimportequoi'), 'diplome.pdf');
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'FORMAT_NON_SUPPORTE');
+  });
+
+  test('fournit un modèle de fichier à remplir', async () => {
+    const t = await login('+22890000002');
+    // `responseType('blob')` : sans cela superagent décode le binaire en texte.
+    const res = await api()
+      .get('/api/promotions/modele-import')
+      .set(auth(t))
+      .responseType('blob');
+    assert.equal(res.status, 200);
+    assert.match(res.headers['content-type'], /spreadsheetml/);
+
+    // Le modèle doit être relisible par l'import lui-même.
+    const classeur = new ExcelJS.Workbook();
+    await classeur.xlsx.load(res.body);
+    const entetes = [];
+    classeur.worksheets[0].getRow(1).eachCell((c) => entetes.push(String(c.value)));
+    assert.ok(entetes.includes('matricule'));
+    assert.ok(entetes.includes('nom'));
+    assert.ok(entetes.includes('prenom'));
+  });
+
+  test('refuse l\'import dans une promotion figée (409)', async () => {
+    const t = await login('+22890000002');
+    await pool.query(`UPDATE promotions SET statut = 'transmise' WHERE id = $1`, [PROMO_SEED]);
+
+    const buffer = await fichier([['IMP-401', 'TROP', 'Tard', '+22891000401', 'M', 12, '']]);
+    const res = await envoyer(t, buffer);
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'PROMOTION_FIGEE');
+
+    await pool.query(`UPDATE promotions SET statut = 'ouverte' WHERE id = $1`, [PROMO_SEED]);
+  });
+
+  test('un autre établissement ne peut pas importer dans cette promotion', async () => {
+    const t = await login('+22890000200');
+    const buffer = await fichier([['IMP-501', 'INTRUS', 'Test', '+22891000501', 'M', 12, '']]);
+    const res = await envoyer(t, buffer);
+    assert.equal(res.status, 404);
+    assert.equal(res.body.error.code, 'PROMOTION_INTROUVABLE');
   });
 });

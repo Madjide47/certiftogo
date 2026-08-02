@@ -116,6 +116,38 @@ export async function desinscrire(req, res, next) {
   }
 }
 
+/** POST /api/promotions/:id/import?simulation=true — fichier Excel ou CSV */
+export async function importer(req, res, next) {
+  try {
+    const simulation = String(req.query.simulation || '') === 'true';
+
+    if (simulation) {
+      const rapport = await promotionService.analyserImport(req.params.id, etab(req), req.file);
+      return res.json({ success: true, data: { simulation: true, rapport } });
+    }
+
+    const rapport = await promotionService.executerImport(req.params.id, etab(req), req.file);
+    return res.status(201).json({ success: true, data: { simulation: false, rapport } });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** GET /api/promotions/modele-import — gabarit Excel à remplir */
+export async function modeleImport(req, res, next) {
+  try {
+    const fichier = await promotionService.genererModeleImport();
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename="modele-import-certiftogo.xlsx"');
+    return res.send(fichier);
+  } catch (err) {
+    return next(err);
+  }
+}
+
 /** GET /api/promotions/parcours/:candidatId */
 export async function parcoursEtudiant(req, res, next) {
   try {

@@ -10,6 +10,7 @@ import * as candidatModel from '../models/candidat.model.js';
 import * as anneeModel from '../models/annee-academique.model.js';
 import * as sessionModel from '../models/session-academique.model.js';
 import { recupererFiliere } from './structure.service.js';
+import * as importService from './import.service.js';
 import { ErreurApp, avecErreursSql } from '../utils/errors.js';
 import {
   nettoyerTexte,
@@ -386,6 +387,56 @@ async function recupererInscription(inscription_id, promotion_id) {
     throw new ErreurApp(404, 'INSCRIPTION_INTROUVABLE', 'Inscription introuvable.');
   }
   return inscription;
+}
+
+// ── Import d'une promotion entière ─────────────────────────────────
+
+/** Garde commune aux deux modes d'import. */
+async function promotionPourImport(promotion_id, etablissement_id, fichier) {
+  const promotion = await recuperer(promotion_id, etablissement_id);
+
+  if (!STATUTS_PROMOTION_MODIFIABLE.includes(promotion.statut)) {
+    throw new ErreurApp(
+      409,
+      'PROMOTION_FIGEE',
+      `Une promotion « ${promotion.statut} » n'accepte plus d'import.`
+    );
+  }
+  if (!fichier?.buffer?.length) {
+    throw new ErreurApp(400, 'FICHIER_REQUIS', 'Aucun fichier reçu.');
+  }
+
+  return promotion;
+}
+
+/** Gabarit Excel à remplir, consignes incluses. */
+export function genererModeleImport() {
+  return importService.genererModele();
+}
+
+/** Simulation : produit le rapport sans rien écrire. */
+export async function analyserImport(promotion_id, etablissement_id, fichier) {
+  await promotionPourImport(promotion_id, etablissement_id, fichier);
+
+  const { rapport } = await importService.analyser({
+    buffer: fichier.buffer,
+    nomFichier: fichier.originalname || '',
+    etablissement_id,
+    promotion_id,
+  });
+  return rapport;
+}
+
+/** Import réel — strict : la moindre erreur annule l'ensemble. */
+export async function executerImport(promotion_id, etablissement_id, fichier) {
+  await promotionPourImport(promotion_id, etablissement_id, fichier);
+
+  return importService.importer({
+    buffer: fichier.buffer,
+    nomFichier: fichier.originalname || '',
+    etablissement_id,
+    promotion_id,
+  });
 }
 
 export async function desinscrire(promotion_id, inscription_id, etablissement_id) {

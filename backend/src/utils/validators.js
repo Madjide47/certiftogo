@@ -51,6 +51,35 @@ export function estDansEnum(valeur, valeursAutorisees) {
   return valeursAutorisees.includes(valeur);
 }
 
+/** Indicatif par défaut, utilisé quand un numéro est saisi en forme locale. */
+export const INDICATIF_PAR_DEFAUT = process.env.INDICATIF_TELEPHONE || '+228';
+
+/**
+ * Ramène un numéro à sa forme canonique internationale.
+ *
+ * Sans cela, « 90 00 00 11 » et « +22890000011 » désignent deux personnes
+ * différentes en base : le portefeuille national se fragmente et le même
+ * diplômé peut se retrouver avec deux comptes.
+ *
+ *   "90 00 00 11"   → "+22890000011"
+ *   "00228 90000011"→ "+22890000011"
+ *   "22890000011"   → "+22890000011"
+ *   "+33612345678"  → inchangé (déjà international)
+ */
+export function canoniserTelephone(valeur, indicatif = INDICATIF_PAR_DEFAUT) {
+  const brut = normaliserTelephone(valeur);
+  if (!brut) return null;
+
+  if (brut.startsWith('+')) return brut;
+  if (brut.startsWith('00')) return `+${brut.slice(2)}`;
+
+  const sansPlus = indicatif.replace('+', '');
+  if (brut.startsWith(sansPlus) && brut.length > sansPlus.length) return `+${brut}`;
+
+  // Forme locale : on préfixe par l'indicatif du pays.
+  return `${indicatif}${brut}`;
+}
+
 /**
  * Vérifie qu'une chaîne est un UUID.
  * Sans ce garde-fou, un identifiant fantaisiste atteint PostgreSQL et

@@ -70,9 +70,10 @@ export async function numeroExiste(etablissement_id, numero_etudiant, exclureId 
   return rows.length > 0;
 }
 
-/** Crée un candidat. */
-export async function creer(data) {
-  const { rows } = await query(
+/** Crée un candidat. `client` permet de l'inscrire dans une transaction. */
+export async function creer(data, client = null) {
+  const executer = client ? client.query.bind(client) : query;
+  const { rows } = await executer(
     `INSERT INTO candidats
        (personne_id, numero_etudiant, nom, prenom, date_naissance, lieu_naissance,
         sexe, telephone, email, etablissement_id)
