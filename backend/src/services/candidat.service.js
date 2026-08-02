@@ -6,6 +6,7 @@ import * as candidatModel from '../models/candidat.model.js';
 import * as personneModel from '../models/personne.model.js';
 import * as utilisateurModel from '../models/utilisateur.model.js';
 import { ErreurApp } from '../utils/errors.js';
+import { journaliser, deposerCorbeille, ACTIONS } from './audit.service.js';
 import {
   nettoyerTexte,
   estEmailValide,
@@ -110,26 +111,68 @@ export async function creer(etablissement_id, donnees) {
   const personne = await resoudrePersonne(data);
   await assurerCompte(personne);
 
-  return candidatModel.creer({ ...data, personne_id: personne.id, etablissement_id });
+  const candidat = await candidatModel.creer({
+    ...data,
+    personne_id: personne.id,
+    etablissement_id,
+  });
+
+  await journaliser({
+    action: ACTIONS.CANDIDAT_CREE,
+    entite: 'candidats',
+    entite_id: candidat.id,
+    apres: candidat,
+    message: `${candidat.nom} ${candidat.prenom} (${candidat.numero_etudiant}).`,
+  });
+
+  return candidat;
 }
 
 /** Met à jour un candidat de l'établissement courant. */
 export async function modifier(id, etablissement_id, donnees) {
-  await recuperer(id, etablissement_id); // garantit l'appartenance
+  const avant = await recuperer(id, etablissement_id); // garantit l'appartenance
   const data = validerDonnees(donnees);
 
   if (await candidatModel.numeroExiste(etablissement_id, data.numero_etudiant, id)) {
     throw new ErreurApp(409, 'NUMERO_DUPLIQUE', 'Ce numéro étudiant existe déjà.');
   }
 
-  return candidatModel.modifier(id, data);
+  const apres = await candidatModel.modifier(id, data);
+
+  await journaliser({
+    action: ACTIONS.CANDIDAT_MODIFIE,
+    entite: 'candidats',
+    entite_id: id,
+    avant,
+    apres,
+    message: `${apres.nom} ${apres.prenom} (${apres.numero_etudiant}).`,
+  });
+
+  return apres;
 }
 
 /** Supprime un candidat (refusé s'il possède des dossiers). */
 export async function supprimer(id, etablissement_id) {
-  await recuperer(id, etablissement_id);
+  const candidat = await recuperer(id, etablissement_id);
   try {
+    // La ligne part d'abord en corbeille : toute suppression est réversible.
+    await deposerCorbeille({
+      table_source: 'candidats',
+      enregistrement_id: id,
+      donnees: candidat,
+      libelle: `${candidat.nom} ${candidat.prenom} (${candidat.numero_etudiant})`,
+      etablissement_id,
+    });
+
     await candidatModel.supprimer(id);
+
+    await journaliser({
+      action: ACTIONS.CANDIDAT_SUPPRIME,
+      entite: 'candidats',
+      entite_id: id,
+      avant: candidat,
+      message: `${candidat.nom} ${candidat.prenom} (${candidat.numero_etudiant}).`,
+    });
   } catch (err) {
     if (err.code === '23503') {
       throw new ErreurApp(

@@ -25,6 +25,8 @@ import referentielRoutes from './routes/referentiel.routes.js';
 import structureRoutes from './routes/structure.routes.js';
 import promotionRoutes from './routes/promotion.routes.js';
 import lotRoutes from './routes/lot.routes.js';
+import { journalRouter, corbeilleRouter } from './routes/journal.routes.js';
+import { contexteRequete } from './config/contexte.js';
 import { UPLOADS_DIR, UPLOADS_URL_PREFIX, assurerDossierUploads } from './config/storage.js';
 
 dotenv.config();
@@ -39,6 +41,10 @@ const originsAutorisees = (process.env.CORS_ORIGINS || 'http://localhost:5173')
   .split(',')
   .map((o) => o.trim());
 app.use(cors({ origin: originsAutorisees, credentials: true }));
+
+// Contexte de requête : transporte auteur, IP et user-agent jusqu'aux
+// services, sans polluer leurs signatures. Doit précéder les routes.
+app.use(contexteRequete);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -75,6 +81,8 @@ app.use('/api/referentiel', referentielRoutes);
 app.use('/api/structure', structureRoutes);
 app.use('/api/promotions', promotionRoutes);
 app.use('/api/lots', lotRoutes);
+app.use('/api/journal', journalRouter);
+app.use('/api/corbeille', corbeilleRouter);
 
 // ── Gestion des erreurs (toujours en dernier) ──────────────────────
 app.use(nonTrouve);

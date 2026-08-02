@@ -16,6 +16,7 @@ import * as demandeModel from '../models/demande-integration.model.js';
 import * as utilisateurModel from '../models/utilisateur.model.js';
 import { ErreurApp, avecErreursSql } from '../utils/errors.js';
 import { genererReferenceDemande, initialesEtablissement } from '../utils/reference-generator.js';
+import { journaliser, ACTIONS } from './audit.service.js';
 import {
   nettoyerTexte,
   estUuidValide,
@@ -178,6 +179,18 @@ export async function creerEtablissement(donnees, agent_ministere_id = null) {
           client
         );
 
+        await journaliser(
+          {
+            action: ACTIONS.ETABLISSEMENT_CREE,
+            entite: 'etablissements',
+            entite_id: etablissement.id,
+            etablissement_id: etablissement.id,
+            apres: { code, nom: etablissement.nom, habilitations },
+            message: `${etablissement.nom} (${code}) — agent principal ${compte.nom} ${compte.prenom}.`,
+          },
+          client
+        );
+
         return { etablissement, agent_principal: compte, habilitations };
       }),
     CONTRAINTES
@@ -222,7 +235,7 @@ export async function accorderHabilitation(etablissement_id, donnees) {
     );
   }
 
-  return avecErreursSql(
+  const habilitation = await avecErreursSql(
     () =>
       habilitationModel.creer({
         etablissement_id,
@@ -233,6 +246,17 @@ export async function accorderHabilitation(etablissement_id, donnees) {
       }),
     CONTRAINTES
   );
+
+  await journaliser({
+    action: ACTIONS.HABILITATION_ACCORDEE,
+    entite: 'habilitations',
+    entite_id: habilitation.id,
+    etablissement_id,
+    apres: habilitation,
+    message: `Habilitation « ${type_diplome} » accordée.`,
+  });
+
+  return habilitation;
 }
 
 export async function changerStatutHabilitation(id, statut) {
@@ -275,7 +299,7 @@ export async function deposerDemande(donnees) {
 
   const types = validerTypesDiplomes(donnees.types_diplomes_demandes);
 
-  return avecErreursSql(
+  const demande = await avecErreursSql(
     () =>
       demandeModel.creer({
         reference: genererReferenceDemande(),
@@ -288,6 +312,18 @@ export async function deposerDemande(donnees) {
       }),
     CONTRAINTES
   );
+
+  // Dépôt anonyme : l'auteur est l'établissement candidat lui-même.
+  await journaliser({
+    action: ACTIONS.DEMANDE_DEPOSEE,
+    entite: 'demandes_integration',
+    entite_id: demande.id,
+    auteur_libelle: `${demande.nom} (demande ${demande.reference})`,
+    apres: { reference: demande.reference, nom: demande.nom, types: types.join(',') },
+    message: `Demande d'intégration de « ${demande.nom} ».`,
+  });
+
+  return demande;
 }
 
 /** Suivi public par référence — vue volontairement restreinte. */
@@ -378,6 +414,16 @@ export async function accepterDemande(id, agent_ministere_id, donnees = {}) {
     agent_ministere_id,
   });
 
+  await journaliser({
+    action: ACTIONS.DEMANDE_ACCEPTEE,
+    entite: 'demandes_integration',
+    entite_id: id,
+    etablissement_id: resultat.etablissement.id,
+    avant: { statut: demande.statut },
+    apres: { statut: 'acceptee', etablissement_id: resultat.etablissement.id },
+    message: `${demande.nom} agréé sous le code ${resultat.etablissement.code}.`,
+  });
+
   return { ...resultat, demande: majDemande };
 }
 
@@ -390,7 +436,22 @@ export async function refuserDemande(id, agent_ministere_id, motif) {
     throw new ErreurApp(400, 'MOTIF_REQUIS', 'Un motif de refus est obligatoire.');
   }
 
-  return demandeModel.statuer(id, { statut: 'refusee', motif_refus, agent_ministere_id });
+  const refusee = await demandeModel.statuer(id, {
+    statut: 'refusee',
+    motif_refus,
+    agent_ministere_id,
+  });
+
+  await journaliser({
+    action: ACTIONS.DEMANDE_REFUSEE,
+    entite: 'demandes_integration',
+    entite_id: id,
+    avant: { statut: demande.statut },
+    apres: { statut: 'refusee', motif_refus },
+    message: `${demande.nom} — ${motif_refus}`,
+  });
+
+  return refusee;
 }
 
 // ── Agents d'un établissement ──────────────────────────────────────
@@ -420,7 +481,7 @@ export async function creerAgent(demandeur, donnees) {
     throw new ErreurApp(409, 'TELEPHONE_EXISTANT', 'Ce numéro est déjà utilisé par un compte.');
   }
 
-  return avecErreursSql(
+  const compte = await avecErreursSql(
     () =>
       utilisateurModel.creer({
         ...agent,
@@ -433,4 +494,15 @@ export async function creerAgent(demandeur, donnees) {
       }),
     CONTRAINTES
   );
+
+  await journaliser({
+    action: ACTIONS.AGENT_CREE,
+    entite: 'utilisateurs',
+    entite_id: compte.id,
+    etablissement_id: demandeur.etablissement_id,
+    apres: { nom: compte.nom, prenom: compte.prenom, telephone: compte.telephone },
+    message: `${compte.nom} ${compte.prenom} ajouté comme agent.`,
+  });
+
+  return compte;
 }

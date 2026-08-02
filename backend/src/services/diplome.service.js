@@ -12,6 +12,7 @@ import * as diplomeModel from '../models/diplome.model.js';
 import * as dossierModel from '../models/dossier.model.js';
 import * as txModel from '../models/transaction-blockchain.model.js';
 import { withTransaction } from '../config/database.js';
+import { journaliser, journaliserStatutDossier, ACTIONS } from './audit.service.js';
 import { ErreurApp } from '../utils/errors.js';
 import { genererReferenceDiplome } from '../utils/reference-generator.js';
 import { calculerHash } from './hash.service.js';
@@ -159,6 +160,32 @@ export async function certifier(dossier_id, ministere_id) {
       [dossier.candidat_id]
     );
 
+    // Trace ATOMIQUE : la certification est l'acte le plus sensible du
+    // système, sa trace ne doit pas pouvoir manquer. Elle tombe avec la
+    // transaction si celle-ci échoue.
+    await journaliserStatutDossier(
+      {
+        dossier_id,
+        statut_avant: dossier.statut,
+        statut_apres: 'certifie',
+        motif: `Certification — diplôme ${reference}.`,
+      },
+      client
+    );
+
+    await journaliser(
+      {
+        action: ACTIONS.DIPLOME_CERTIFIE,
+        entite: 'diplomes',
+        entite_id: cree.id,
+        apres: { reference, hash_sha256: hash, dossier_id },
+        transaction_hash: tx.transactionHash,
+        etablissement_id: dossier.etablissement_id,
+        message: `${dossier.candidat_nom} ${dossier.candidat_prenom} — ${reference}.`,
+      },
+      client
+    );
+
     return cree;
   });
 
@@ -187,6 +214,19 @@ export async function revoquer(id, motif) {
 
   return withTransaction(async (client) => {
     const revoque = await diplomeModel.revoquer(id, motifNet, client);
+    await journaliser(
+      {
+        action: ACTIONS.DIPLOME_REVOQUE,
+        entite: 'diplomes',
+        entite_id: id,
+        avant: { statut: 'actif' },
+        apres: { statut: 'revoque', motif_revocation: motifNet },
+        transaction_hash: tx.transactionHash,
+        etablissement_id: diplome.etablissement_id,
+        message: `${diplome.reference} — ${motifNet}`,
+      },
+      client
+    );
     await txModel.creer(
       {
         diplome_id: id,

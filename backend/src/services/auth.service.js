@@ -7,6 +7,7 @@ import * as otpModel from '../models/otp.model.js';
 import { genererCodeOtp, calculerExpiration, OTP_EXPIRATION_MINUTES } from './otp.service.js';
 import { envoyerCodeOtp, estActif as whatsappActif } from './whatsapp.service.js';
 import { genererToken } from '../config/jwt.js';
+import { journaliser, ACTIONS } from './audit.service.js';
 
 /** Erreur métier avec code HTTP et code applicatif. */
 export class ErreurAuth extends Error {
@@ -81,6 +82,15 @@ export async function verifierOtp(telephone, code) {
   const codeOtp = await otpModel.trouverCodeValide(telephone, code);
 
   if (!codeOtp) {
+    // Une tentative infructueuse est tracée : c'est le premier signal
+    // d'une attaque par force brute sur un numéro connu.
+    await journaliser({
+      action: ACTIONS.CONNEXION_ECHOUEE,
+      entite: 'utilisateurs',
+      resultat: 'echec',
+      message: `Code invalide ou expiré pour ${telephone}.`,
+      auteur_libelle: telephone,
+    });
     throw new ErreurAuth(401, 'CODE_INVALIDE', 'Code invalide, expiré ou déjà utilisé.');
   }
 
@@ -100,6 +110,16 @@ export async function verifierOtp(telephone, code) {
     personne_id: utilisateur.personne_id,
     // Porté par le jeton : détermine qui peut créer d'autres agents.
     est_agent_principal: utilisateur.est_agent_principal === true,
+  });
+
+  await journaliser({
+    action: ACTIONS.CONNEXION_REUSSIE,
+    entite: 'utilisateurs',
+    entite_id: utilisateur.id,
+    utilisateur_id: utilisateur.id,
+    role: utilisateur.role,
+    etablissement_id: utilisateur.etablissement_id,
+    auteur_libelle: `${utilisateur.nom} ${utilisateur.prenom}`.trim(),
   });
 
   return { token, utilisateur: formaterUtilisateur(utilisateur) };

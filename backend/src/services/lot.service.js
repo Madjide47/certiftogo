@@ -18,6 +18,7 @@ import * as inscriptionModel from '../models/inscription.model.js';
 import { controlerLot } from './controle.service.js';
 import { ErreurApp, avecErreursSql } from '../utils/errors.js';
 import { genererReferenceDossier } from '../utils/reference-generator.js';
+import { journaliser, journaliserStatutDossier, ACTIONS } from './audit.service.js';
 import { nettoyerTexte, estUuidValide, estDansEnum, estDateValide } from '../utils/validators.js';
 
 const STATUTS_LOT = ['transmis', 'en_examen', 'valide', 'partiellement_traite', 'rejete', 'certifie'];
@@ -124,6 +125,36 @@ export async function transmettre(promotion_id, etablissement_id, agent, donnees
         [promotion_id, dateDeliberation]
       );
 
+      // Chronologie de chaque dossier créé : « soumis » est son premier état.
+      const { rows: crees } = await client.query(
+        `SELECT id FROM dossiers WHERE lot_id = $1`,
+        [lot_id]
+      );
+      for (const { id } of crees) {
+        await journaliserStatutDossier(
+          {
+            dossier_id: id,
+            statut_avant: null,
+            statut_apres: 'soumis',
+            motif: 'Transmission de la promotion.',
+            lot_id,
+          },
+          client
+        );
+      }
+
+      await journaliser(
+        {
+          action: ACTIONS.LOT_TRANSMIS,
+          entite: 'lots_transmission',
+          entite_id: lot_id,
+          etablissement_id,
+          apres: { promotion_id, effectif: admis.length, date_deliberation: dateDeliberation },
+          message: `${admis.length} dossier(s) transmis pour « ${promotion.libelle} ».`,
+        },
+        client
+      );
+
       return lot_id;
     })
   ).then(async (lot_id) => ({
@@ -178,6 +209,15 @@ export async function examiner(id, agent_ministere_id) {
     rapport_controles: controles,
   });
 
+  await journaliser({
+    action: ACTIONS.LOT_EXAMINE,
+    entite: 'lots_transmission',
+    entite_id: id,
+    etablissement_id: lot.etablissement_id,
+    apres: { statut: 'en_examen' },
+    message: `${controles.bloquants.length} dossier(s) bloquant(s), ${controles.anomalies.length} anomalie(s).`,
+  });
+
   return { lot: await lotModel.trouverParId(id), controles };
 }
 
@@ -228,6 +268,8 @@ export async function valider(id, agent_ministere_id, donnees = {}) {
     );
   }
 
+  const parId = new Map(dossiers.map((d) => [d.id, d]));
+
   await withTransaction(async (client) => {
     for (const dossier of aValider) {
       await client.query(
@@ -237,7 +279,17 @@ export async function valider(id, agent_ministere_id, donnees = {}) {
           WHERE id = $1`,
         [dossier.id, agent_ministere_id]
       );
+      await journaliserStatutDossier(
+        {
+          dossier_id: dossier.id,
+          statut_avant: dossier.statut,
+          statut_apres: 'valide',
+          lot_id: id,
+        },
+        client
+      );
     }
+
     for (const [dossier_id, motif] of aRejeter) {
       await client.query(
         `UPDATE dossiers
@@ -246,14 +298,34 @@ export async function valider(id, agent_ministere_id, donnees = {}) {
           WHERE id = $1`,
         [dossier_id, agent_ministere_id, motif]
       );
+      await journaliserStatutDossier(
+        {
+          dossier_id,
+          statut_avant: parId.get(dossier_id)?.statut || null,
+          statut_apres: 'rejete',
+          motif,
+          lot_id: id,
+        },
+        client
+      );
     }
+
+    const statutLot = aRejeter.size > 0 ? 'partiellement_traite' : 'valide';
 
     await lotModel.changerStatut(
       id,
+      { statut: statutLot, agent_ministere_id, rapport_controles: controles },
+      client
+    );
+
+    await journaliser(
       {
-        statut: aRejeter.size > 0 ? 'partiellement_traite' : 'valide',
-        agent_ministere_id,
-        rapport_controles: controles,
+        action: ACTIONS.LOT_VALIDE,
+        entite: 'lots_transmission',
+        entite_id: id,
+        etablissement_id: lot.etablissement_id,
+        apres: { statut: statutLot, valides: aValider.length, rejetes: aRejeter.size },
+        message: `${aValider.length} validé(s), ${aRejeter.size} rejeté(s).`,
       },
       client
     );
@@ -279,6 +351,8 @@ export async function rejeter(id, agent_ministere_id, motif) {
     throw new ErreurApp(400, 'MOTIF_REQUIS', 'Un motif de rejet est obligatoire.');
   }
 
+  const dossiers = await lotModel.listerDossiers(id);
+
   await withTransaction(async (client) => {
     await client.query(
       `UPDATE dossiers
@@ -287,7 +361,32 @@ export async function rejeter(id, agent_ministere_id, motif) {
         WHERE lot_id = $1`,
       [id, motif_rejet, agent_ministere_id]
     );
+    for (const dossier of dossiers) {
+      await journaliserStatutDossier(
+        {
+          dossier_id: dossier.id,
+          statut_avant: dossier.statut,
+          statut_apres: 'rejete',
+          motif: motif_rejet,
+          lot_id: id,
+        },
+        client
+      );
+    }
+
     await lotModel.changerStatut(id, { statut: 'rejete', motif_rejet, agent_ministere_id }, client);
+
+    await journaliser(
+      {
+        action: ACTIONS.LOT_REJETE,
+        entite: 'lots_transmission',
+        entite_id: id,
+        etablissement_id: lot.etablissement_id,
+        apres: { statut: 'rejete', motif_rejet },
+        message: `${dossiers.length} dossier(s) renvoyés : ${motif_rejet}`,
+      },
+      client
+    );
 
     // L'établissement doit pouvoir corriger puis retransmettre.
     await client.query(`UPDATE promotions SET statut = 'ouverte' WHERE id = $1`, [lot.promotion_id]);

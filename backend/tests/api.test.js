@@ -1447,6 +1447,173 @@ describe('Import Excel — promotion entière', () => {
   });
 });
 
+// ── Journal d'audit, historique et corbeille ───────────────────
+// La table existait depuis la Phase 1 mais aucun code ne l'alimentait.
+describe('Audit — qui a fait quoi', () => {
+  test('trace les connexions réussies avec leur auteur et leur origine', async () => {
+    await login('+22890000002');
+
+    const { rows } = await pool.query(
+      `SELECT auteur_libelle, role, action, resultat, adresse_ip, user_agent, etablissement_id
+         FROM journal_audit
+        WHERE action = 'connexion_reussie'
+        ORDER BY date_action DESC LIMIT 1`
+    );
+    assert.equal(rows.length, 1);
+    assert.match(rows[0].auteur_libelle, /KOUASSI/);
+    assert.equal(rows[0].role, 'etablissement');
+    assert.equal(rows[0].resultat, 'succes');
+    assert.ok(rows[0].adresse_ip, 'adresse IP capturée par le contexte de requête');
+    assert.ok(rows[0].etablissement_id, 'rattachement conservé pour le cloisonnement');
+  });
+
+  test('trace les tentatives de connexion échouées', async () => {
+    await api().post('/api/auth/request-otp').send({ telephone: '+22890000002' });
+    const res = await api()
+      .post('/api/auth/verify-otp')
+      .send({ telephone: '+22890000002', code: '000000' });
+    assert.equal(res.status, 401);
+
+    const { rows } = await pool.query(
+      `SELECT resultat, message FROM journal_audit
+        WHERE action = 'connexion_echouee' ORDER BY date_action DESC LIMIT 1`
+    );
+    assert.equal(rows[0].resultat, 'echec');
+    assert.match(rows[0].message, /\+22890000002/);
+  });
+
+  test('trace la certification avec sa transaction blockchain', async () => {
+    const { rows } = await pool.query(
+      `SELECT action, transaction_hash, valeurs_apres, etablissement_id
+         FROM journal_audit
+        WHERE action = 'diplome_certifie'
+        ORDER BY date_action DESC LIMIT 1`
+    );
+    assert.ok(rows.length, 'des certifications ont eu lieu dans les tests précédents');
+    assert.ok(rows[0].transaction_hash, 'corrélation avec l\'ancrage');
+    assert.ok(rows[0].valeurs_apres.hash_sha256);
+  });
+
+  test('restitue la chronologie complète d\'un dossier', async () => {
+    const { rows: dossiers } = await pool.query(
+      `SELECT dossier_id FROM historique_statuts_dossier
+        WHERE statut_apres = 'certifie'
+        ORDER BY date_changement DESC LIMIT 1`
+    );
+    assert.ok(dossiers.length, 'des certifications ont eu lieu');
+
+    const t = await login('+22890000001');
+    const res = await api().get(`/api/journal/dossiers/${dossiers[0].dossier_id}`).set(auth(t));
+    assert.equal(res.status, 200);
+
+    const etapes = res.body.data.historique.map((h) => h.statut_apres);
+    assert.equal(
+      etapes[etapes.length - 1],
+      'certifie',
+      'la chronologie est ordonnée et se clôt sur la certification'
+    );
+    assert.ok(res.body.data.historique[0].auteur_libelle, 'chaque étape porte son auteur');
+  });
+
+  test('cloisonne le journal : un établissement ne voit que ses actions', async () => {
+    const etab = await login('+22890000002');
+    const res = await api().get('/api/journal?limit=200').set(auth(etab));
+    assert.equal(res.status, 200);
+
+    const { rows } = await pool.query(
+      `SELECT id FROM etablissements WHERE code = 'IAI001'`
+    );
+    const iai = rows[0].id;
+
+    assert.ok(res.body.data.entrees.length > 0);
+    assert.ok(
+      res.body.data.entrees.every((e) => e.etablissement_id === iai),
+      'aucune entrée d\'un autre établissement ne fuit'
+    );
+  });
+
+  test('refuse la consultation à un candidat (403)', async () => {
+    const t = await login('+22890000011');
+    const res = await api().get('/api/journal').set(auth(t));
+    assert.equal(res.status, 403);
+    assert.equal(res.body.error.code, 'ACCES_REFUSE');
+  });
+
+  test('exporte le journal en CSV', async () => {
+    const t = await login('+22890000003');
+    const res = await api()
+      .get('/api/journal/export?action=connexion_reussie')
+      .set(auth(t))
+      .responseType('blob');
+    assert.equal(res.status, 200);
+    assert.match(res.headers['content-type'], /text\/csv/);
+
+    const csv = res.body.toString('utf8');
+    assert.match(csv.split('\n')[0], /date_action,auteur_libelle,role,action/);
+
+    // L'export est lui-même un acte tracé.
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM journal_audit WHERE action = 'journal_exporte'`
+    );
+    assert.ok(rows[0].n >= 1);
+  });
+
+  test('protège la durée de conservation contre une purge trop agressive', async () => {
+    const admin = await login('+22890000003');
+    const trop = await api().post('/api/journal/purger').set(auth(admin)).send({ jours: 30 });
+    assert.equal(trop.status, 400);
+    assert.equal(trop.body.error.code, 'CONSERVATION_INSUFFISANTE');
+
+    const ministere = await login('+22890000001');
+    const refuse = await api().post('/api/journal/purger').set(auth(ministere)).send({ jours: 1825 });
+    assert.equal(refuse.status, 403, 'la purge est réservée à l\'administrateur');
+  });
+
+  test('met en corbeille puis restaure un élément supprimé', async () => {
+    const t = await login('+22890000002');
+
+    const creation = await api().post('/api/candidats').set(auth(t)).send({
+      numero_etudiant: 'CORB-001', nom: 'EPHEMERE', prenom: 'Test',
+      telephone: '+22893000001',
+    });
+    assert.equal(creation.status, 201);
+    const candidatId = creation.body.data.candidat.id;
+
+    const suppression = await api().delete(`/api/candidats/${candidatId}`).set(auth(t));
+    assert.equal(suppression.status, 200);
+
+    const absent = await api().get(`/api/candidats/${candidatId}`).set(auth(t));
+    assert.equal(absent.status, 404, 'la fiche a bien disparu');
+
+    const corbeille = await api().get('/api/corbeille?table_source=candidats').set(auth(t));
+    assert.equal(corbeille.status, 200);
+    const element = corbeille.body.data.elements.find((e) => e.enregistrement_id === candidatId);
+    assert.ok(element, 'la ligne supprimée est récupérable');
+    assert.match(element.libelle, /EPHEMERE/);
+
+    const restauration = await api()
+      .post(`/api/corbeille/${element.id}/restaurer`)
+      .set(auth(t));
+    assert.equal(restauration.status, 200, JSON.stringify(restauration.body));
+
+    // Réinsérée avec le MÊME identifiant : les références restent valides.
+    const revenu = await api().get(`/api/candidats/${candidatId}`).set(auth(t));
+    assert.equal(revenu.status, 200);
+    assert.equal(revenu.body.data.candidat.numero_etudiant, 'CORB-001');
+
+    // Une restauration ne se rejoue pas.
+    const doublon = await api().post(`/api/corbeille/${element.id}/restaurer`).set(auth(t));
+    assert.equal(doublon.status, 404);
+  });
+
+  test('un autre établissement ne voit pas la corbeille du premier', async () => {
+    const autre = await login('+22890000200');
+    const res = await api().get('/api/corbeille?table_source=candidats').set(auth(autre));
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.elements.length, 0);
+  });
+});
+
 // ── Transmission par lot et instruction par le ministère ────────
 // Le chaînon qui manquait : la promotion passait « transmise » sans que
 // le ministère ne reçoive quoi que ce soit.

@@ -165,16 +165,16 @@ Dernière mise à jour : 2 août 2026.
 
 | # | Élément | Statut |
 |---|---|---|
-| J-01 | Table `journal_audit` | ✅ *existe* |
-| J-02 | **Alimentation effective** — aujourd'hui aucune écriture dans le code | ⬜ |
-| J-03 | Format complet : horodatage, utilisateur, rôle, action, entité, **avant/après**, IP, user-agent, résultat | ⬜ |
-| J-04 | **Corrélation avec la transaction blockchain** | ⬜ |
-| J-05 | Catalogue des **30 à 40 actions obligatoires** | ⬜ |
-| J-06 | Durée de conservation et purge | ⬜ |
-| J-07 | Droits de consultation par rôle | ⬜ |
-| J-08 | Export du journal | ⬜ |
-| J-09 | Écran « Qui a fait quoi » | ⬜ |
-| J-10 | **Corbeille et restauration** (suppression réversible) | ⬜ |
+| J-01 | Table `journal_audit` | ✅ |
+| J-02 | **Alimentation effective** — aujourd'hui aucune écriture dans le code | ✅ |
+| J-03 | Format complet : horodatage, utilisateur, rôle, action, entité, **avant/après**, IP, user-agent, résultat | ✅ |
+| J-04 | **Corrélation avec la transaction blockchain** | ✅ |
+| J-05 | Catalogue des **30 à 40 actions obligatoires** | ✅ |
+| J-06 | Durée de conservation et purge | ✅ |
+| J-07 | Droits de consultation par rôle | ✅ |
+| J-08 | Export du journal | ✅ |
+| J-09 | Écran « Qui a fait quoi » | ⬜ *API prête, écran à venir avec la refonte* |
+| J-10 | **Corbeille et restauration** (suppression réversible) | ✅ |
 
 ## K. Statistiques et tableaux de bord
 
@@ -274,7 +274,7 @@ ci-dessus : voici ce que seul le CDC mentionne.
 | P-09 | Critères d'acceptation du MVP | 3.4 | ⬜ |
 | P-10 | Environnements : dev, test, démo, production | 5.5 | ⬜ |
 | P-11 | **Nomenclatures en base** : `types_diplome`, `mentions` (aujourd'hui des `CHECK` figés) | 24.3.4 | ⬜ |
-| P-12 | **Table `historique_statuts_dossier`** | 24.3.6 | ⬜ |
+| P-12 | **Table `historique_statuts_dossier`** | 24.3.6 | ✅ |
 | P-13 | **Table `cles_publiques_ministere`** | 24.3.9 | ⬜ |
 | P-14 | **Table `sessions`** (jetons, révocation) | 24.3.2 | ⬜ |
 | P-15 | Diagramme entité-association d'ensemble | 24.4 | ⬜ |
@@ -298,9 +298,9 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 63 |
+| ✅ fait et testé | 73 |
 | 🔨 partiel ou en cours | 13 |
-| ⬜ à faire | 98 |
+| ⬜ à faire | 88 |
 | **Total** | **174** |
 
 ## Ordre d'implémentation proposé
