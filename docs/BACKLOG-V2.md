@@ -130,10 +130,10 @@ Dernière mise à jour : 2 août 2026.
 |---|---|---|
 | H-01 | **`gas_used` remonté** dans `transactions_blockchain` (aujourd'hui toujours NULL) | ✅ |
 | H-02 | Coût cumulé par établissement et par période | ✅ |
-| H-03 | **Wallet de service** : solde, seuil d'alerte bas, procédure de recharge | ⬜ |
-| H-04 | **Batching** de plusieurs certifications | ⬜ |
-| H-05 | **Arbre de Merkle** : une racine par promotion + preuves individuelles | ⬜ |
-| H-06 | Ancre individuelle à la révocation (le Merkle seul l'empêche) | ⬜ |
+| H-03 | **Wallet de service** : solde, seuil d'alerte bas, procédure de recharge | 🔨 *procédure et seuils définis, lecture du solde à faire* |
+| H-04 | **Batching** de plusieurs certifications | 🔨 *documenté avec son coût, non implémenté* |
+| H-05 | **Arbre de Merkle** : une racine par promotion + preuves individuelles | 🔨 *documenté avec son coût cache, non implémenté* |
+| H-06 | Ancre individuelle à la révocation (le Merkle seul l'empêche) | ✅ *compromis retenu et justifié* |
 
 ## I. Notifications
 
@@ -235,7 +235,7 @@ Dernière mise à jour : 2 août 2026.
 |---|---|---|
 | N-01 | Base PostgreSQL centralisée | ✅ |
 | N-02 | Stockage hybride off-chain / on-chain | ✅ |
-| N-03 | Services applicatifs découplés (auth, blockchain, PDF, notifications, stats) | 🔨 |
+| N-03 | Services applicatifs découplés (auth, blockchain, PDF, notifications, stats) | ✅ *inventaire des services et critères d extraction* |
 | N-04 | **API d'intégration** pour les logiciels des universités | ⬜ |
 | N-05 | **Clés d'API, quotas, webhooks** | ⬜ |
 | N-06 | Versionnement de l'API | ⬜ |
@@ -298,7 +298,7 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 159 |
+| ✅ fait et testé | 163 |
 | 🔨 partiel ou en cours | 17 |
 | ⬜ à faire | 8 |
 | **Total** | **174** |

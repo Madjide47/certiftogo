@@ -20,8 +20,11 @@ fichier seraient illisibles en revue et impossibles à relire par diff.
 | Chapitre | Fichier | État |
 |---|---|---|
 | 24 — Modèle de données | [`cdc/24-modele-donnees.md`](cdc/24-modele-donnees.md) | ✅ rédigé |
+| 33 — Performances et traitement asynchrone | [`cdc/33-performances-asynchrone.md`](cdc/33-performances-asynchrone.md) | ✅ rédigé |
+| 34 — Coûts blockchain et gestion du gas | [`cdc/34-couts-blockchain.md`](cdc/34-couts-blockchain.md) | ✅ rédigé |
 | 35 — Décisions d'architecture (16 ADR) | [`cdc/35-decisions-architecture.md`](cdc/35-decisions-architecture.md) | ✅ rédigé |
 | 36 — Argumentaire pour le jury | [`cdc/36-argumentaire-jury.md`](cdc/36-argumentaire-jury.md) | ✅ rédigé |
+| 37 — Évolutivité et découplage | [`cdc/37-evolutivite-decouplage.md`](cdc/37-evolutivite-decouplage.md) | ✅ rédigé |
 
 > Les ADR ont été rédigées en premier parce qu'elles gouvernent la lecture de
 > tout le reste : chaque chapitre suivant peut s'y référer au lieu de
