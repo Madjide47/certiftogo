@@ -79,7 +79,10 @@ export async function trouverParReference(reference) {
  */
 export async function listerParPersonne(personne_id) {
   const { rows } = await query(
-    `SELECT ${SELECT_DIPLOME} ${FROM_DIPLOME}
+    `SELECT ${SELECT_DIPLOME},
+            precedent.reference AS remplace_reference
+       ${FROM_DIPLOME}
+       LEFT JOIN diplomes precedent ON precedent.id = d.diplome_precedent_id
       WHERE d.candidat_id IN (SELECT id FROM candidats WHERE personne_id = $1)
       ORDER BY d.date_certification DESC`,
     [personne_id]

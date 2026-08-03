@@ -1,11 +1,20 @@
 // ─────────────────────────────────────────────────────────────
-// Accueil public : saisie d'une empreinte SHA-256 ou d'une référence
-// DIP-AAAA-XXXXX, puis redirection vers la page de résultat.
+// Accueil du service de vérification.
+//
+// Qui arrive ici ? Un employeur, un service RH, une administration
+// étrangère, une université — quelqu'un qui a un document sous les yeux
+// et un doute. Il n'a pas de compte, il n'en veut pas, et il ne
+// reviendra peut-être jamais. L'écran doit donc, en un seul regard :
+// dire ce qu'on peut saisir, et dire ce que la réponse prouvera.
+//
+// La saisie accepte trois choses parce que le document en porte trois :
+// un QR code, une empreinte, une référence. Refuser l'une d'elles
+// obligerait à retaper 64 caractères hexadécimaux à la main.
 // ─────────────────────────────────────────────────────────────
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Icon from '../components/Icon.jsx';
 import QrScanner from '../components/QrScanner.jsx';
+import { Icone, Bouton, Encart } from '../components/ui.jsx';
 
 /**
  * Extrait le code de vérification d'un contenu de QR : le QR d'un diplôme
@@ -27,13 +36,13 @@ function extraireCode(texte) {
 export default function HomePage() {
   const [valeur, setValeur] = useState('');
   const [scannerOuvert, setScannerOuvert] = useState(false);
-  const navigate = useNavigate();
+  const naviguer = useNavigate();
 
-  function soumettre(e) {
-    e.preventDefault();
+  function soumettre(evenement) {
+    evenement.preventDefault();
     const code = valeur.trim();
     if (!code) return;
-    navigate(`/verifier/${encodeURIComponent(code)}`);
+    naviguer(`/verifier/${encodeURIComponent(code)}`);
   }
 
   const surQrDetecte = useCallback(
@@ -41,72 +50,97 @@ export default function HomePage() {
       const code = extraireCode(texte);
       if (!code) return;
       setScannerOuvert(false);
-      navigate(`/verifier/${encodeURIComponent(code)}?methode=qr`);
+      naviguer(`/verifier/${encodeURIComponent(code)}?methode=qr`);
     },
-    [navigate]
+    [naviguer]
   );
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col items-center">
-      <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-on-primary shadow-soft-md">
-        <Icon name="verified_user" filled size={34} />
-      </div>
+    <div className="mx-auto w-full max-w-3xl">
+      <h1 className="text-xl">Vérifier l’authenticité d’un diplôme</h1>
+      <p className="mt-2 max-w-2xl text-base text-gris-700">
+        Ce service interroge le registre national tenu par le ministère. Il répond sur les
+        diplômes certifiés par CertifTOGO : un diplôme délivré avant la mise en service, ou par un
+        établissement non agréé, n’y figure pas.
+      </p>
 
-      <div className="text-center">
-        <h1 className="font-display text-4xl font-extrabold tracking-tight text-on-surface md:text-5xl">
-          Vérifier un diplôme
-        </h1>
-        <p className="mx-auto mt-3 max-w-xl text-on-surface-variant">
-          Saisissez l'empreinte (hash) ou la référence du diplôme, ou scannez son QR code. La
-          vérification est instantanée, gratuite et anonyme.
-        </p>
-      </div>
-
-      <form onSubmit={soumettre} className="mt-10 w-full rounded-2xl bg-white p-6 shadow-soft-md ring-1 ring-outline-variant/20">
-        <label className="block">
-          <span className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
-            Empreinte SHA-256 ou référence (DIP-AAAA-XXXXX)
-          </span>
-          <div className="relative mt-2">
-            <Icon
-              name="search"
-              size={22}
-              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant/50"
-            />
-            <input
-              autoFocus
-              value={valeur}
-              onChange={(e) => setValeur(e.target.value)}
-              placeholder="ex. DIP-2024-00042 ou 7b1309…"
-              className="w-full rounded-xl border border-outline-variant/40 bg-white py-3.5 pl-11 pr-4 text-on-surface placeholder:text-on-surface-variant/50 focus:border-primary-container focus:outline-none focus:ring-2 focus:ring-primary-container/20"
-            />
-          </div>
+      <form onSubmit={soumettre} className="mt-6 border border-gris-300 bg-white p-5">
+        <label htmlFor="code" className="block text-base font-medium text-gris-900">
+          Empreinte, référence ou QR code du document
         </label>
-        <button
-          type="submit"
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 font-semibold text-on-primary shadow-sm transition-all hover:bg-primary-container active:scale-[0.99]"
-        >
-          <Icon name="search" size={20} /> Vérifier
-        </button>
+        <p className="mt-0.5 text-sm text-gris-500">
+          L’empreinte est la suite de 64 caractères imprimée sur le diplôme ; la référence a la
+          forme DIP-2026-00042.
+        </p>
 
-        <div className="my-4 flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-on-surface-variant/60">
-          <span className="h-px flex-grow bg-outline-variant/30" /> ou <span className="h-px flex-grow bg-outline-variant/30" />
+        <div className="mt-3 flex flex-wrap gap-2">
+          <input
+            id="code"
+            autoFocus
+            value={valeur}
+            onChange={(e) => setValeur(e.target.value)}
+            placeholder="DIP-2026-00042 ou 7b1309a4…"
+            className="tabulaire min-w-[16rem] flex-1 rounded border border-gris-500 bg-white px-3 py-2.5 text-base text-gris-900 placeholder:text-gris-500 focus:border-vert"
+          />
+          <Bouton type="submit" icone="search" disabled={!valeur.trim()}>
+            Vérifier
+          </Bouton>
+          <Bouton variante="secondaire" icone="qr_code_scanner" onClick={() => setScannerOuvert(true)}>
+            Scanner le QR
+          </Bouton>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setScannerOuvert(true)}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/40 py-3.5 font-semibold text-primary transition-all hover:bg-primary/5 active:scale-[0.99]"
-        >
-          <Icon name="qr_code_scanner" size={20} /> Scanner le QR code
-        </button>
       </form>
 
-      {scannerOuvert && <QrScanner onResultat={surQrDetecte} onFermer={() => setScannerOuvert(false)} />}
+      {scannerOuvert && (
+        <QrScanner onResultat={surQrDetecte} onFermer={() => setScannerOuvert(false)} />
+      )}
 
-      <div className="mt-6 flex items-center gap-2 text-sm text-on-surface-variant/80">
-        <Icon name="lock" size={18} /> Aucun compte requis — données personnelles jamais stockées sur la blockchain.
-      </div>
+      <section id="aide" className="mt-8">
+        <h2 className="text-lg">Ce que la vérification établit</h2>
+
+        <div className="mt-3 grid gap-4 sm:grid-cols-3">
+          <article className="border border-gris-300 bg-white p-4">
+            <Icone nom="fingerprint" taille={24} className="text-vert" />
+            <h3 className="mt-2 text-base font-bold text-gris-900">L’empreinte du document</h3>
+            <p className="mt-1 text-sm text-gris-700">
+              Les données du diplôme produisent une empreinte unique. Modifier une note, un nom ou
+              une date change l’empreinte : le document ne correspond plus.
+            </p>
+          </article>
+
+          <article className="border border-gris-300 bg-white p-4">
+            <Icone nom="link" taille={24} className="text-vert" />
+            <h3 className="mt-2 text-base font-bold text-gris-900">L’inscription en blockchain</h3>
+            <p className="mt-1 text-sm text-gris-700">
+              Cette empreinte est inscrite sur une chaîne publique. Personne — pas même le
+              ministère — ne peut réécrire une inscription passée.
+            </p>
+          </article>
+
+          <article className="border border-gris-300 bg-white p-4">
+            <Icone nom="gpp_bad" taille={24} className="text-vert" />
+            <h3 className="mt-2 text-base font-bold text-gris-900">L’état actuel</h3>
+            <p className="mt-1 text-sm text-gris-700">
+              Un diplôme peut être révoqué après coup. La vérification donne l’état du jour, pas
+              celui du jour de l’impression.
+            </p>
+          </article>
+        </div>
+
+        <div className="mt-4">
+          <Encart ton="info" titre="Ce que la vérification n’établit pas">
+            Elle atteste qu’un diplôme correspondant existe au registre et qu’il n’a pas été
+            modifié. Elle ne dit pas que la personne qui vous présente le document en est la
+            titulaire : comparez le nom affiché avec une pièce d’identité.
+          </Encart>
+        </div>
+      </section>
+
+      <p className="mt-6 flex items-start gap-1.5 text-sm text-gris-500">
+        <Icone nom="lock" taille={16} className="mt-0.5 shrink-0" />
+        Aucun compte n’est requis et aucune donnée personnelle n’est inscrite sur la blockchain :
+        seule l’empreinte l’est. Votre consultation est comptabilisée de façon anonyme.
+      </p>
     </div>
   );
 }

@@ -40,10 +40,11 @@ export async function listerEtablissements() {
   return data.data.etablissements;
 }
 
-export async function creerEtablissement(donnees) {
-  const { data } = await api.post('/admin/etablissements', donnees);
-  return data.data.etablissement;
-}
+// La création d'un établissement N'EST PAS ici : l'agrément relève du
+// ministère (`gouvernance.service`), qui attribue en même temps le code
+// officiel, les habilitations et le premier agent. La route
+// `POST /admin/etablissements` n'existe plus ; l'appeler donnait un 404
+// silencieux derrière un bouton qui semblait fonctionner.
 
 export async function definirStatutEtablissement(id, statut) {
   const { data } = await api.patch(`/admin/etablissements/${id}/statut`, { statut });

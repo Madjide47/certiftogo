@@ -1,111 +1,166 @@
 // ─────────────────────────────────────────────────────────────
-// Candidat — portefeuille détaillé : une carte par diplôme, avec accès
-// au PDF, au QR, et au lien de vérification publique.
+// Fiches détaillées des diplômes du titulaire.
+//
+// L'écran est construit autour d'un geste unique : PARTAGER LA PREUVE.
+// Un diplômé ne montre pas un PDF — n'importe qui peut en fabriquer un —
+// il donne un lien que le tiers vérifie lui-même. Le lien de vérification
+// est donc l'action principale, le PDF vient après.
+//
+// Un diplôme révoqué reste affiché, motif visible. L'effacer rendrait
+// service à personne : le tiers qui scanne l'ancien QR verra la
+// révocation de toute façon, et mieux vaut que le titulaire l'apprenne
+// ici que devant un employeur.
 // ─────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react';
-import PageHeader from '../../components/ui/PageHeader.jsx';
-import Badge from '../../components/ui/Badge.jsx';
-import Icon from '../../components/ui/Icon.jsx';
 import { listerMesDiplomes } from '../../services/portefeuille.service.js';
 import {
-  LIBELLES_STATUT_DIPLOME,
-  BADGE_STATUT_DIPLOME,
   LIBELLES_TYPE_DIPLOME,
   LIBELLES_MENTION,
   messageErreur,
 } from '../../utils/libelles.js';
+import { EtiquetteStatut } from './PortefeuillePage.jsx';
+import {
+  EnTetePage,
+  Encart,
+  EtatVide,
+  Bouton,
+  Chargement,
+  Icone,
+} from '../../components/ui/index.jsx';
 
 const URL_PUBLIC = import.meta.env.VITE_PUBLIC_URL || 'http://localhost:5174';
+
+const date = (v) => (v ? new Date(v).toLocaleDateString('fr-FR') : '—');
 
 function Ligne({ label, valeur }) {
   if (!valeur) return null;
   return (
-    <div className="flex justify-between gap-4 py-1">
-      <dt className="text-sm text-on-surface-variant">{label}</dt>
-      <dd className="text-right text-sm font-medium text-on-surface">{valeur}</dd>
+    <div className="flex justify-between gap-4 border-b border-gris-200 py-2 last:border-0">
+      <dt className="text-sm text-gris-500">{label}</dt>
+      <dd className="text-right text-sm font-medium text-gris-900">{valeur}</dd>
     </div>
   );
 }
 
-function CarteDiplome({ d }) {
+function CarteDiplome({ d, onCopie }) {
   const revoque = d.statut === 'revoque';
-  const date = d.date_certification
-    ? new Date(d.date_certification).toLocaleDateString('fr-FR')
-    : null;
+  const enAttente = d.statut === 'en_attente_ancrage';
+  const lien = d.hash ? `${URL_PUBLIC}/verifier/${d.hash}` : null;
+
   return (
-    <div
-      className={`flex flex-col rounded-2xl border bg-white p-6 shadow-soft ${
-        revoque ? 'border-error/30 bg-error-container/20' : 'border-outline-variant/25'
-      }`}
+    <article
+      className={`border bg-white ${revoque ? 'border-erreur/40' : 'border-gris-300'}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="font-display text-xl font-bold text-on-surface">
-            {LIBELLES_TYPE_DIPLOME[d.type_diplome] || d.type_diplome}
-          </h3>
-          <p className={`text-sm ${revoque ? 'text-on-surface-variant line-through' : 'text-on-surface-variant'}`}>
-            {d.reference}
-          </p>
-        </div>
-        <Badge className={BADGE_STATUT_DIPLOME[d.statut]}>
-          {LIBELLES_STATUT_DIPLOME[d.statut] || d.statut}
-        </Badge>
-      </div>
-
-      <dl className="mt-4 divide-y divide-outline-variant/10">
-        <Ligne label="Filière" valeur={d.filiere} />
-        <Ligne label="Mention" valeur={LIBELLES_MENTION[d.mention] || d.mention} />
-        <Ligne label="Établissement" valeur={d.etablissement} />
-        <Ligne label="Certifié le" valeur={date} />
-      </dl>
-
-      {revoque && d.motif_revocation && (
-        <p className="mt-3 rounded-lg bg-error-container/60 px-3 py-2 text-xs text-on-error-container">
-          Ce certificat a été révoqué — {d.motif_revocation}
-        </p>
+      {revoque && (
+        <p className="bg-erreur px-4 py-1.5 text-sm font-bold text-white">DIPLÔME RÉVOQUÉ</p>
       )}
 
-      <div className="mt-5 flex flex-wrap gap-2">
-        {revoque ? (
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant/30 px-3 py-2 text-xs font-medium text-on-surface-variant/60">
-            <Icon name="picture_as_pdf" size={16} /> PDF indisponible
-          </span>
-        ) : (
-          <>
-            {d.pdf_url && (
+      <div className="p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg">
+              {LIBELLES_TYPE_DIPLOME[d.type_diplome] || d.type_diplome}
+            </h2>
+            <p className="text-base text-gris-700">{d.filiere || '—'}</p>
+            <p className="tabulaire mt-0.5 text-sm text-gris-500">{d.reference}</p>
+          </div>
+          <EtiquetteStatut statut={d.statut} version={d.version} />
+        </div>
+
+        <dl className="mt-4">
+          <Ligne label="Établissement" valeur={d.etablissement} />
+          <Ligne label="Mention" valeur={LIBELLES_MENTION[d.mention] || d.mention} />
+          <Ligne label="Certifié le" valeur={date(d.date_certification)} />
+          {d.version > 1 && (
+            <Ligne
+              label="Remplace"
+              valeur={d.remplace_reference ? `${d.remplace_reference} — ${d.motif_version || 'correction'}` : d.motif_version}
+            />
+          )}
+        </dl>
+
+        {revoque && (
+          <div className="mt-4">
+            <Encart ton="erreur" titre="Ce diplôme n’est plus valable">
+              {d.motif_revocation || 'Motif non précisé.'} Rapprochez-vous de votre établissement :
+              une réémission corrigée est possible.
+            </Encart>
+          </div>
+        )}
+
+        {enAttente && (
+          <div className="mt-4">
+            <Encart ton="info" titre="Enregistrement en blockchain en cours">
+              Votre diplôme est certifié et valable. Son inscription définitive sur la blockchain
+              est en file d’attente ; la page de vérification l’indique au tiers qui la consulte.
+            </Encart>
+          </div>
+        )}
+
+        {!revoque && lien && (
+          <div className="mt-5 border-t border-gris-200 pt-4">
+            <p className="mb-2 text-sm font-bold text-gris-700">
+              Faire vérifier ce diplôme
+            </p>
+            <p className="mb-3 text-sm text-gris-500">
+              Transmettez ce lien — ou le QR code — à un employeur ou à une administration. Il
+              n’a besoin d’aucun compte pour contrôler l’authenticité.
+            </p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <code className="tabulaire max-w-full flex-1 overflow-x-auto whitespace-nowrap border border-gris-300 bg-gris-50 px-3 py-2 font-mono text-xs text-gris-700">
+                {lien}
+              </code>
+              <Bouton variante="secondaire" icone="content_copy" onClick={() => onCopie(lien, d.id)}>
+                Copier
+              </Bouton>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
               <a
-                href={d.pdf_url}
+                href={lien}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-primary-container px-3 py-2 text-xs font-semibold text-on-primary hover:bg-primary"
+                className="inline-flex items-center gap-1.5 border border-vert bg-vert px-4 py-2 text-base font-medium text-white hover:bg-vert-fonce"
               >
-                <Icon name="picture_as_pdf" size={16} /> PDF
+                <Icone nom="verified" taille={18} />
+                Ouvrir la page publique
               </a>
-            )}
-            {d.qr_code_url && (
-              <a
-                href={d.qr_code_url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant/40 px-3 py-2 text-xs font-semibold text-on-surface hover:bg-surface-container-low"
-              >
-                <Icon name="qr_code_2" size={16} /> QR
-              </a>
-            )}
-            {d.hash && (
-              <a
-                href={`${URL_PUBLIC}/verifier/${d.hash}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant/40 px-3 py-2 text-xs font-semibold text-on-surface hover:bg-surface-container-low"
-              >
-                <Icon name="verified" size={16} /> Vérifier
-              </a>
-            )}
-          </>
+              {d.pdf_url && (
+                <a
+                  href={d.pdf_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 border border-gris-500 bg-white px-4 py-2 text-base font-medium text-gris-900 hover:bg-gris-100"
+                >
+                  <Icone nom="picture_as_pdf" taille={18} />
+                  Diplôme PDF
+                </a>
+              )}
+              {d.qr_code_url && (
+                <a
+                  href={d.qr_code_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 border border-gris-500 bg-white px-4 py-2 text-base font-medium text-gris-900 hover:bg-gris-100"
+                >
+                  <Icone nom="qr_code_2" taille={18} />
+                  QR code
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
+        {revoque && (
+          <p className="mt-4 flex items-start gap-1.5 text-sm text-gris-500">
+            <Icone nom="block" taille={16} className="mt-0.5 shrink-0" />
+            Le PDF et le lien de vérification ne sont plus proposés : ce document ne prouve plus
+            rien.
+          </p>
         )}
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -113,6 +168,7 @@ export default function MesDiplomesPage() {
   const [diplomes, setDiplomes] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState('');
+  const [copie, setCopie] = useState(null);
 
   useEffect(() => {
     listerMesDiplomes()
@@ -121,29 +177,48 @@ export default function MesDiplomesPage() {
       .finally(() => setChargement(false));
   }, []);
 
+  async function copier(lien, id) {
+    try {
+      await navigator.clipboard.writeText(lien);
+      setCopie(id);
+      setTimeout(() => setCopie(null), 3000);
+    } catch {
+      // Presse-papiers refusé (contexte non sécurisé, permission) : on le
+      // dit plutôt que de laisser croire à une copie silencieuse.
+      setErreur('Copie impossible depuis ce navigateur. Sélectionnez le lien à la main.');
+    }
+  }
+
   return (
     <div>
-      <PageHeader
+      <EnTetePage
         titre="Mes diplômes"
-        sous="Consultez, téléchargez et partagez vos certificats enregistrés en blockchain."
+        description="Chaque diplôme dispose d’un lien de vérification publique : c’est lui qui fait preuve, pas le document imprimé."
+        fil={[{ libelle: 'Mon espace' }, { libelle: 'Mes diplômes' }]}
       />
 
       {erreur && (
-        <div className="mb-4 rounded-lg bg-error-container px-4 py-3 text-sm text-on-error-container">
-          {erreur}
+        <div className="mb-4">
+          <Encart ton="erreur">{erreur}</Encart>
+        </div>
+      )}
+
+      {copie && (
+        <div className="mb-4">
+          <Encart ton="succes">Lien copié. Vous pouvez le coller dans un message ou un courriel.</Encart>
         </div>
       )}
 
       {chargement ? (
-        <div className="py-16 text-center text-on-surface-variant">Chargement…</div>
+        <Chargement />
       ) : diplomes.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-outline-variant/40 bg-white p-12 text-center text-on-surface-variant">
-          Aucun diplôme certifié pour l'instant.
-        </div>
+        <EtatVide icone="school" titre="Aucun diplôme certifié">
+          Vos diplômes apparaîtront ici dès que le ministère les aura certifiés.
+        </EtatVide>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-5 lg:grid-cols-2">
           {diplomes.map((d) => (
-            <CarteDiplome key={d.id} d={d} />
+            <CarteDiplome key={d.id} d={d} onCopie={copier} />
           ))}
         </div>
       )}

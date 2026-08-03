@@ -3480,6 +3480,61 @@ describe('Pièces justificatives — instruction et intégrité', () => {
 // ces cas répondent 500, l'exploitant cherche une panne serveur là où il
 // n'y a qu'une requête invalide.
 // ═══════════════════════════════════════════════════════════════════
+describe('Administration — création de comptes', () => {
+  test('accepte la fonction de l’agent et la conserve', async () => {
+    const t = await login('+22890000003');
+    const etabs = await api().get('/api/admin/etablissements').set(auth(t));
+
+    const res = await api().post('/api/admin/utilisateurs').set(auth(t)).send({
+      nom: 'AGENT', prenom: 'Sousrole', telephone: '+22890000881',
+      role: 'etablissement', etablissement_id: etabs.body.data.etablissements[0].id,
+      sous_role: 'chef_scolarite',
+    });
+
+    assert.equal(res.status, 201, JSON.stringify(res.body.error || res.body));
+    // Sans cette conservation, l'agent naissait sans permissions et les
+    // écrans lui refusaient tout, sans expliquer pourquoi.
+    assert.equal(res.body.data.utilisateur.sous_role, 'chef_scolarite');
+  });
+
+  test('refuse une fonction inconnue', async () => {
+    const t = await login('+22890000003');
+    const etabs = await api().get('/api/admin/etablissements').set(auth(t));
+
+    const res = await api().post('/api/admin/utilisateurs').set(auth(t)).send({
+      nom: 'AGENT', prenom: 'Inconnu', telephone: '+22890000882',
+      role: 'etablissement', etablissement_id: etabs.body.data.etablissements[0].id,
+      sous_role: 'recteur',
+    });
+
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'SOUS_ROLE_INVALIDE');
+  });
+
+  test('résout le ministère quand il n’y en a qu’un', async () => {
+    // Exiger un UUID qu'aucun écran ne montre rendait la création d'un
+    // compte ministère impossible depuis l'interface.
+    const t = await login('+22890000003');
+    const res = await api().post('/api/admin/utilisateurs').set(auth(t)).send({
+      nom: 'MINISTERE', prenom: 'Agent', telephone: '+22890000883', role: 'ministere',
+    });
+
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    assert.ok(res.body.data.utilisateur.ministere_id);
+  });
+
+  test('la configuration annonce le canal réellement en vigueur', async () => {
+    const t = await login('+22890000003');
+    const res = await api().get('/api/admin/configuration').set(auth(t));
+
+    assert.equal(res.status, 200);
+    // Ce champ était figé sur « Console (mock WhatsApp) » quel que soit
+    // le mode : un écran de configuration qui décrit autre chose que la
+    // configuration en vigueur est pire qu'un écran vide.
+    assert.equal(res.body.data.configuration.otp.mode, process.env.WHATSAPP_MODE || 'mock');
+  });
+});
+
 describe('Robustesse — erreurs techniques traduites', () => {
   test('un corps JSON illisible donne 400, pas 500', async () => {
     const res = await api()

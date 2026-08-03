@@ -16,6 +16,22 @@ export async function verifierOtp(telephone, code) {
 }
 
 /** Récupère l'utilisateur connecté à partir du token stocké. */
+/** Appareils actuellement connectés à ce compte. */
+export async function listerSessions() {
+  const { data } = await api.get('/auth/sessions');
+  return data.data.sessions;
+}
+
+export async function fermerSession(id) {
+  const { data } = await api.delete(`/auth/sessions/${id}`);
+  return data.data;
+}
+
+export async function fermerAutresSessions() {
+  const { data } = await api.post('/auth/sessions/fermer-autres');
+  return data.data;
+}
+
 export async function recupererMoi() {
   const { data } = await api.get('/auth/me');
   return data.data.utilisateur;

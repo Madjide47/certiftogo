@@ -159,7 +159,7 @@ Dernière mise à jour : 2 août 2026.
 | I-14 | Agent désactivé | ✅ |
 | I-15 | Transaction blockchain échouée | ✅ |
 | I-16 | Retry blockchain réussi | ✅ |
-| I-17 | **Centre de notifications in-app** | ✅ |
+| I-17 | **Centre de notifications in-app** | ✅ *écran livré : boîte de réception + préférences* |
 | I-18 | Préférences et désabonnement | ✅ |
 | I-19 | Reprise sur échec d'envoi | ✅ |
 | I-20 | Canal **SMS** de secours (aujourd'hui WhatsApp seul) | 🔨 *canal tracé, opérateur non raccordé* |
@@ -177,7 +177,7 @@ Dernière mise à jour : 2 août 2026.
 | J-06 | Durée de conservation et purge | ✅ |
 | J-07 | Droits de consultation par rôle | ✅ |
 | J-08 | Export du journal | ✅ |
-| J-09 | Écran « Qui a fait quoi » | ⬜ *API prête, écran à venir avec la refonte* |
+| J-09 | Écran « Qui a fait quoi » | ✅ |
 | J-10 | **Corbeille et restauration** (suppression réversible) | ✅ |
 
 ## K. Statistiques et tableaux de bord
@@ -266,8 +266,8 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | # | Élément | Chapitre | Statut |
 |---|---|---|---|
-| P-00 | **Refonte complète du frontend** — l'UI actuelle ne fait pas « plateforme gouvernementale ». Décidé le 2 août 2026, à mener une fois le backend terminé. Jusque-là, écrans fonctionnels et minimaux. | 26 | ⬜ |
-| P-01 | **Description écran par écran** : composition, actions, états vides, états d'erreur | 26.4 | ⬜ *délibérément reporté : les écrans seront refaits* |
+| P-00 | **Refonte complète du frontend** — socle « service public » (DSFR/GOV.UK) appliqué aux quatre espaces du back-office et au front public. | 26 | ✅ |
+| P-01 | **Description écran par écran** : composition, actions, états vides, états d'erreur | 26.4 | 🔨 *les écrans portent leurs états ; la description reste à rédiger* |
 | P-02 | **Accessibilité et affichage mobile** | 26.5 | ⬜ *reporté avec la refonte* |
 | P-03 | **Tests de charge** : promotion de 12 000 diplômés | 31.4 | ⬜ |
 | P-04 | **Tests de sécurité** | 31.5 | ⬜ |

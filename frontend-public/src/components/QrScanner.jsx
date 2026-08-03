@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 import { useEffect, useRef, useState } from 'react';
 import jsQR from 'jsqr';
-import Icon from './Icon.jsx';
+import { Icone, Encart } from './ui.jsx';
 
 export default function QrScanner({ onResultat, onFermer }) {
   const videoRef = useRef(null);
@@ -102,36 +102,46 @@ export default function QrScanner({ onResultat, onFermer }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-soft-md">
-        <div className="flex items-center justify-between border-b border-outline-variant/20 px-5 py-4">
-          <div className="flex items-center gap-2 font-display font-bold text-on-surface">
-            <Icon name="qr_code_scanner" size={22} className="text-primary" />
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gris-900/60 p-4 sm:p-8"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Scanner un QR code"
+    >
+      <div className="w-full max-w-md border border-gris-300 bg-white">
+        <div className="flex items-center justify-between border-b border-gris-300 px-5 py-3">
+          <h2 className="flex items-center gap-2 text-lg">
+            <Icone nom="qr_code_scanner" taille={22} className="text-vert" />
             Scanner un QR code
-          </div>
+          </h2>
           <button
+            type="button"
             onClick={onFermer}
-            title="Fermer"
-            className="rounded-full p-1.5 text-outline transition-colors hover:bg-surface-variant hover:text-on-surface"
+            aria-label="Fermer"
+            className="rounded p-1 text-gris-500 hover:bg-gris-100 hover:text-gris-900"
           >
-            <Icon name="close" size={20} />
+            <Icone nom="close" taille={20} />
           </button>
         </div>
 
-        <div className="p-5">
+        <div className="px-5 py-4">
           {erreurCamera ? (
-            <div className="flex flex-col items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-sm text-on-surface-variant">
-              <Icon name="videocam_off" size={30} className="text-secondary" />
+            <Encart ton="alerte" titre="Caméra indisponible">
               {erreurCamera}
-            </div>
+            </Encart>
           ) : (
-            <div className="relative overflow-hidden rounded-xl bg-black">
-              <video ref={videoRef} playsInline muted className="aspect-square w-full object-cover" />
-              {/* Viseur */}
+            <div className="relative overflow-hidden bg-gris-900">
+              <video
+                ref={videoRef}
+                playsInline
+                muted
+                className="aspect-square w-full object-cover"
+              />
+              {/* Viseur : un simple cadre, sans effet. */}
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="h-3/5 w-3/5 rounded-2xl border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
+                <div className="h-3/5 w-3/5 border-2 border-white/90" />
               </div>
-              <p className="absolute inset-x-0 bottom-3 text-center text-xs font-medium text-white/90">
+              <p className="absolute inset-x-0 bottom-2 text-center text-xs font-medium text-white">
                 Placez le QR code du diplôme dans le cadre
               </p>
             </div>
@@ -139,13 +149,24 @@ export default function QrScanner({ onResultat, onFermer }) {
           <canvas ref={canvasRef} className="hidden" />
 
           <button
+            type="button"
             onClick={() => fichierRef.current?.click()}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-outline-variant/40 py-3 text-sm font-semibold text-on-surface transition-colors hover:border-primary/50 hover:text-primary"
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded border border-gris-500 bg-white py-2.5 text-base font-medium text-gris-900 hover:bg-gris-100"
           >
-            <Icon name="photo_library" size={20} /> Importer une image du QR code
+            <Icone nom="photo_library" taille={20} /> Importer une photo du QR code
           </button>
-          <input ref={fichierRef} type="file" accept="image/*" onChange={importerImage} className="hidden" />
-          {erreurImage && <p className="mt-2 text-center text-sm text-error">{erreurImage}</p>}
+          <input
+            ref={fichierRef}
+            type="file"
+            accept="image/*"
+            onChange={importerImage}
+            className="hidden"
+          />
+          {erreurImage && (
+            <p className="mt-2 text-sm font-medium text-erreur" role="alert">
+              {erreurImage}
+            </p>
+          )}
         </div>
       </div>
     </div>

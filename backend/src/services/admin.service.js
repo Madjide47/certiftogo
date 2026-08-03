@@ -2,12 +2,14 @@
 // Service "admin système" — statistiques globales, gestion des comptes
 // et des établissements.
 // ─────────────────────────────────────────────────────────────
+import { query } from '../config/database.js';
 import * as adminModel from '../models/admin.model.js';
 import * as utilisateurModel from '../models/utilisateur.model.js';
 import * as etablissementModel from '../models/etablissement.model.js';
 import { ErreurApp } from '../utils/errors.js';
 import * as sessions from './session.service.js';
 import * as notifications from './notification.service.js';
+import { SOUS_ROLES } from './permissions.service.js';
 import { journaliser, ACTIONS } from './audit.service.js';
 import {
   nettoyerTexte,
@@ -37,10 +39,20 @@ export function configuration() {
     otp: {
       longueur: Number(process.env.OTP_LENGTH) || 6,
       expiration_minutes: Number(process.env.OTP_EXPIRATION_MINUTES) || 5,
-      canal: 'Console (mock WhatsApp)',
+      // Ce champ annonçait « Console (mock WhatsApp) » en dur : un écran
+      // de configuration qui décrit une configuration qui n'est pas celle
+      // en vigueur est pire qu'un écran vide.
+      canal:
+        (process.env.WHATSAPP_MODE || 'mock') === 'cloud'
+          ? 'WhatsApp Cloud API'
+          : 'Console serveur (simulation)',
+      mode: process.env.WHATSAPP_MODE || 'mock',
     },
     securite: {
       jwt_expiration: process.env.JWT_EXPIRES_IN || '24h',
+      // Le refus de démarrer sans secret en production est une garantie
+      // qu'un exploitant doit pouvoir constater, pas supposer.
+      signature_ministere: process.env.MINISTERE_SIGNING_SECRET ? 'configurée' : 'absente',
     },
   };
 }
@@ -70,16 +82,38 @@ export async function creerUtilisateur(donnees) {
 
   // Cohérence rôle ↔ FK de rattachement (miroir de chk_role_rattachement).
   const rattachement = { etablissement_id: null, ministere_id: null, personne_id: null };
+  let sous_role = null;
+
   if (role === 'etablissement') {
     if (!donnees.etablissement_id) {
       throw new ErreurApp(400, 'RATTACHEMENT_REQUIS', 'Un établissement est requis pour ce rôle.');
     }
     rattachement.etablissement_id = donnees.etablissement_id;
+
+    // La fonction de l'agent décide de ce qu'il peut faire (saisir,
+    // contrôler, transmettre). L'ignorer créait des agents sans
+    // permissions, que le premier écran refusait ensuite en silence.
+    sous_role = nettoyerTexte(donnees.sous_role);
+    if (sous_role && !SOUS_ROLES.includes(sous_role)) {
+      throw new ErreurApp(
+        400,
+        'SOUS_ROLE_INVALIDE',
+        `Fonction inconnue. Valeurs : ${SOUS_ROLES.join(', ')}.`
+      );
+    }
   } else if (role === 'ministere') {
-    if (!donnees.ministere_id) {
+    // Le pays n'a qu'un ministère certificateur. L'exiger explicitement
+    // obligeait l'administrateur à connaître un UUID qu'aucun écran ne
+    // lui montre : on le résout quand il n'y a pas d'ambiguïté.
+    let ministere_id = donnees.ministere_id;
+    if (!ministere_id) {
+      const { rows } = await query(`SELECT id FROM ministeres LIMIT 2`);
+      if (rows.length === 1) ministere_id = rows[0].id;
+    }
+    if (!ministere_id) {
       throw new ErreurApp(400, 'RATTACHEMENT_REQUIS', 'Un ministère est requis pour ce rôle.');
     }
-    rattachement.ministere_id = donnees.ministere_id;
+    rattachement.ministere_id = ministere_id;
   } else if (role === 'candidat') {
     // Le compte candidat est rattaché à la PERSONNE, pas à sa fiche dans un
     // établissement : c'est ce qui rend son portefeuille national.
@@ -94,7 +128,7 @@ export async function creerUtilisateur(donnees) {
     throw new ErreurApp(409, 'TELEPHONE_EXISTANT', 'Ce numéro est déjà utilisé.');
   }
 
-  return utilisateurModel.creer({ nom, prenom, telephone, role, ...rattachement });
+  return utilisateurModel.creer({ nom, prenom, telephone, role, sous_role, ...rattachement });
 }
 
 /** Active / désactive un compte. */

@@ -6,7 +6,10 @@
 import * as diplomeModel from '../models/diplome.model.js';
 import { ErreurApp } from '../utils/errors.js';
 
-const STATUTS = ['actif', 'revoque'];
+// `en_attente_ancrage` fait partie du cycle depuis la file d'ancrage
+// (migration 008). L'omettre ici afficherait « 0 diplôme » à quelqu'un
+// dont le diplôme vient d'être certifié — le pire moment pour douter.
+const STATUTS = ['en_attente_ancrage', 'actif', 'revoque'];
 
 /** Vue "portefeuille" d'un diplôme (champs utiles au candidat). */
 function vue(d) {
@@ -24,6 +27,12 @@ function vue(d) {
     pdf_url: d.pdf_url,
     qr_code_url: d.qr_code_url,
     motif_revocation: d.statut === 'revoque' ? d.motif_revocation : null,
+    // Versionnement : un diplôme corrigé (changement de nom, erreur de
+    // saisie) remplace le précédent. Le titulaire doit savoir laquelle de
+    // ses deux versions fait foi — sinon il présente l'ancienne.
+    version: d.version,
+    motif_version: d.motif_version,
+    remplace_reference: d.remplace_reference || null,
   };
 }
 

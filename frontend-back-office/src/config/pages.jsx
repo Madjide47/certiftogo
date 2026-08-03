@@ -30,6 +30,8 @@ import AdminDashboardPage from '../pages/admin/DashboardPage.jsx';
 import UtilisateursPage from '../pages/admin/UtilisateursPage.jsx';
 import AdminEtablissementsPage from '../pages/admin/EtablissementsPage.jsx';
 import ConfigurationPage from '../pages/admin/ConfigurationPage.jsx';
+import CorbeillePage from '../pages/admin/CorbeillePage.jsx';
+import ClesPage from '../pages/admin/ClesPage.jsx';
 
 export const PAGES_PAR_ROLE = {
   etablissement: {
@@ -69,6 +71,8 @@ export const PAGES_PAR_ROLE = {
     '/etablissements': AdminEtablissementsPage,
     '/journal': JournalPage,
     '/recuperations': RecuperationsPage,
+    '/corbeille': CorbeillePage,
+    '/cles': ClesPage,
     '/configuration': ConfigurationPage,
     '/notifications': NotificationsPage,
   },

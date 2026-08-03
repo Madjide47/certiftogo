@@ -240,9 +240,13 @@ Connexion par OTP (le code s'affiche dans la **console du backend**) :
    *Reste des étapes hors code : débloquer la facturation GitHub, créer le
    Blueprint Render, faire valider numéro et template par Meta.* ⏳
 
-> **Refonte UI (post-phases)** : design system Material 3 (vert Togo + jaune),
-> polices Manrope/Inter, icônes Material Symbols. Tous les écrans back-office
-> (4 rôles) et le front public ont été redesignés — voir `docs/stitch-ui-prompts.md`.
+> **Refonte UI (post-phases)** : socle « service public » inspiré du DSFR et de
+> GOV.UK — une couleur primaire (vert togolais), une échelle de gris, quatre
+> couleurs d'état, une seule famille typographique (Inter), aucune ombre ni
+> dégradé, séparations par filets de 1 px. Les jetons vivent dans
+> `tailwind.config.js` (identique dans les deux fronts) et les composants dans
+> `components/ui/index.jsx`. Les quatre espaces du back-office et le front
+> public sont passés sur ce socle.
 
 > On avance **phase par phase**, avec validation avant de créer les fichiers.
 
