@@ -13,6 +13,8 @@ import {
   estDansEnum,
   canoniserTelephone,
   estTelephoneValide,
+  canoniserDate,
+  FORMATS_DATE_ACCEPTES,
   SEXES,
 } from '../utils/validators.js';
 
@@ -54,11 +56,22 @@ function validerDonnees(donnees) {
     throw new ErreurApp(400, 'TELEPHONE_INVALIDE', 'Numéro de téléphone invalide.');
   }
 
+  // Sans ce contrôle, une date fantaisiste descendait jusqu'à PostgreSQL :
+  // l'agent recevait une erreur de base de données au lieu du champ fautif.
+  const date_naissance = canoniserDate(donnees.date_naissance);
+  if (date_naissance === null) {
+    throw new ErreurApp(
+      400,
+      'DATE_INVALIDE',
+      `Date de naissance illisible. Formats acceptés : ${FORMATS_DATE_ACCEPTES}.`
+    );
+  }
+
   return {
     numero_etudiant,
     nom,
     prenom,
-    date_naissance: nettoyerTexte(donnees.date_naissance),
+    date_naissance: date_naissance ?? null,
     lieu_naissance: nettoyerTexte(donnees.lieu_naissance),
     sexe,
     telephone,

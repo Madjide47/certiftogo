@@ -92,11 +92,27 @@ export function estUuidValide(valeur) {
   );
 }
 
+/**
+ * Ramène un libellé d'année académique à sa forme canonique AAAA-AAAA.
+ *
+ * Les fichiers et les agents écrivent « 2025/2026 », « 2025 - 2026 »,
+ * parfois « 2025 2026 ». Refuser ces formes n'apprend rien à personne :
+ * l'intention est limpide. Seul l'enchaînement des années est une vraie
+ * règle — 2025-2027 n'est pas une année académique.
+ */
+export function canoniserLibelleAnnee(valeur) {
+  if (typeof valeur !== 'string') return null;
+  const m = valeur.trim().match(/^(\d{4})\s*[-/\s]\s*(\d{4})$/);
+  if (!m) return null;
+  const debut = Number(m[1]);
+  const fin = Number(m[2]);
+  if (fin !== debut + 1) return null;
+  return `${debut}-${fin}`;
+}
+
 /** Vérifie le format d'un libellé d'année académique : AAAA-AAAA consécutives. */
 export function estLibelleAnneeValide(valeur) {
-  if (typeof valeur !== 'string' || !/^\d{4}-\d{4}$/.test(valeur.trim())) return false;
-  const [debut, fin] = valeur.trim().split('-').map(Number);
-  return fin === debut + 1;
+  return canoniserLibelleAnnee(valeur) !== null;
 }
 
 /** Convertit en entier, ou renvoie null si la valeur n'est pas un entier exploitable. */
@@ -106,12 +122,71 @@ export function versEntier(valeur) {
   return Number.isInteger(n) ? n : null;
 }
 
-/** Vérifie qu'une chaîne est une date au format AAAA-MM-JJ et qu'elle existe. */
+/** Format attendu, cité tel quel dans les messages d'erreur. */
+export const FORMATS_DATE_ACCEPTES = 'AAAA-MM-JJ ou JJ/MM/AAAA';
+
+/** Assemble une date en AAAA-MM-JJ, ou null si le jour n'existe pas. */
+function assemblerDate(annee, mois, jour) {
+  const a = Number(annee);
+  const m = Number(mois);
+  const j = Number(jour);
+  if (!Number.isInteger(a) || !Number.isInteger(m) || !Number.isInteger(j)) return null;
+  if (m < 1 || m > 12 || j < 1 || j > 31) return null;
+
+  // Aller-retour par UTC : seul moyen sûr d'éliminer le 31 février.
+  const d = new Date(Date.UTC(a, m - 1, j));
+  if (d.getUTCFullYear() !== a || d.getUTCMonth() !== m - 1 || d.getUTCDate() !== j) return null;
+
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Ramène une date à sa forme canonique AAAA-MM-JJ, ou null si elle est
+ * inexploitable. Renvoie `undefined` pour une valeur absente — l'appelant
+ * distingue ainsi « pas de date » de « date incompréhensible ».
+ *
+ * Les formes acceptées sont celles qu'on rencontre réellement dans les
+ * fichiers des établissements :
+ *
+ *   2000-03-15        forme canonique
+ *   2000-03-15T…      horodatage ISO (on ne garde que le jour)
+ *   15/03/2000        usage francophone — le jour d'abord
+ *   15-03-2000, 15.03.2000
+ *   2000/03/15
+ *   Date              cellule Excel réellement typée date
+ *
+ * L'ordre jour-mois est celui de l'usage local : « 03/05/2000 » est lu
+ * comme le 3 mai. Interpréter à l'américaine ferait naître des étudiants
+ * à une date fausse sans que rien ne le signale.
+ */
+export function canoniserDate(valeur) {
+  if (valeur === null || valeur === undefined || valeur === '') return undefined;
+
+  if (valeur instanceof Date) {
+    return Number.isNaN(valeur.getTime()) ? null : valeur.toISOString().slice(0, 10);
+  }
+
+  const brut = String(valeur).trim();
+  if (!brut) return undefined;
+
+  // Année en tête : ISO, éventuellement horodatée.
+  let m = brut.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s].*)?$/);
+  if (m) return assemblerDate(m[1], m[2], m[3]);
+
+  // Jour en tête : l'usage francophone.
+  m = brut.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (m) return assemblerDate(m[3], m[2], m[1]);
+
+  return null;
+}
+
+/**
+ * Vérifie qu'une date est exploitable. Tolérante sur la forme, stricte
+ * sur l'existence du jour : `canoniserDate` fait foi.
+ */
 export function estDateValide(valeur) {
   if (!valeur) return true;
-  if (typeof valeur !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(valeur.trim())) return false;
-  const d = new Date(`${valeur.trim()}T00:00:00Z`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === valeur.trim();
+  return canoniserDate(valeur) !== null;
 }
 
 /** Valeurs autorisées par les contraintes CHECK du schéma. */

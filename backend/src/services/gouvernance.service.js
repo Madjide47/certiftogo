@@ -26,7 +26,8 @@ import {
   estDansEnum,
   canoniserTelephone,
   estTelephoneValide,
-  estDateValide,
+  canoniserDate,
+  FORMATS_DATE_ACCEPTES,
   TYPES_DIPLOME,
   TYPES_ETABLISSEMENT,
 } from '../utils/validators.js';
@@ -241,11 +242,17 @@ export async function accorderHabilitation(etablissement_id, donnees) {
     );
   }
 
-  const date_debut = nettoyerTexte(donnees.date_debut);
-  const date_fin = nettoyerTexte(donnees.date_fin);
-  if ((date_debut && !estDateValide(date_debut)) || (date_fin && !estDateValide(date_fin))) {
-    throw new ErreurApp(400, 'DATE_INVALIDE', 'Les dates doivent être au format AAAA-MM-JJ.');
+  const debutCanonise = canoniserDate(nettoyerTexte(donnees.date_debut));
+  const finCanonisee = canoniserDate(nettoyerTexte(donnees.date_fin));
+  if (debutCanonise === null || finCanonisee === null) {
+    throw new ErreurApp(
+      400,
+      'DATE_INVALIDE',
+      `Dates illisibles. Formats acceptés : ${FORMATS_DATE_ACCEPTES}.`
+    );
   }
+  const date_debut = debutCanonise ?? null;
+  const date_fin = finCanonisee ?? null;
   if (date_debut && date_fin && date_fin <= date_debut) {
     throw new ErreurApp(
       400,

@@ -17,7 +17,8 @@ import {
   estUuidValide,
   canoniserTelephone,
   estTelephoneValide,
-  estDateValide,
+  canoniserDate,
+  FORMATS_DATE_ACCEPTES,
 } from '../utils/validators.js';
 
 const reference = (prefixe) =>
@@ -44,10 +45,15 @@ export async function deposerRecuperation(donnees) {
     throw new ErreurApp(400, 'CHAMP_REQUIS', 'Nom et prénom sont requis.');
   }
 
-  const date_naissance = nettoyerTexte(donnees.date_naissance);
-  if (date_naissance && !estDateValide(date_naissance)) {
-    throw new ErreurApp(400, 'DATE_INVALIDE', 'Date de naissance invalide (AAAA-MM-JJ).');
+  const naissanceCanonisee = canoniserDate(nettoyerTexte(donnees.date_naissance));
+  if (naissanceCanonisee === null) {
+    throw new ErreurApp(
+      400,
+      'DATE_INVALIDE',
+      `Date de naissance illisible. Formats acceptés : ${FORMATS_DATE_ACCEPTES}.`
+    );
   }
+  const date_naissance = naissanceCanonisee ?? null;
 
   // Le nouveau numéro ne doit pas déjà servir : sinon la récupération
   // deviendrait un moyen de fusionner deux comptes.

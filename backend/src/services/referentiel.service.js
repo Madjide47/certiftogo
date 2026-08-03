@@ -10,8 +10,9 @@ import { ErreurApp, avecErreursSql } from '../utils/errors.js';
 import {
   nettoyerTexte,
   estUuidValide,
-  estLibelleAnneeValide,
-  estDateValide,
+  canoniserLibelleAnnee,
+  canoniserDate,
+  FORMATS_DATE_ACCEPTES,
   estDansEnum,
   TYPES_SESSION,
   STATUTS_ANNEE,
@@ -73,24 +74,34 @@ export async function recupererAnnee(id) {
 }
 
 function validerAnnee(donnees) {
-  const libelle = nettoyerTexte(donnees.libelle);
-  if (!libelle) throw new ErreurApp(400, 'CHAMP_REQUIS', 'Le libellé de l\'année est requis.');
-  if (!estLibelleAnneeValide(libelle)) {
+  const saisi = nettoyerTexte(donnees.libelle);
+  if (!saisi) throw new ErreurApp(400, 'CHAMP_REQUIS', 'Le libellé de l\'année est requis.');
+  // Canonisé, pas seulement contrôlé : « 2025/2026 » est enregistré
+  // « 2025-2026 », sinon la contrainte d'unicité laisserait coexister
+  // deux écritures de la même année.
+  const libelle = canoniserLibelleAnnee(saisi);
+  if (!libelle) {
     throw new ErreurApp(
       400,
       'LIBELLE_INVALIDE',
-      'Le libellé doit être au format AAAA-AAAA sur deux années consécutives (ex : 2024-2025).'
+      'Le libellé doit couvrir deux années consécutives (ex : 2024-2025).'
     );
   }
 
-  const date_debut = nettoyerTexte(donnees.date_debut);
-  const date_fin = nettoyerTexte(donnees.date_fin);
+  const date_debut = canoniserDate(donnees.date_debut);
+  const date_fin = canoniserDate(donnees.date_fin);
   if (!date_debut || !date_fin) {
+    if (date_debut === null || date_fin === null) {
+      throw new ErreurApp(
+        400,
+        'DATE_INVALIDE',
+        `Dates illisibles. Formats acceptés : ${FORMATS_DATE_ACCEPTES}.`
+      );
+    }
     throw new ErreurApp(400, 'CHAMP_REQUIS', 'Les dates de début et de fin sont requises.');
   }
-  if (!estDateValide(date_debut) || !estDateValide(date_fin)) {
-    throw new ErreurApp(400, 'DATE_INVALIDE', 'Les dates doivent être au format AAAA-MM-JJ.');
-  }
+  // La comparaison est lexicographique : elle n'a de sens que sur des
+  // dates déjà canonisées.
   if (date_fin <= date_debut) {
     throw new ErreurApp(
       400,
@@ -182,11 +193,19 @@ export async function creerSession(annee_id, donnees) {
     );
   }
 
-  const date_debut = nettoyerTexte(donnees.date_debut);
-  const date_fin = nettoyerTexte(donnees.date_fin);
-  if (!estDateValide(date_debut) || !estDateValide(date_fin)) {
-    throw new ErreurApp(400, 'DATE_INVALIDE', 'Les dates doivent être au format AAAA-MM-JJ.');
+  // Les dates d'une session sont facultatives : `undefined` (absente) et
+  // `null` (illisible) ne se traitent donc pas pareil.
+  const debutCanonise = canoniserDate(nettoyerTexte(donnees.date_debut));
+  const finCanonisee = canoniserDate(nettoyerTexte(donnees.date_fin));
+  if (debutCanonise === null || finCanonisee === null) {
+    throw new ErreurApp(
+      400,
+      'DATE_INVALIDE',
+      `Dates illisibles. Formats acceptés : ${FORMATS_DATE_ACCEPTES}.`
+    );
   }
+  const date_debut = debutCanonise ?? null;
+  const date_fin = finCanonisee ?? null;
   if (date_debut && date_fin && date_fin < date_debut) {
     throw new ErreurApp(
       400,
