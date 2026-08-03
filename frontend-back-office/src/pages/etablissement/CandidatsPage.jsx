@@ -1,19 +1,42 @@
 // ─────────────────────────────────────────────────────────────
-// Gestion des candidats de l'établissement : liste, recherche,
-// création / modification (modale) et suppression.
+// Étudiants de l'établissement : recherche, fiche, parcours.
+//
+// « Candidat » a disparu de l'écran : l'agent de scolarité parle
+// d'étudiants. Le mot reste dans le code et dans l'API, où il désigne le
+// rattachement d'une personne à un établissement.
+//
+// Le parcours pluriannuel est l'apport principal de cet écran : une
+// personne peut avoir été inscrite plusieurs années de suite, et c'est ce
+// fil qu'on consulte quand un dossier est contesté.
 // ─────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react';
-import Modal from '../../components/ui/Modal.jsx';
-import PageHeader from '../../components/ui/PageHeader.jsx';
-import Icon from '../../components/ui/Icon.jsx';
-import { INPUT, BTN_PRIMARY, BTN_GHOST, TABLE_WRAP, TH, TD, ROW, ACT } from '../../components/ui/classes.js';
 import {
   listerCandidats,
   creerCandidat,
   modifierCandidat,
   supprimerCandidat,
 } from '../../services/candidat.service.js';
-import { messageErreur } from '../../utils/libelles.js';
+import { parcoursEtudiant } from '../../services/promotion.service.js';
+import {
+  messageErreur,
+  LIBELLES_STATUT_INSCRIPTION,
+  TON_STATUT_INSCRIPTION,
+  LIBELLES_MENTION,
+} from '../../utils/libelles.js';
+import {
+  EnTetePage,
+  Tableau,
+  Etiquette,
+  Encart,
+  EtatVide,
+  Modale,
+  Bouton,
+  Champ,
+  Saisie,
+  Liste,
+  Chargement,
+  Icone,
+} from '../../components/ui/index.jsx';
 
 const CANDIDAT_VIDE = {
   numero_etudiant: '',
@@ -26,14 +49,10 @@ const CANDIDAT_VIDE = {
   email: '',
 };
 
-function Champ({ label, children }) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-on-surface-variant">{label}</span>
-      {children}
-    </label>
-  );
-}
+const OPTIONS_SEXE = [
+  { value: 'M', label: 'Masculin' },
+  { value: 'F', label: 'Féminin' },
+];
 
 export default function CandidatsPage() {
   const [candidats, setCandidats] = useState([]);
@@ -47,6 +66,8 @@ export default function CandidatsPage() {
   const [erreurForm, setErreurForm] = useState('');
   const [enregistrement, setEnregistrement] = useState(false);
 
+  const [parcours, setParcours] = useState(null);
+
   async function charger(q = '') {
     setChargement(true);
     setErreur('');
@@ -59,10 +80,7 @@ export default function CandidatsPage() {
     }
   }
 
-  useEffect(() => {
-    charger();
-  }, []);
-
+  // Débounce : la recherche part au serveur, inutile d'y aller à chaque frappe.
   useEffect(() => {
     const t = setTimeout(() => charger(recherche), 300);
     return () => clearTimeout(t);
@@ -92,9 +110,7 @@ export default function CandidatsPage() {
     setModaleOuverte(true);
   }
 
-  function majChamp(nom, valeur) {
-    setForm((f) => ({ ...f, [nom]: valeur }));
-  }
+  const majChamp = (nom, valeur) => setForm((f) => ({ ...f, [nom]: valeur }));
 
   async function soumettre(e) {
     e.preventDefault();
@@ -113,7 +129,8 @@ export default function CandidatsPage() {
   }
 
   async function supprimer(candidat) {
-    if (!window.confirm(`Supprimer le candidat ${candidat.prenom} ${candidat.nom} ?`)) return;
+    if (!window.confirm(`Supprimer l'étudiant ${candidat.prenom} ${candidat.nom} ?`)) return;
+    setErreur('');
     try {
       await supprimerCandidat(candidat.id);
       await charger(recherche);
@@ -122,176 +139,290 @@ export default function CandidatsPage() {
     }
   }
 
+  async function ouvrirParcours(candidat) {
+    setParcours({ candidat, inscriptions: null });
+    try {
+      const ins = await parcoursEtudiant(candidat.id);
+      setParcours({ candidat, inscriptions: ins });
+    } catch (err) {
+      setErreur(messageErreur(err));
+      setParcours(null);
+    }
+  }
+
   return (
     <div>
-      <PageHeader titre="Candidats" sous={`${candidats.length} candidat(s)`}>
-        <button onClick={ouvrirCreation} className={BTN_PRIMARY}>
-          <Icon name="add" size={20} /> Nouveau candidat
-        </button>
-      </PageHeader>
-
-      <div className="relative mb-4 max-w-md">
-        <Icon
-          name="search"
-          size={20}
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60"
-        />
-        <input
-          value={recherche}
-          onChange={(e) => setRecherche(e.target.value)}
-          placeholder="Rechercher par nom, prénom ou numéro étudiant…"
-          className={`${INPUT} mt-0 pl-10`}
-        />
-      </div>
+      <EnTetePage
+        titre="Étudiants"
+        description="Les personnes inscrites dans votre établissement, toutes années confondues."
+        fil={[{ libelle: 'Scolarité' }, { libelle: 'Étudiants' }]}
+      >
+        <Bouton icone="person_add" onClick={ouvrirCreation}>
+          Nouvel étudiant
+        </Bouton>
+      </EnTetePage>
 
       {erreur && (
-        <div className="mb-4 rounded-lg bg-error-container px-4 py-3 text-sm text-on-error-container">
-          {erreur}
+        <div className="mb-4">
+          <Encart ton="erreur">{erreur}</Encart>
         </div>
       )}
 
-      <div className={TABLE_WRAP}>
-        <table className="w-full">
-          <thead className="bg-surface-container-low/60">
-            <tr>
-              <th className={TH}>N° étudiant</th>
-              <th className={TH}>Nom</th>
-              <th className={TH}>Prénom</th>
-              <th className={TH}>Sexe</th>
-              <th className={TH}>Téléphone</th>
-              <th className={`${TH} text-right`}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {chargement ? (
-              <tr>
-                <td colSpan={6} className="px-5 py-10 text-center text-on-surface-variant">
-                  Chargement…
-                </td>
-              </tr>
-            ) : candidats.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-5 py-10 text-center text-on-surface-variant">
-                  Aucun candidat. Cliquez sur « Nouveau candidat » pour commencer.
-                </td>
-              </tr>
-            ) : (
-              candidats.map((c) => (
-                <tr key={c.id} className={ROW}>
-                  <td className={`${TD} font-semibold`}>{c.numero_etudiant}</td>
-                  <td className={TD}>{c.nom}</td>
-                  <td className={TD}>{c.prenom}</td>
-                  <td className={`${TD} text-on-surface-variant`}>{c.sexe || '—'}</td>
-                  <td className={`${TD} text-on-surface-variant`}>{c.telephone || '—'}</td>
-                  <td className={`${TD} text-right`}>
-                    <button
-                      onClick={() => ouvrirEdition(c)}
-                      className={`${ACT} text-primary hover:bg-primary-container/10`}
-                    >
-                      Modifier
-                    </button>
-                    <button
-                      onClick={() => supprimer(c)}
-                      className={`${ACT} ml-1 text-error hover:bg-error-container/50`}
-                    >
-                      Supprimer
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      <div className="mb-4 max-w-md">
+        <Champ
+          label="Rechercher"
+          htmlFor="recherche"
+          aide="Par nom, prénom ou numéro étudiant."
+        >
+          <Saisie
+            id="recherche"
+            type="search"
+            value={recherche}
+            onChange={(e) => setRecherche(e.target.value)}
+            placeholder="KOFFI, Ama, 2024-0142…"
+          />
+        </Champ>
       </div>
 
-      <Modal
+      <p className="mb-2 text-sm text-gris-500">{candidats.length} étudiant(s) affiché(s).</p>
+
+      <Tableau
+        legende="Étudiants de l'établissement"
+        chargement={chargement}
+        lignes={candidats}
+        colonnes={[
+          {
+            cle: 'numero_etudiant',
+            libelle: 'N° étudiant',
+            tabulaire: true,
+            rendu: (c) => <span className="font-medium">{c.numero_etudiant}</span>,
+          },
+          {
+            cle: 'identite',
+            libelle: 'Étudiant',
+            rendu: (c) => (
+              <span>
+                <span className="font-medium">{c.nom}</span> {c.prenom}
+                {c.date_naissance && (
+                  <span className="block text-xs text-gris-500">
+                    né(e) le {new Date(c.date_naissance).toLocaleDateString('fr-FR')}
+                    {c.lieu_naissance ? ` à ${c.lieu_naissance}` : ''}
+                  </span>
+                )}
+              </span>
+            ),
+          },
+          { cle: 'sexe', libelle: 'Sexe', rendu: (c) => c.sexe || '—' },
+          {
+            cle: 'telephone',
+            libelle: 'Téléphone',
+            tabulaire: true,
+            rendu: (c) => c.telephone || '—',
+          },
+          {
+            cle: 'actions',
+            libelle: 'Actions',
+            alignement: 'droite',
+            rendu: (c) => (
+              <span className="whitespace-nowrap">
+                <Bouton variante="discret" onClick={() => ouvrirParcours(c)}>
+                  Parcours
+                </Bouton>
+                <Bouton variante="discret" className="ml-3" onClick={() => ouvrirEdition(c)}>
+                  Modifier
+                </Bouton>
+                <Bouton
+                  variante="discret"
+                  className="ml-3 text-erreur hover:text-erreur"
+                  onClick={() => supprimer(c)}
+                >
+                  Supprimer
+                </Bouton>
+              </span>
+            ),
+          },
+        ]}
+        vide={
+          <EtatVide
+            icone="group"
+            titre={recherche ? 'Aucun résultat' : 'Aucun étudiant'}
+            action={
+              recherche ? null : (
+                <Bouton icone="person_add" onClick={ouvrirCreation}>
+                  Créer un étudiant
+                </Bouton>
+              )
+            }
+          >
+            {recherche
+              ? 'Aucun étudiant ne correspond à cette recherche.'
+              : "Saisissez vos étudiants un par un, ou importez une promotion entière depuis un classeur Excel depuis l'écran Promotions."}
+          </EtatVide>
+        }
+      />
+
+      {/* ── Fiche étudiant ── */}
+      <Modale
         ouvert={modaleOuverte}
-        titre={enEdition ? 'Modifier le candidat' : 'Nouveau candidat'}
+        titre={enEdition ? "Modifier l'étudiant" : 'Nouvel étudiant'}
         onFermer={() => setModaleOuverte(false)}
       >
         <form onSubmit={soumettre} className="space-y-4">
-          {erreurForm && (
-            <div className="rounded-lg bg-error-container px-4 py-2.5 text-sm text-on-error-container">
-              {erreurForm}
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-4">
-            <Champ label="N° étudiant *">
-              <input
+          {erreurForm && <Encart ton="erreur">{erreurForm}</Encart>}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Champ
+              label="N° étudiant"
+              htmlFor="c-numero"
+              requis
+              aide="Unique dans votre établissement."
+            >
+              <Saisie
+                id="c-numero"
                 required
                 value={form.numero_etudiant}
                 onChange={(e) => majChamp('numero_etudiant', e.target.value)}
-                className={INPUT}
               />
             </Champ>
-            <Champ label="Sexe">
-              <select
+            <Champ label="Sexe" htmlFor="c-sexe">
+              <Liste
+                id="c-sexe"
                 value={form.sexe}
                 onChange={(e) => majChamp('sexe', e.target.value)}
-                className={INPUT}
-              >
-                <option value="">—</option>
-                <option value="M">Masculin</option>
-                <option value="F">Féminin</option>
-              </select>
+                options={OPTIONS_SEXE}
+              />
             </Champ>
-            <Champ label="Nom *">
-              <input
+            <Champ label="Nom" htmlFor="c-nom" requis>
+              <Saisie
+                id="c-nom"
                 required
                 value={form.nom}
                 onChange={(e) => majChamp('nom', e.target.value)}
-                className={INPUT}
               />
             </Champ>
-            <Champ label="Prénom *">
-              <input
+            <Champ label="Prénom" htmlFor="c-prenom" requis>
+              <Saisie
+                id="c-prenom"
                 required
                 value={form.prenom}
                 onChange={(e) => majChamp('prenom', e.target.value)}
-                className={INPUT}
               />
             </Champ>
-            <Champ label="Date de naissance">
-              <input
+            <Champ label="Date de naissance" htmlFor="c-naissance">
+              <Saisie
+                id="c-naissance"
                 type="date"
                 value={form.date_naissance}
                 onChange={(e) => majChamp('date_naissance', e.target.value)}
-                className={INPUT}
               />
             </Champ>
-            <Champ label="Lieu de naissance">
-              <input
+            <Champ label="Lieu de naissance" htmlFor="c-lieu">
+              <Saisie
+                id="c-lieu"
                 value={form.lieu_naissance}
                 onChange={(e) => majChamp('lieu_naissance', e.target.value)}
-                className={INPUT}
-              />
-            </Champ>
-            <Champ label="Téléphone">
-              <input
-                value={form.telephone}
-                onChange={(e) => majChamp('telephone', e.target.value)}
-                className={INPUT}
-              />
-            </Champ>
-            <Champ label="Email">
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => majChamp('email', e.target.value)}
-                className={INPUT}
               />
             </Champ>
           </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={() => setModaleOuverte(false)} className={BTN_GHOST}>
+
+          <Champ
+            label="Téléphone"
+            htmlFor="c-telephone"
+            aide="Sert à ouvrir le portefeuille du diplômé après certification. Sans numéro, l'étudiant ne pourra pas consulter ses diplômes."
+          >
+            <Saisie
+              id="c-telephone"
+              placeholder="+228 90 00 00 00"
+              value={form.telephone}
+              onChange={(e) => majChamp('telephone', e.target.value)}
+            />
+          </Champ>
+
+          <Champ label="Email" htmlFor="c-email">
+            <Saisie
+              id="c-email"
+              type="email"
+              value={form.email}
+              onChange={(e) => majChamp('email', e.target.value)}
+            />
+          </Champ>
+
+          <div className="flex justify-end gap-2 border-t border-gris-200 pt-4">
+            <Bouton variante="neutre" onClick={() => setModaleOuverte(false)}>
               Annuler
-            </button>
-            <button type="submit" disabled={enregistrement} className={BTN_PRIMARY}>
-              {enregistrement ? 'Enregistrement…' : 'Enregistrer'}
-            </button>
+            </Bouton>
+            <Bouton type="submit" enCours={enregistrement}>
+              Enregistrer
+            </Bouton>
           </div>
         </form>
-      </Modal>
+      </Modale>
+
+      {/* ── Parcours pluriannuel ── */}
+      <Modale
+        ouvert={Boolean(parcours)}
+        titre={`Parcours — ${parcours?.candidat?.nom || ''} ${parcours?.candidat?.prenom || ''}`}
+        onFermer={() => setParcours(null)}
+        largeur="max-w-3xl"
+      >
+        {parcours?.inscriptions === null ? (
+          <Chargement />
+        ) : (
+          <>
+            <Tableau
+              legende="Inscriptions successives"
+              lignes={parcours?.inscriptions || []}
+              colonnes={[
+                { cle: 'annee_libelle', libelle: 'Année' },
+                {
+                  cle: 'promotion',
+                  libelle: 'Promotion',
+                  rendu: (i) => (
+                    <span>
+                      <span className="font-medium">{i.promotion_libelle}</span>
+                      <span className="block text-xs text-gris-500">
+                        {i.filiere_nom} — niveau {i.niveau}
+                      </span>
+                    </span>
+                  ),
+                },
+                {
+                  cle: 'statut',
+                  libelle: 'Résultat',
+                  rendu: (i) => (
+                    <Etiquette ton={TON_STATUT_INSCRIPTION[i.statut]}>
+                      {LIBELLES_STATUT_INSCRIPTION[i.statut]}
+                    </Etiquette>
+                  ),
+                },
+                {
+                  cle: 'moyenne',
+                  libelle: 'Moyenne',
+                  alignement: 'droite',
+                  tabulaire: true,
+                  rendu: (i) => i.moyenne ?? '—',
+                },
+                {
+                  cle: 'mention',
+                  libelle: 'Mention',
+                  rendu: (i) => (i.mention ? LIBELLES_MENTION[i.mention] : '—'),
+                },
+              ]}
+              vide={
+                <EtatVide icone="timeline" titre="Aucune inscription">
+                  Cet étudiant n'est encore inscrit dans aucune promotion.
+                </EtatVide>
+              }
+            />
+
+            <p className="mt-4 flex items-start gap-1.5 text-sm text-gris-500">
+              <Icone nom="info" taille={16} className="mt-0.5 shrink-0" />
+              Ce parcours ne couvre que votre établissement. Un diplômé peut avoir étudié
+              ailleurs : son portefeuille national, lui, réunit tout.
+            </p>
+          </>
+        )}
+      </Modale>
     </div>
   );
 }

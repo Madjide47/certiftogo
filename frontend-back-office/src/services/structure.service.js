@@ -44,3 +44,33 @@ export async function modifierFiliere(id, donnees) {
 export async function supprimerFiliere(id) {
   await api.delete(`/structure/filieres/${id}`);
 }
+
+// ── Agents et organisation interne ─────────────────────────────────
+
+/** Profil du compte : sous-rôle, mode de workflow, permissions effectives. */
+export async function monProfil() {
+  const { data } = await api.get('/structure/profil');
+  return data.data;
+}
+
+export async function listerAgents() {
+  const { data } = await api.get('/structure/agents');
+  return data.data.agents;
+}
+
+export async function creerAgent(donnees) {
+  const { data } = await api.post('/structure/agents', donnees);
+  return data.data.agent;
+}
+
+/** Bascule simple ↔ hiérarchique. Réservé à l'agent principal. */
+export async function definirModeWorkflow(mode) {
+  const { data } = await api.put('/structure/mode-workflow', { mode });
+  return data.data.etablissement;
+}
+
+/** Départ d'un agent : transfère ses dossiers en cours puis le désactive. */
+export async function transfererDossiers({ agent_id, repreneur_id, desactiver = true }) {
+  const { data } = await api.post('/agents/transfert', { agent_id, repreneur_id, desactiver });
+  return data.data;
+}

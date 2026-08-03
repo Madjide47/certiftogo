@@ -9,8 +9,16 @@ const SELECT_AVEC_CANDIDAT = `
   d.id, d.reference, d.etablissement_id, d.candidat_id, d.filiere, d.parcours,
   d.mention, d.date_obtention, d.type_diplome, d.annee_academique, d.notes,
   d.statut, d.motif_rejet, d.date_transmission, d.date_traitement,
+  d.lot_id,
   c.nom AS candidat_nom, c.prenom AS candidat_prenom,
-  c.numero_etudiant AS candidat_numero_etudiant`;
+  c.numero_etudiant AS candidat_numero_etudiant,
+  l.reference AS lot_reference`;
+
+// Le lot est facultatif : un dossier peut avoir été créé à l'unité, avant
+// l'existence des lots ou pour un cas isolé. D'où le LEFT JOIN.
+const JOINTURES = `
+       JOIN candidats c ON c.id = d.candidat_id
+  LEFT JOIN lots_transmission l ON l.id = d.lot_id`;
 
 /**
  * Liste les dossiers d'un établissement (filtre statut optionnel).
@@ -26,8 +34,7 @@ export async function lister({ etablissement_id, statut = null, limit = 50, offs
   params.push(limit, offset);
   const { rows } = await query(
     `SELECT ${SELECT_AVEC_CANDIDAT}
-       FROM dossiers d
-       JOIN candidats c ON c.id = d.candidat_id
+       FROM dossiers d ${JOINTURES}
       WHERE d.etablissement_id = $1 ${filtreStatut}
       ORDER BY COALESCE(d.date_transmission, d.date_traitement) DESC NULLS LAST, d.reference DESC
       LIMIT $${params.length - 1} OFFSET $${params.length}`,
@@ -40,8 +47,7 @@ export async function lister({ etablissement_id, statut = null, limit = 50, offs
 export async function trouverParId(id) {
   const { rows } = await query(
     `SELECT ${SELECT_AVEC_CANDIDAT}
-       FROM dossiers d
-       JOIN candidats c ON c.id = d.candidat_id
+       FROM dossiers d ${JOINTURES}
       WHERE d.id = $1`,
     [id]
   );

@@ -138,34 +138,68 @@ export const BADGE_STATUT_STRUCTURE = {
 export const LIBELLES_STATUT_PROMOTION = {
   brouillon: 'Brouillon',
   ouverte: 'Ouverte',
+  controle_interne: 'Contrôle interne',
+  validee_interne: 'Validée en interne',
   transmise: 'Transmise',
   certifiee: 'Certifiée',
   cloturee: 'Clôturée',
 };
 
-export const BADGE_STATUT_PROMOTION = {
-  brouillon: 'bg-slate-100 text-slate-600',
-  ouverte: 'bg-blue-100 text-blue-700',
-  transmise: 'bg-amber-100 text-amber-700',
-  certifiee: 'bg-togo-green/10 text-togo-green',
-  cloturee: 'bg-slate-200 text-slate-700',
+export const TON_STATUT_PROMOTION = {
+  brouillon: 'neutre',
+  ouverte: 'info',
+  controle_interne: 'alerte',
+  validee_interne: 'succes',
+  transmise: 'alerte',
+  certifiee: 'vert',
+  cloturee: 'neutre',
 };
 
+export const OPTIONS_STATUT_PROMOTION = Object.entries(LIBELLES_STATUT_PROMOTION).map(
+  ([value, label]) => ({ value, label })
+);
+
 /**
- * Transitions proposées à l'écran — miroir de TRANSITIONS_PROMOTION côté
- * backend. Le serveur reste seul juge : l'interface n'affiche que les
- * actions plausibles, elle ne décide pas.
+ * Transitions proposées à l'écran — miroir de TRANSITIONS_PROMOTION et de
+ * TRANSITIONS_INTERNES côté backend. Le serveur reste seul juge : l'interface
+ * n'affiche que les actions plausibles, elle ne décide pas.
+ *
+ * « transmise » n'y figure pas : la transmission passe par son propre
+ * endpoint, qui crée le lot et les dossiers.
  */
-export const ACTIONS_PROMOTION = {
+const ACTIONS_SIMPLE = {
   brouillon: [{ statut: 'ouverte', libelle: 'Ouvrir' }],
-  ouverte: [
-    { statut: 'transmise', libelle: 'Transmettre au ministère' },
-    { statut: 'brouillon', libelle: 'Repasser en brouillon' },
-  ],
+  ouverte: [{ statut: 'brouillon', libelle: 'Repasser en brouillon' }],
   transmise: [{ statut: 'ouverte', libelle: 'Rouvrir' }],
   certifiee: [{ statut: 'cloturee', libelle: 'Clôturer' }],
   cloturee: [],
 };
+
+const ACTIONS_HIERARCHIQUE = {
+  brouillon: [{ statut: 'ouverte', libelle: 'Ouvrir' }],
+  ouverte: [
+    { statut: 'controle_interne', libelle: 'Envoyer au contrôle' },
+    { statut: 'brouillon', libelle: 'Repasser en brouillon' },
+  ],
+  controle_interne: [
+    { statut: 'validee_interne', libelle: 'Valider en interne' },
+    { statut: 'ouverte', libelle: 'Renvoyer à la saisie' },
+  ],
+  validee_interne: [{ statut: 'controle_interne', libelle: 'Renvoyer au contrôle' }],
+  transmise: [{ statut: 'ouverte', libelle: 'Rouvrir' }],
+  certifiee: [{ statut: 'cloturee', libelle: 'Clôturer' }],
+  cloturee: [],
+};
+
+export function actionsPromotion(statut, mode = 'simple') {
+  const table = mode === 'hierarchique' ? ACTIONS_HIERARCHIQUE : ACTIONS_SIMPLE;
+  return table[statut] || [];
+}
+
+/** Statut à partir duquel une promotion peut partir au ministère. */
+export function transmissiblePromotion(statut, mode = 'simple') {
+  return mode === 'hierarchique' ? statut === 'validee_interne' : statut === 'ouverte';
+}
 
 export const LIBELLES_STATUT_INSCRIPTION = {
   inscrit: 'Inscrit',
@@ -175,12 +209,12 @@ export const LIBELLES_STATUT_INSCRIPTION = {
   exclu: 'Exclu',
 };
 
-export const BADGE_STATUT_INSCRIPTION = {
-  inscrit: 'bg-blue-100 text-blue-700',
-  admis: 'bg-emerald-100 text-emerald-700',
-  ajourne: 'bg-amber-100 text-amber-700',
-  abandon: 'bg-slate-100 text-slate-600',
-  exclu: 'bg-red-100 text-red-700',
+export const TON_STATUT_INSCRIPTION = {
+  inscrit: 'info',
+  admis: 'succes',
+  ajourne: 'alerte',
+  abandon: 'neutre',
+  exclu: 'erreur',
 };
 
 export const OPTIONS_STATUT_INSCRIPTION = Object.entries(LIBELLES_STATUT_INSCRIPTION).map(
