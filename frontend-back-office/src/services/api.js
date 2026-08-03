@@ -20,6 +20,16 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  // Un envoi de fichier n'est pas du JSON. Axios calcule lui-même
+  // « multipart/form-data; boundary=… » — mais seulement si l'en-tête
+  // n'est pas déjà fixé. Le défaut posé ci-dessus l'en empêchait : le
+  // serveur recevait un corps multipart annoncé en JSON, donc aucun
+  // fichier. C'est ce qui cassait l'import Excel des étudiants.
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
+
   return config;
 });
 
