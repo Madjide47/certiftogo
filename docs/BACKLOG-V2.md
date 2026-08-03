@@ -38,13 +38,13 @@ Dernière mise à jour : 2 août 2026.
 
 | # | Élément | Statut |
 |---|---|---|
-| B-01 | Sous-rôle **agent de saisie** | ⬜ |
-| B-02 | Sous-rôle **chef de scolarité** (contrôle qualité, correction) | ⬜ |
-| B-03 | Sous-rôle **directeur** (autorise la transmission) | ⬜ |
-| B-04 | Workflow interne : brouillon → contrôle interne → validé interne → soumis | ⬜ |
-| B-05 | Matrice permissions × actions par sous-rôle | ⬜ |
-| B-06 | **Mode simple** : établissement sans hiérarchie, sous-rôle configurable | ⬜ |
-| B-07 | Remplacer les 4 rôles figés par un vrai modèle rôles/permissions | ⬜ |
+| B-01 | Sous-rôle **agent de saisie** | ✅ |
+| B-02 | Sous-rôle **chef de scolarité** (contrôle qualité, correction) | ✅ |
+| B-03 | Sous-rôle **directeur** (autorise la transmission) | ✅ |
+| B-04 | Workflow interne : brouillon → contrôle interne → validé interne → soumis | ✅ |
+| B-05 | Matrice permissions × actions par sous-rôle | ✅ |
+| B-06 | **Mode simple** : établissement sans hiérarchie, sous-rôle configurable | ✅ |
+| B-07 | Remplacer les 4 rôles figés par un vrai modèle rôles/permissions | 🔨 *matrice en place pour l établissement ; les 4 rôles principaux restent figés* |
 | B-08 | Séparation nette **ministère (certifie) / admin (exploite)** — l'admin ne certifie jamais | ✅ |
 
 ## C. Structure académique et promotions
@@ -65,7 +65,7 @@ Dernière mise à jour : 2 août 2026.
 | C-12 | **Simulation avant import** (dry run) | ✅ |
 | C-13 | **Détection des doublons** dans le fichier et avec l'existant | ✅ |
 | C-14 | **Modèle de fichier Excel téléchargeable** | ✅ |
-| C-15 | Validation interne avant transmission | ⬜ *voir B-04* |
+| C-15 | Validation interne avant transmission | ✅ |
 | C-16 | Effectifs prévus / inscrits et réconciliation | 🔨 *compteurs affichés* |
 
 ## D. Transmission par lot
@@ -298,9 +298,9 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 128 |
+| ✅ fait et testé | 135 |
 | 🔨 partiel ou en cours | 17 |
-| ⬜ à faire | 29 |
+| ⬜ à faire | 22 |
 | **Total** | **174** |
 
 ## Ordre d'implémentation proposé

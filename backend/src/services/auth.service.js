@@ -161,6 +161,7 @@ export async function verifierOtp(telephone, code) {
     personne_id: utilisateur.personne_id,
     // Porté par le jeton : détermine qui peut créer d'autres agents.
     est_agent_principal: utilisateur.est_agent_principal === true,
+    sous_role: utilisateur.sous_role || null,
   });
 
   await journaliser({
@@ -203,6 +204,7 @@ export async function rafraichir(jeton_rafraichissement) {
     ministere_id: utilisateur.ministere_id,
     personne_id: utilisateur.personne_id,
     est_agent_principal: utilisateur.est_agent_principal === true,
+    sous_role: utilisateur.sous_role || null,
   });
 
   return { token, utilisateur: formaterUtilisateur(utilisateur) };
@@ -221,5 +223,6 @@ export function formaterUtilisateur(u) {
     personne_id: u.personne_id,
     actif: u.actif,
     est_agent_principal: u.est_agent_principal === true,
+    sous_role: u.sous_role || null,
   };
 }

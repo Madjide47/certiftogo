@@ -11,7 +11,7 @@ import { query } from '../config/database.js';
 export async function trouverParTelephone(telephone) {
   const { rows } = await query(
     `SELECT id, nom, prenom, telephone, role,
-            etablissement_id, ministere_id, personne_id, actif, est_agent_principal, date_creation
+            etablissement_id, ministere_id, personne_id, actif, est_agent_principal, sous_role, date_creation
        FROM utilisateurs
       WHERE telephone = $1`,
     [telephone]
@@ -27,7 +27,7 @@ export async function trouverParTelephone(telephone) {
 export async function trouverParId(id) {
   const { rows } = await query(
     `SELECT id, nom, prenom, telephone, role,
-            etablissement_id, ministere_id, personne_id, actif, est_agent_principal, date_creation
+            etablissement_id, ministere_id, personne_id, actif, est_agent_principal, sous_role, date_creation
        FROM utilisateurs
       WHERE id = $1`,
     [id]
@@ -65,7 +65,7 @@ export async function lister({ role = null } = {}) {
 /** Agents d'un établissement donné (vue de l'agent principal). */
 export async function listerParEtablissement(etablissement_id) {
   const { rows } = await query(
-    `SELECT id, nom, prenom, telephone, role, actif, est_agent_principal, date_creation
+    `SELECT id, nom, prenom, telephone, role, actif, est_agent_principal, sous_role, date_creation
        FROM utilisateurs
       WHERE etablissement_id = $1 AND role = 'etablissement'
       ORDER BY est_agent_principal DESC, date_creation`,
@@ -79,10 +79,10 @@ export async function creer(data, client = null) {
   const executer = client ? client.query.bind(client) : query;
   const { rows } = await executer(
     `INSERT INTO utilisateurs
-       (nom, prenom, telephone, role, etablissement_id, ministere_id, personne_id, actif, est_agent_principal)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       (nom, prenom, telephone, role, etablissement_id, ministere_id, personne_id, actif, est_agent_principal, sous_role)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING id, nom, prenom, telephone, role,
-               etablissement_id, ministere_id, personne_id, actif, est_agent_principal, date_creation`,
+               etablissement_id, ministere_id, personne_id, actif, est_agent_principal, sous_role, date_creation`,
     [
       data.nom,
       data.prenom,
@@ -94,6 +94,7 @@ export async function creer(data, client = null) {
       // Un compte candidat naît fermé : la certification l'ouvrira.
       data.actif === undefined ? true : data.actif,
       data.est_agent_principal === true,
+      data.sous_role || null,
     ]
   );
   return rows[0];
@@ -104,7 +105,7 @@ export async function definirActif(id, actif) {
   const { rows } = await query(
     `UPDATE utilisateurs SET actif = $2 WHERE id = $1
      RETURNING id, nom, prenom, telephone, role,
-               etablissement_id, ministere_id, personne_id, actif, est_agent_principal, date_creation`,
+               etablissement_id, ministere_id, personne_id, actif, est_agent_principal, sous_role, date_creation`,
     [id, actif]
   );
   return rows[0] || null;

@@ -2602,3 +2602,180 @@ describe('Notifications — catalogue, centre in-app et préférences', () => {
     assert.ok(res.body.data.repartition.some((r) => r.canal === 'in_app'));
   });
 });
+
+// ── Sous-rôles et workflow interne ─────────────────────────────
+// « L'établissement » n'est pas un acteur unique : celui qui saisit
+// n'est pas celui qui engage l'institution auprès du ministère.
+describe('Sous-rôles d\'établissement et workflow interne', () => {
+  const FACULTE_CII = '60000000-0000-0000-0000-000000000001';
+  const ANNEE = '50000000-0000-0000-0000-000000000001';
+  const AGENT_SAISIE = '+22890444555'; // créé plus haut, sous-rôle par défaut
+  let filiereWkf;
+  let promotionId;
+
+  before(async () => {
+    // Filière dédiée : les niveaux des filières existantes sont déjà
+    // consommés par les suites précédentes.
+    const t = await login('+22890000002');
+    const res = await api().post('/api/structure/filieres').set(auth(t)).send({
+      faculte_id: FACULTE_CII, nom: 'Workflow Interne', code: 'WKF',
+      type_diplome: 'licence', duree_annees: 3,
+    });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    filiereWkf = res.body.data.filiere.id;
+  });
+
+  test('expose le profil, ses permissions et le mode de l\'établissement', async () => {
+    const t = await login('+22890000002');
+    const res = await api().get('/api/structure/profil').set(auth(t));
+    assert.equal(res.status, 200);
+
+    assert.equal(res.body.data.mode_workflow, 'simple');
+    assert.equal(res.body.data.sous_role, 'directeur', 'l\'agent principal est directeur');
+    // En mode simple, tout agent peut tout : imposer une hiérarchie à une
+    // scolarité d'une seule personne la bloquerait.
+    assert.ok(res.body.data.permissions.includes('promotion.transmettre'));
+  });
+
+  test('en mode simple, un agent ordinaire peut transmettre', async () => {
+    const t = await login(AGENT_SAISIE);
+    const res = await api().get('/api/structure/profil').set(auth(t));
+    assert.equal(res.body.data.sous_role, 'agent_saisie');
+    assert.ok(res.body.data.permissions.includes('promotion.transmettre'));
+  });
+
+  test('seul l\'agent principal bascule l\'établissement en hiérarchique', async () => {
+    const ordinaire = await login(AGENT_SAISIE);
+    const refus = await api()
+      .put('/api/structure/mode-workflow')
+      .set(auth(ordinaire)).send({ mode: 'hierarchique' });
+    assert.equal(refus.status, 403);
+    assert.equal(refus.body.error.code, 'AGENT_PRINCIPAL_REQUIS');
+
+    const principal = await login('+22890000002');
+    const invalide = await api()
+      .put('/api/structure/mode-workflow')
+      .set(auth(principal)).send({ mode: 'pyramidal' });
+    assert.equal(invalide.status, 400);
+    assert.equal(invalide.body.error.code, 'MODE_INVALIDE');
+
+    const res = await api()
+      .put('/api/structure/mode-workflow')
+      .set(auth(principal)).send({ mode: 'hierarchique' });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.etablissement.mode_workflow, 'hierarchique');
+  });
+
+  test('l\'agent de saisie perd les droits qui engagent l\'établissement', async () => {
+    const t = await login(AGENT_SAISIE);
+
+    const profil = await api().get('/api/structure/profil').set(auth(t));
+    assert.equal(profil.body.data.mode_workflow, 'hierarchique');
+    assert.equal(
+      profil.body.data.permissions.includes('promotion.transmettre'),
+      false,
+      'il produit la donnée, il n\'engage pas l\'institution'
+    );
+    assert.ok(profil.body.data.permissions.includes('promotion.creer'));
+
+    // Il peut toujours créer une promotion…
+    const promo = await api().post('/api/promotions').set(auth(t)).send({
+      filiere_id: filiereWkf, annee_id: ANNEE,
+      libelle: 'L1 — workflow interne', niveau: 1,
+    });
+    assert.equal(promo.status, 201);
+    promotionId = promo.body.data.promotion.id;
+
+    // …mais ni saisir un résultat, ni transmettre.
+    const resultat = await api()
+      .put(`/api/promotions/${promotionId}/inscriptions/00000000-0000-0000-0000-000000000000`)
+      .set(auth(t)).send({ statut: 'admis' });
+    assert.equal(resultat.status, 403);
+    assert.equal(resultat.body.error.code, 'PERMISSION_REFUSEE');
+
+    const transmission = await api()
+      .post(`/api/promotions/${promotionId}/transmettre`)
+      .set(auth(t)).send({ date_deliberation: '2025-07-15' });
+    assert.equal(transmission.status, 403);
+    assert.match(transmission.body.error.message, /agent_saisie/);
+  });
+
+  test('impose le contrôle interne avant la transmission', async () => {
+    const directeur = await login('+22890000002');
+
+    // Peupler la promotion et arrêter les résultats.
+    const candidat = await api().post('/api/candidats').set(auth(directeur)).send({
+      numero_etudiant: 'HIER-001', nom: 'INTERNE', prenom: 'Test',
+      telephone: '+22896000001',
+    });
+    const inscription = await api()
+      .post(`/api/promotions/${promotionId}/inscriptions`)
+      .set(auth(directeur))
+      .send({ candidat_id: candidat.body.data.candidat.id });
+    await api()
+      .put(`/api/promotions/${promotionId}/inscriptions/${inscription.body.data.inscription.id}`)
+      .set(auth(directeur))
+      .send({ statut: 'admis', mention: 'bien' });
+
+    await api().patch(`/api/promotions/${promotionId}/statut`).set(auth(directeur))
+      .send({ statut: 'ouverte' });
+
+    // Transmettre une promotion seulement « ouverte » est refusé.
+    const trop_tot = await api()
+      .post(`/api/promotions/${promotionId}/transmettre`)
+      .set(auth(directeur)).send({ date_deliberation: '2025-07-15' });
+    assert.equal(trop_tot.status, 409);
+    assert.equal(trop_tot.body.error.code, 'PROMOTION_NON_TRANSMISSIBLE');
+    assert.match(trop_tot.body.error.message, /contrôlée puis validée en interne/);
+
+    // Le parcours complet : contrôle interne, validation, puis envoi.
+    const controle = await api().patch(`/api/promotions/${promotionId}/statut`)
+      .set(auth(directeur)).send({ statut: 'controle_interne' });
+    assert.equal(controle.status, 200);
+
+    const validation = await api().patch(`/api/promotions/${promotionId}/statut`)
+      .set(auth(directeur)).send({ statut: 'validee_interne' });
+    assert.equal(validation.body.data.promotion.statut, 'validee_interne');
+
+    const envoi = await api()
+      .post(`/api/promotions/${promotionId}/transmettre`)
+      .set(auth(directeur)).send({ date_deliberation: '2025-07-15' });
+    assert.equal(envoi.status, 201, JSON.stringify(envoi.body));
+    assert.equal(envoi.body.data.transmis, 1);
+  });
+
+  test('refuse un saut d\'étape dans le workflow interne', async () => {
+    const directeur = await login('+22890000002');
+
+    const promo = await api().post('/api/promotions').set(auth(directeur)).send({
+      filiere_id: filiereWkf, annee_id: ANNEE,
+      libelle: 'L2 — saut d\'étape', niveau: 2,
+    });
+    const id = promo.body.data.promotion.id;
+    await api().patch(`/api/promotions/${id}/statut`).set(auth(directeur))
+      .send({ statut: 'ouverte' });
+
+    const saut = await api().patch(`/api/promotions/${id}/statut`)
+      .set(auth(directeur)).send({ statut: 'validee_interne' });
+    assert.equal(saut.status, 409);
+    assert.equal(saut.body.error.code, 'TRANSITION_INTERDITE');
+  });
+
+  test('refuse un sous-rôle inconnu à la création d\'un agent', async () => {
+    const principal = await login('+22890000002');
+    const res = await api().post('/api/structure/agents').set(auth(principal)).send({
+      nom: 'ROLE', prenom: 'Inconnu', telephone: '+22896000099', sous_role: 'recteur',
+    });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'SOUS_ROLE_INVALIDE');
+  });
+
+  test('revient au mode simple', async () => {
+    const principal = await login('+22890000002');
+    const res = await api()
+      .put('/api/structure/mode-workflow')
+      .set(auth(principal)).send({ mode: 'simple' });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.etablissement.mode_workflow, 'simple');
+  });
+});

@@ -9,6 +9,7 @@ import * as lotController from '../controllers/lot.controller.js';
 import { authJWT } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/role.middleware.js';
 import { ErreurApp } from '../utils/errors.js';
+import { requirePermission } from '../services/permissions.service.js';
 
 const router = Router();
 
@@ -49,7 +50,7 @@ router.get('/parcours/:candidatId', promotionController.parcoursEtudiant);
 router.get('/modele-import', promotionController.modeleImport);
 
 router.get('/', promotionController.lister);
-router.post('/', promotionController.creer);
+router.post('/', requirePermission('promotion.creer'), promotionController.creer);
 router.get('/:id', promotionController.recuperer);
 router.put('/:id', promotionController.modifier);
 router.patch('/:id/statut', promotionController.changerStatut);
@@ -58,14 +59,14 @@ router.delete('/:id', promotionController.supprimer);
 // ── Inscriptions d'une promotion ───────────────────────────────────
 router.get('/:id/inscriptions', promotionController.listerInscriptions);
 router.post('/:id/inscriptions', promotionController.inscrire);
-router.put('/:id/inscriptions/:inscriptionId', promotionController.enregistrerResultat);
+router.put('/:id/inscriptions/:inscriptionId', requirePermission('promotion.resultat'), promotionController.enregistrerResultat);
 router.delete('/:id/inscriptions/:inscriptionId', promotionController.desinscrire);
 
 // Import d'une promotion entière. `?simulation=true` valide sans écrire.
-router.post('/:id/import', recevoirFichier, promotionController.importer);
+router.post('/:id/import', requirePermission('promotion.importer'), recevoirFichier, promotionController.importer);
 
 // Transmission de la promotion entière au ministère : génère un lot et
 // un dossier par étudiant admis.
-router.post('/:id/transmettre', lotController.transmettre);
+router.post('/:id/transmettre', requirePermission('promotion.transmettre'), lotController.transmettre);
 
 export default router;

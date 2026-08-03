@@ -11,6 +11,7 @@ import * as anneeModel from '../models/annee-academique.model.js';
 import * as sessionModel from '../models/session-academique.model.js';
 import { recupererFiliere } from './structure.service.js';
 import * as importService from './import.service.js';
+import * as permissions from './permissions.service.js';
 import { ErreurApp, avecErreursSql } from '../utils/errors.js';
 import {
   nettoyerTexte,
@@ -243,7 +244,13 @@ export async function changerStatut(id, etablissement_id, statut) {
     );
   }
 
-  if (!TRANSITIONS_PROMOTION[promotion.statut].includes(cible)) {
+  // En mode hiérarchique, la promotion passe par un contrôle interne puis
+  // une validation du directeur avant de pouvoir être transmise.
+  const mode = await permissions.modeWorkflow(etablissement_id);
+  const transitions =
+    mode === 'hierarchique' ? permissions.TRANSITIONS_INTERNES : TRANSITIONS_PROMOTION;
+
+  if (!(transitions[promotion.statut] || []).includes(cible)) {
     throw new ErreurApp(
       409,
       'TRANSITION_INTERDITE',

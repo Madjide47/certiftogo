@@ -20,6 +20,7 @@ import { ErreurApp, avecErreursSql } from '../utils/errors.js';
 import { genererReferenceDossier } from '../utils/reference-generator.js';
 import { journaliser, journaliserStatutDossier, ACTIONS } from './audit.service.js';
 import * as notifications from './notification.service.js';
+import * as permissions from './permissions.service.js';
 import { nettoyerTexte, estUuidValide, estDansEnum, estDateValide } from '../utils/validators.js';
 
 const STATUTS_LOT = ['transmis', 'en_examen', 'valide', 'partiellement_traite', 'rejete', 'certifie'];
@@ -45,11 +46,18 @@ export async function transmettre(promotion_id, etablissement_id, agent, donnees
   if (!promotion || promotion.etablissement_id !== etablissement_id) {
     throw new ErreurApp(404, 'PROMOTION_INTROUVABLE', 'Promotion introuvable.');
   }
-  if (promotion.statut !== 'ouverte') {
+  // En mode hiérarchique, seule une promotion validée en interne part au
+  // ministère : celui qui saisit n'est pas celui qui engage l'établissement.
+  const mode = await permissions.modeWorkflow(etablissement_id);
+  const statutRequis = mode === 'hierarchique' ? 'validee_interne' : 'ouverte';
+
+  if (promotion.statut !== statutRequis) {
     throw new ErreurApp(
       409,
       'PROMOTION_NON_TRANSMISSIBLE',
-      `Une promotion « ${promotion.statut} » ne peut pas être transmise. Ouvrez-la d'abord.`
+      mode === 'hierarchique'
+        ? `Une promotion « ${promotion.statut} » ne peut pas être transmise : elle doit d'abord être contrôlée puis validée en interne.`
+        : `Une promotion « ${promotion.statut} » ne peut pas être transmise. Ouvrez-la d'abord.`
     );
   }
 

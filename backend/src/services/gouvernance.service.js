@@ -18,6 +18,7 @@ import { ErreurApp, avecErreursSql } from '../utils/errors.js';
 import { genererReferenceDemande, initialesEtablissement } from '../utils/reference-generator.js';
 import { journaliser, ACTIONS } from './audit.service.js';
 import * as notifications from './notification.service.js';
+import * as permissions from './permissions.service.js';
 import {
   nettoyerTexte,
   estUuidValide,
@@ -175,6 +176,8 @@ export async function creerEtablissement(donnees, agent_ministere_id = null) {
             role: 'etablissement',
             etablissement_id: etablissement.id,
             est_agent_principal: true,
+            // Le premier agent engage l'etablissement : c'est un directeur.
+            sous_role: 'directeur',
             actif: true,
           },
           client
@@ -508,6 +511,15 @@ export async function creerAgent(demandeur, donnees) {
 
   const agent = validerAgent(donnees);
 
+  const sous_role = nettoyerTexte(donnees.sous_role) || 'agent_saisie';
+  if (!permissions.SOUS_ROLES.includes(sous_role)) {
+    throw new ErreurApp(
+      400,
+      'SOUS_ROLE_INVALIDE',
+      `Sous-role inconnu. Valeurs : ${permissions.SOUS_ROLES.join(', ')}.`
+    );
+  }
+
   const existant = await utilisateurModel.trouverParTelephone(agent.telephone);
   if (existant) {
     throw new ErreurApp(409, 'TELEPHONE_EXISTANT', 'Ce numéro est déjà utilisé par un compte.');
@@ -522,6 +534,7 @@ export async function creerAgent(demandeur, donnees) {
         // Un seul agent principal par établissement : celui désigné par le
         // ministère à l'agrément. Les agents créés ici sont ordinaires.
         est_agent_principal: false,
+        sous_role,
         actif: true,
       }),
     CONTRAINTES
@@ -543,4 +556,49 @@ export async function creerAgent(demandeur, donnees) {
   });
 
   return compte;
+}
+
+// ── Mode de fonctionnement interne ─────────────────────────────────
+
+/**
+ * Bascule l'établissement entre workflow simple et hiérarchique.
+ * Réservé à l'agent principal : c'est une décision d'organisation, pas
+ * un réglage technique.
+ */
+export async function definirModeWorkflow(demandeur, mode) {
+  if (!demandeur.est_agent_principal) {
+    throw new ErreurApp(
+      403,
+      'AGENT_PRINCIPAL_REQUIS',
+      "Seul l'agent principal peut changer le mode de fonctionnement."
+    );
+  }
+
+  const cible = nettoyerTexte(mode);
+  if (!cible || !permissions.MODES_WORKFLOW.includes(cible)) {
+    throw new ErreurApp(
+      400,
+      'MODE_INVALIDE',
+      `Mode inconnu. Valeurs : ${permissions.MODES_WORKFLOW.join(', ')}.`
+    );
+  }
+
+  const { query } = await import('../config/database.js');
+  const { rows } = await query(
+    `UPDATE etablissements SET mode_workflow = $2 WHERE id = $1
+     RETURNING id, code, nom, mode_workflow`,
+    [demandeur.etablissement_id, cible]
+  );
+  permissions.viderCache();
+
+  await journaliser({
+    action: ACTIONS.MODE_WORKFLOW_CHANGE,
+    entite: 'etablissements',
+    entite_id: demandeur.etablissement_id,
+    etablissement_id: demandeur.etablissement_id,
+    apres: { mode_workflow: cible },
+    message: `Mode de fonctionnement passé en « ${cible} ».`,
+  });
+
+  return rows[0];
 }

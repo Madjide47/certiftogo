@@ -77,8 +77,8 @@ INSERT INTO utilisateurs (id, nom, prenom, telephone, role, ministere_id)
 VALUES ('40000000-0000-0000-0000-000000000001', 'ADJOVI', 'Sena', '+22890000001', 'ministere', '10000000-0000-0000-0000-000000000001');
 
 -- Agent principal de l'établissement pilote (peut créer d'autres agents)
-INSERT INTO utilisateurs (id, nom, prenom, telephone, role, etablissement_id, est_agent_principal)
-VALUES ('40000000-0000-0000-0000-000000000002', 'KOUASSI', 'Edem', '+22890000002', 'etablissement', '20000000-0000-0000-0000-000000000001', TRUE);
+INSERT INTO utilisateurs (id, nom, prenom, telephone, role, etablissement_id, est_agent_principal, sous_role)
+VALUES ('40000000-0000-0000-0000-000000000002', 'KOUASSI', 'Edem', '+22890000002', 'etablissement', '20000000-0000-0000-0000-000000000001', TRUE, 'directeur');
 
 -- Administrateur système
 INSERT INTO utilisateurs (id, nom, prenom, telephone, role)

@@ -127,7 +127,18 @@ export const TYPES_SESSION = ['normale', 'rattrapage', 'exceptionnelle'];
 export const STATUTS_ANNEE = ['preparation', 'ouverte', 'cloturee'];
 export const STATUTS_SESSION = ['preparation', 'ouverte', 'cloturee'];
 export const STATUTS_STRUCTURE = ['active', 'archivee'];
-export const STATUTS_PROMOTION = ['brouillon', 'ouverte', 'transmise', 'certifiee', 'cloturee'];
+// `controle_interne` et `validee_interne` n'existent qu'en mode
+// hiérarchique (voir permissions.service.js), mais restent des statuts
+// valides du point de vue de la validation d'entrée.
+export const STATUTS_PROMOTION = [
+  'brouillon',
+  'ouverte',
+  'controle_interne',
+  'validee_interne',
+  'transmise',
+  'certifiee',
+  'cloturee',
+];
 export const STATUTS_INSCRIPTION = ['inscrit', 'admis', 'ajourne', 'abandon', 'exclu'];
 
 /**
