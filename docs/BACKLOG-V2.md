@@ -251,7 +251,7 @@ Dernière mise à jour : 2 août 2026.
 | O-03 | **12 ADR** au format Nygard | ✅ *16 ADR, dont 4 nées de la construction* |
 | O-04 | Argumentaire jury : détention de la clé privée | ✅ |
 | O-05 | Argumentaire jury : blockchain vs base de données, en 4 points | ✅ |
-| O-06 | DDL PostgreSQL complet commenté (`COMMENT ON`) | 🔨 |
+| O-06 | DDL PostgreSQL complet commenté (`COMMENT ON`) | ✅ *migrations commentées, source unique* |
 | O-07 | Tableau « ce qui a changé entre V1 et V2 » | ⬜ |
 | O-08 | Priorisation `[MVP]` / `[V1]` / `[VISION]` de chaque exigence | ⬜ |
 
@@ -273,12 +273,12 @@ ci-dessus : voici ce que seul le CDC mentionne.
 | P-08 | Cycle de vie de chaque acteur | 6.3 | ⬜ |
 | P-09 | Critères d'acceptation du MVP | 3.4 | ⬜ |
 | P-10 | Environnements : dev, test, démo, production | 5.5 | ⬜ |
-| P-11 | **Nomenclatures en base** : `types_diplome`, `mentions` (aujourd'hui des `CHECK` figés) | 24.3.4 | ⬜ |
+| P-11 | **Nomenclatures en base** : `types_diplome`, `mentions` (aujourd'hui des `CHECK` figés) | 24.3.4 | ⬜ *nomenclatures toujours en CHECK figés* |
 | P-12 | **Table `historique_statuts_dossier`** | 24.3.6 | ✅ |
 | P-13 | **Table `cles_publiques_ministere`** | ✅ | ✅ |
 | P-14 | **Table `sessions`** (jetons, révocation) | ✅ | ✅ |
-| P-15 | Diagramme entité-association d'ensemble | 24.4 | ⬜ |
-| P-16 | Stratégie de migration depuis le schéma actuel | 24.6 | 🔨 |
+| P-15 | Diagramme entité-association d'ensemble | 24.4 | ✅ |
+| P-16 | Stratégie de migration depuis le schéma actuel | 24.6 | ✅ |
 | P-17 | Passage en mainnet | 32.1 | ⬜ |
 | P-18 | Interopérabilité internationale | 32.2 | ⬜ |
 | P-19 | Reconnaissance optique et reprise de l'existant papier | 32.3 | ⬜ |
@@ -298,7 +298,7 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 156 |
+| ✅ fait et testé | 159 |
 | 🔨 partiel ou en cours | 17 |
 | ⬜ à faire | 8 |
 | **Total** | **174** |

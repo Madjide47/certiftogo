@@ -19,6 +19,7 @@ fichier seraient illisibles en revue et impossibles à relire par diff.
 
 | Chapitre | Fichier | État |
 |---|---|---|
+| 24 — Modèle de données | [`cdc/24-modele-donnees.md`](cdc/24-modele-donnees.md) | ✅ rédigé |
 | 35 — Décisions d'architecture (16 ADR) | [`cdc/35-decisions-architecture.md`](cdc/35-decisions-architecture.md) | ✅ rédigé |
 | 36 — Argumentaire pour le jury | [`cdc/36-argumentaire-jury.md`](cdc/36-argumentaire-jury.md) | ✅ rédigé |
 
