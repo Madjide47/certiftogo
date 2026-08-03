@@ -3310,6 +3310,20 @@ describe('Pièces justificatives — dépôt', () => {
     assert.equal(res.body.error.code, 'FICHIER_REQUIS');
   });
 
+  test('refuse le même document deux fois, avec un message exploitable', async () => {
+    const envoyer = () =>
+      api()
+        .post(`/api/candidats/${candidatId}/pieces`)
+        .set(auth(jetonEtab))
+        .field('type_piece', 'autre')
+        .attach('fichier', PDF, 'doublon.pdf');
+
+    assert.equal((await envoyer()).status, 201);
+    const second = await envoyer();
+    assert.equal(second.status, 409);
+    assert.equal(second.body.error.code, 'PIECE_DEJA_DEPOSEE');
+  });
+
   test('refuse un étudiant inexistant sans erreur serveur', async () => {
     const res = await api()
       .post('/api/candidats/99999999-9999-9999-9999-999999999999/pieces')

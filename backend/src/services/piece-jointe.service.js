@@ -188,8 +188,17 @@ async function enregistrer(fichier, meta) {
   }
 
   try {
-    return await avecErreursSql(() =>
-      pieceModel.creer({ ...meta, chemin: relatif, empreinte, taille_octets: fichier.size })
+    return await avecErreursSql(
+      () => pieceModel.creer({ ...meta, chemin: relatif, empreinte, taille_octets: fichier.size }),
+      {
+        // Sans ce libellé, un double dépôt ressortirait en « conflit
+        // d'unicité » : exact, et parfaitement inexploitable pour l'agent.
+        idx_piece_unique_candidat: [
+          409,
+          'PIECE_DEJA_DEPOSEE',
+          'Ce document a déjà été déposé pour cet étudiant. Retirez la version précédente ou renommez le fichier.',
+        ],
+      }
     );
   } catch (err) {
     // La ligne n'existe pas : le fichier orphelin ne doit pas rester.

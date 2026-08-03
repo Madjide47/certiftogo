@@ -14,11 +14,94 @@
 // ─────────────────────────────────────────────────────────────
 import crypto from 'node:crypto';
 import { ethers } from 'ethers';
+import { ErreurApp } from '../utils/errors.js';
 
 const MODE = process.env.BLOCKCHAIN_MODE || 'mock';
 const ADRESSE_CONTRAT = process.env.CONTRAT_ADRESSE || '';
 const RPC_URL = process.env.BLOCKCHAIN_RPC_URL || 'http://127.0.0.1:8545';
 const PRIVATE_KEY = process.env.BLOCKCHAIN_PRIVATE_KEY || '';
+
+/**
+ * Délai au-delà duquel on cesse d'attendre la confirmation.
+ *
+ * Sans plafond, `tx.wait()` attend indéfiniment : un RPC qui ne répond
+ * plus laisse la requête HTTP ouverte, l'agent devant un bouton qui
+ * tourne, et personne pour dire que le réseau est en cause. Amoy confirme
+ * en quelques secondes ; deux minutes est déjà généreux.
+ */
+const DELAI_CONFIRMATION_MS = Number(process.env.BLOCKCHAIN_TIMEOUT_MS || 120_000);
+
+/**
+ * Traduit une défaillance Ethers en erreur métier actionnable.
+ *
+ * Une erreur réseau et un portefeuille vide se ressemblent dans les logs
+ * et n'appellent pas du tout le même geste : l'une se réessaie, l'autre
+ * exige une recharge. Les confondre sous « erreur interne » revient à
+ * laisser l'exploitant chercher au mauvais endroit pendant que la
+ * certification du pays est à l'arrêt.
+ */
+export function traduireErreurBlockchain(err) {
+  if (err instanceof ErreurApp) return err;
+
+  const code = err?.code || '';
+  const message = String(err?.shortMessage || err?.message || '');
+
+  if (code === 'INSUFFICIENT_FUNDS' || /insufficient funds/i.test(message)) {
+    return new ErreurApp(
+      503,
+      'SOLDE_BLOCKCHAIN_INSUFFISANT',
+      "Le portefeuille de service n'a plus de quoi payer les frais de transaction. Rechargez-le avant de relancer l'ancrage."
+    );
+  }
+  if (['NETWORK_ERROR', 'SERVER_ERROR', 'TIMEOUT', 'ECONNREFUSED', 'ENOTFOUND'].includes(code)) {
+    return new ErreurApp(
+      503,
+      'BLOCKCHAIN_INJOIGNABLE',
+      "Le réseau blockchain est injoignable. Le diplôme reste en file d'ancrage et sera repris automatiquement."
+    );
+  }
+  if (code === 'CALL_EXCEPTION' || /revert/i.test(message)) {
+    return new ErreurApp(
+      409,
+      'TRANSACTION_REJETEE',
+      `Le contrat a rejeté l'opération : ${message || 'raison non précisée'}.`
+    );
+  }
+  if (code === 'NONCE_EXPIRED' || code === 'REPLACEMENT_UNDERPRICED') {
+    return new ErreurApp(
+      409,
+      'TRANSACTION_CONCURRENTE',
+      'Une autre transaction est déjà en cours avec ce portefeuille. Réessayez dans un instant.'
+    );
+  }
+  return new ErreurApp(
+    503,
+    'ANCRAGE_IMPOSSIBLE',
+    `L'ancrage a échoué (${code || 'cause inconnue'}). L'opération sera reprise par la file d'ancrage.`
+  );
+}
+
+/** Exécute un appel on-chain en traduisant toute défaillance. */
+async function surLaChaine(operation) {
+  try {
+    return await operation();
+  } catch (err) {
+    throw traduireErreurBlockchain(err);
+  }
+}
+
+/** Attend la confirmation, sans attendre indéfiniment. */
+async function confirmer(tx) {
+  const receipt = await tx.wait(1, DELAI_CONFIRMATION_MS);
+  if (!receipt) {
+    throw new ErreurApp(
+      503,
+      'CONFIRMATION_TROP_LENTE',
+      `La transaction ${tx.hash} n'a pas été confirmée en ${Math.round(DELAI_CONFIRMATION_MS / 1000)} s. Elle peut encore aboutir : la file d'ancrage en assurera le suivi.`
+    );
+  }
+  return receipt;
+}
 
 // ABI minimal : uniquement les fonctions utilisées par le backend.
 const ABI = [
@@ -80,8 +163,9 @@ export async function certifier({ reference, hash }) {
       mock: true,
     };
   }
-  const tx = await contrat().certifier(versBytes32(hash), reference);
-  const receipt = await tx.wait();
+  const receipt = await surLaChaine(async () =>
+    confirmer(await contrat().certifier(versBytes32(hash), reference))
+  );
   return {
     transactionHash: receipt.hash,
     blockNumber: receipt.blockNumber,
@@ -113,8 +197,9 @@ export async function revoquer({ reference, hash, motif }) {
       mock: true,
     };
   }
-  const tx = await contrat().revoquer(versBytes32(hash), motif || 'Révocation');
-  const receipt = await tx.wait();
+  const receipt = await surLaChaine(async () =>
+    confirmer(await contrat().revoquer(versBytes32(hash), motif || 'Révocation'))
+  );
   return {
     transactionHash: receipt.hash,
     blockNumber: receipt.blockNumber,
@@ -135,7 +220,7 @@ export async function revoquer({ reference, hash, motif }) {
  */
 export async function verifierOnChain(hash) {
   if (MODE !== 'onchain') return null;
-  const r = await contrat().verifier(versBytes32(hash));
+  const r = await surLaChaine(() => contrat().verifier(versBytes32(hash)));
   const existe = r[0];
   const revoque = r[1];
   return {
@@ -172,7 +257,9 @@ export async function soldeService() {
   const provider = new ethers.JsonRpcProvider(RPC_URL);
   const signataire = new ethers.Wallet(PRIVATE_KEY, provider);
   const adresse = await signataire.getAddress();
-  const solde = await provider.getBalance(adresse);
+  // La surveillance du solde ne doit pas tomber quand le RPC tousse :
+  // c'est précisément le moment où l'exploitant consulte cet écran.
+  const solde = await surLaChaine(() => provider.getBalance(adresse));
 
   return {
     adresse,

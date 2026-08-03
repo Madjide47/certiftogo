@@ -26,6 +26,7 @@ import PDFDocument from 'pdfkit';
 import { assurerDossierUploads, cheminUpload, urlUpload } from '../config/storage.js';
 import { LIBELLES_TYPE_DIPLOME, LIBELLES_MENTION } from '../utils/libelles.js';
 import { urlVerification, URL_VERIFICATION_PUBLIQUE } from './qr.service.js';
+import { ErreurApp } from '../utils/errors.js';
 
 // Couleurs du drapeau togolais, seules teintes autorisées.
 const VERT = '#006a4e';
@@ -129,9 +130,18 @@ function bandeauInvalide(doc, libelle, motif) {
  * @returns {Promise<{ nomFichier: string, url: string }>}
  */
 export async function genererPdfDiplome(d) {
-  assurerDossierUploads();
   const nomFichier = `${d.reference}.pdf`;
-  const chemin = cheminUpload(nomFichier);
+  let chemin;
+  try {
+    assurerDossierUploads();
+    chemin = cheminUpload(nomFichier);
+  } catch (err) {
+    throw new ErreurApp(
+      503,
+      'STOCKAGE_INDISPONIBLE',
+      `Le dossier de destination du diplôme est inaccessible (${err.code || err.message}).`
+    );
+  }
 
   await new Promise((resolve, reject) => {
     const doc = new PDFDocument({
@@ -393,6 +403,15 @@ export async function genererPdfDiplome(d) {
     }
 
     doc.end();
+  }).catch((err) => {
+    // Le flux a échoué en cours d'écriture : le fichier tronqué ne doit
+    // pas rester, un diplôme à moitié imprimé circulerait comme un vrai.
+    fs.rm(chemin, { force: true }, () => {});
+    throw new ErreurApp(
+      503,
+      'PDF_INGENERABLE',
+      `Le diplôme ${d.reference} n'a pas pu être imprimé (${err.code || err.message}).`
+    );
   });
 
   return { nomFichier, url: urlUpload(nomFichier) };
