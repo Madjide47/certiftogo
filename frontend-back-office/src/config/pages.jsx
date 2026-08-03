@@ -12,6 +12,10 @@ import PromotionsPage from '../pages/etablissement/PromotionsPage.jsx';
 import LotsPage from '../pages/etablissement/LotsPage.jsx';
 import AgentsPage from '../pages/etablissement/AgentsPage.jsx';
 import JournalPage from '../pages/commun/JournalPage.jsx';
+import LotsRecusPage from '../pages/ministere/LotsRecusPage.jsx';
+import ValidationsPage from '../pages/ministere/ValidationsPage.jsx';
+import AncragePage from '../pages/ministere/AncragePage.jsx';
+import DemandesPage from '../pages/ministere/DemandesPage.jsx';
 import AnneesAcademiquesPage from '../pages/ministere/AnneesAcademiquesPage.jsx';
 import DossiersRecusPage from '../pages/ministere/DossiersRecusPage.jsx';
 import MinistereDiplomesPage from '../pages/ministere/DiplomesPage.jsx';
@@ -38,10 +42,14 @@ export const PAGES_PAR_ROLE = {
   },
   ministere: {
     '/': MinistereDashboardPage,
-    '/annees': AnneesAcademiquesPage,
+    '/lots-recus': LotsRecusPage,
     '/dossiers-recus': DossiersRecusPage,
+    '/validations': ValidationsPage,
     '/diplomes': MinistereDiplomesPage,
+    '/ancrage': AncragePage,
     '/etablissements': MinistereEtablissementsPage,
+    '/demandes': DemandesPage,
+    '/annees': AnneesAcademiquesPage,
     '/journal': JournalPage,
   },
   candidat: {

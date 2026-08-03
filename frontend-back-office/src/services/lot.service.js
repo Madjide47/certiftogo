@@ -24,9 +24,19 @@ export async function monLot(id) {
 
 // ── Ministère ──────────────────────────────────────────────────────
 
+/**
+ * L'API renvoie la répartition telle que PostgreSQL la produit — un
+ * tableau `[{ statut, total }]`. Les écrans veulent un accès par statut ;
+ * la conversion se fait ici une fois, plutôt que dans chaque page.
+ */
+export function indexerParStatut(lignes) {
+  if (!Array.isArray(lignes)) return lignes || {};
+  return Object.fromEntries(lignes.map((l) => [l.statut, l.total]));
+}
+
 export async function fileDesLots({ statut = '' } = {}) {
   const { data } = await api.get('/ministere/lots', { params: statut ? { statut } : {} });
-  return data.data;
+  return { ...data.data, repartition: indexerParStatut(data.data.repartition) };
 }
 
 /** Lot, dossiers et rapport des contrôles automatiques. */

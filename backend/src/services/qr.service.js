@@ -10,6 +10,9 @@ import { assurerDossierUploads, cheminUpload, urlUpload } from '../config/storag
 const VERIFY_URL =
   process.env.PUBLIC_VERIFY_URL || 'http://localhost:5174/verifier';
 
+/** Adresse du service de vérification, sans empreinte — à imprimer. */
+export const URL_VERIFICATION_PUBLIQUE = VERIFY_URL;
+
 /** URL de vérification publique encodée dans le QR d'un diplôme. */
 export function urlVerification(hash) {
   return `${VERIFY_URL}/${hash}`;

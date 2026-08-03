@@ -12,6 +12,10 @@ const SELECT_AVEC_CANDIDAT = `
   d.lot_id,
   c.nom AS candidat_nom, c.prenom AS candidat_prenom,
   c.numero_etudiant AS candidat_numero_etudiant,
+  -- L'état civil part sur le diplôme imprimé : c'est ce qui distingue
+  -- deux homonymes de la même promotion.
+  c.date_naissance AS candidat_date_naissance,
+  c.lieu_naissance AS candidat_lieu_naissance,
   l.reference AS lot_reference`;
 
 // Le lot est facultatif : un dossier peut avoir été créé à l'unité, avant

@@ -59,6 +59,27 @@ export async function statistiquesMinistere() {
   return data.data.statistiques;
 }
 
+/** Détail d'un diplôme certifié. */
+export async function recupererDiplome(id) {
+  const { data } = await api.get(`/ministere/diplomes/${id}`);
+  return data.data.diplome;
+}
+
+/**
+ * Corrige un diplôme certifié : révoque l'ancien hash et en émet un
+ * nouveau. On ne modifie jamais un diplôme dont le hash est déjà ancré.
+ */
+export async function corrigerDiplome(id, donnees) {
+  const { data } = await api.post(`/ministere/diplomes/${id}/corriger`, donnees);
+  return data.data;
+}
+
+/** Chaîne des versions d'un diplôme (corrections successives). */
+export async function versionsDiplome(id) {
+  const { data } = await api.get(`/ministere/diplomes/${id}/versions`);
+  return data.data;
+}
+
 /** Liste des établissements (lecture seule). */
 export async function listerEtablissementsMinistere() {
   const { data } = await api.get('/ministere/etablissements');
