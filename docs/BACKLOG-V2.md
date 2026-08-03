@@ -267,12 +267,12 @@ ci-dessus : voici ce que seul le CDC mentionne.
 | P-02 | **Accessibilité et affichage mobile** | 26.5 | ⬜ |
 | P-03 | **Tests de charge** : promotion de 12 000 diplômés | 31.4 | ⬜ |
 | P-04 | **Tests de sécurité** | 31.5 | ⬜ |
-| P-05 | Glossaire métier (français) et technique (anglais) | 1.3 | ⬜ |
-| P-06 | Frontières de confiance et zones de sécurité | 4.3 | ⬜ |
-| P-07 | Matrice acteurs × cas d'usage | 6.2 | ⬜ |
-| P-08 | Cycle de vie de chaque acteur | 6.3 | ⬜ |
-| P-09 | Critères d'acceptation du MVP | 3.4 | ⬜ |
-| P-10 | Environnements : dev, test, démo, production | 5.5 | ⬜ |
+| P-05 | Glossaire métier (français) et technique (anglais) | 1.3 | ✅ |
+| P-06 | Frontières de confiance et zones de sécurité | 4.3 | ✅ |
+| P-07 | Matrice acteurs × cas d'usage | 6.2 | ✅ |
+| P-08 | Cycle de vie de chaque acteur | 6.3 | ✅ |
+| P-09 | Critères d'acceptation du MVP | 3.4 | ✅ |
+| P-10 | Environnements : dev, test, démo, production | 5.5 | ✅ |
 | P-11 | **Nomenclatures en base** : `types_diplome`, `mentions` (aujourd'hui des `CHECK` figés) | 24.3.4 | ⬜ *nomenclatures toujours en CHECK figés* |
 | P-12 | **Table `historique_statuts_dossier`** | 24.3.6 | ✅ |
 | P-13 | **Table `cles_publiques_ministere`** | ✅ | ✅ |
@@ -298,9 +298,9 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 166 |
+| ✅ fait et testé | 172 |
 | 🔨 partiel ou en cours | 17 |
-| ⬜ à faire | 8 |
+| ⬜ à faire | 2 |
 | **Total** | **174** |
 
 ## Ordre d'implémentation proposé

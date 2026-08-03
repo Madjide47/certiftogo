@@ -19,6 +19,7 @@ fichier seraient illisibles en revue et impossibles à relire par diff.
 
 | Chapitre | Fichier | État |
 |---|---|---|
+| 1 à 7 — Fondations (introduction, vision, objectifs, architecture, acteurs, authentification) | [`cdc/01-07-fondations.md`](cdc/01-07-fondations.md) | ✅ rédigé |
 | 24 — Modèle de données | [`cdc/24-modele-donnees.md`](cdc/24-modele-donnees.md) | ✅ rédigé |
 | 33 — Performances et traitement asynchrone | [`cdc/33-performances-asynchrone.md`](cdc/33-performances-asynchrone.md) | ✅ rédigé |
 | 34 — Coûts blockchain et gestion du gas | [`cdc/34-couts-blockchain.md`](cdc/34-couts-blockchain.md) | ✅ rédigé |
