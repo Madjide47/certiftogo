@@ -247,13 +247,13 @@ Dernière mise à jour : 2 août 2026.
 | # | Élément | Statut |
 |---|---|---|
 | O-01 | Table des matières du CDC V2 | ✅ |
-| O-02 | Rédaction des 37 chapitres | ⬜ |
+| O-02 | Rédaction des 37 chapitres | ✅ |
 | O-03 | **12 ADR** au format Nygard | ✅ *16 ADR, dont 4 nées de la construction* |
 | O-04 | Argumentaire jury : détention de la clé privée | ✅ |
 | O-05 | Argumentaire jury : blockchain vs base de données, en 4 points | ✅ |
 | O-06 | DDL PostgreSQL complet commenté (`COMMENT ON`) | ✅ *migrations commentées, source unique* |
-| O-07 | Tableau « ce qui a changé entre V1 et V2 » | ⬜ |
-| O-08 | Priorisation `[MVP]` / `[V1]` / `[VISION]` de chaque exigence | ⬜ |
+| O-07 | Tableau « ce qui a changé entre V1 et V2 » | ✅ |
+| O-08 | Priorisation `[MVP]` / `[V1]` / `[VISION]` de chaque exigence | ✅ *marqueurs MVP/V1/VISION au chapitre 30.3* |
 
 ## P. Éléments issus du CDC-V2 absents des quatre messages
 
@@ -263,8 +263,8 @@ ci-dessus : voici ce que seul le CDC mentionne.
 | # | Élément | Chapitre | Statut |
 |---|---|---|---|
 | P-00 | **Refonte complète du frontend** — l'UI actuelle ne fait pas « plateforme gouvernementale ». Décidé le 2 août 2026, à mener une fois le backend terminé. Jusque-là, écrans fonctionnels et minimaux. | 26 | ⬜ |
-| P-01 | **Description écran par écran** : composition, actions, états vides, états d'erreur | 26.4 | ⬜ |
-| P-02 | **Accessibilité et affichage mobile** | 26.5 | ⬜ |
+| P-01 | **Description écran par écran** : composition, actions, états vides, états d'erreur | 26.4 | ⬜ *délibérément reporté : les écrans seront refaits* |
+| P-02 | **Accessibilité et affichage mobile** | 26.5 | ⬜ *reporté avec la refonte* |
 | P-03 | **Tests de charge** : promotion de 12 000 diplômés | 31.4 | ⬜ |
 | P-04 | **Tests de sécurité** | 31.5 | ⬜ |
 | P-05 | Glossaire métier (français) et technique (anglais) | 1.3 | ✅ |
@@ -279,18 +279,18 @@ ci-dessus : voici ce que seul le CDC mentionne.
 | P-14 | **Table `sessions`** (jetons, révocation) | ✅ | ✅ |
 | P-15 | Diagramme entité-association d'ensemble | 24.4 | ✅ |
 | P-16 | Stratégie de migration depuis le schéma actuel | 24.6 | ✅ |
-| P-17 | Passage en mainnet | 32.1 | ⬜ |
-| P-18 | Interopérabilité internationale | 32.2 | ⬜ |
-| P-19 | Reconnaissance optique et reprise de l'existant papier | 32.3 | ⬜ |
-| P-20 | Ouverture à d'autres ministères | 32.4 | ⬜ |
+| P-17 | Passage en mainnet | 32.1 | ✅ |
+| P-18 | Interopérabilité internationale | 32.2 | ✅ |
+| P-19 | Reconnaissance optique et reprise de l'existant papier | 32.3 | ✅ |
+| P-20 | Ouverture à d'autres ministères | 32.4 | ✅ |
 | P-21 | Objections probables et réponses préparées (jury) | 36.3 | ✅ |
 | P-22 | Limites assumées du dispositif | 36.4 | ✅ |
 | P-23 | Critères déclenchant une extraction en micro-service | 37.7 | ✅ |
 | P-24 | Ce qui ne doit **pas** être découplé, et pourquoi | 37.8 | ✅ |
-| P-25 | Taxonomie des erreurs et contrat d'erreur de l'API | 28.1-28.2 | 🔨 |
-| P-26 | Restitution des erreurs à l'écran : message, action corrective, recours | 28.3 | 🔨 |
-| P-27 | Erreurs silencieuses et détection | 28.4 | ⬜ |
-| P-28 | Jalons de soutenance | 30.4 | ⬜ |
+| P-25 | Taxonomie des erreurs et contrat d'erreur de l'API | 28.1-28.2 | ✅ |
+| P-26 | Restitution des erreurs à l'écran : message, action corrective, recours | 28.3 | ✅ |
+| P-27 | Erreurs silencieuses et détection | 28.4 | ✅ |
+| P-28 | Jalons de soutenance | 30.4 | ✅ |
 
 ---
 
@@ -298,9 +298,9 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 172 |
+| ✅ fait et testé | 183 |
 | 🔨 partiel ou en cours | 17 |
-| ⬜ à faire | 2 |
+| ⬜ à faire | 5 |
 | **Total** | **174** |
 
 ## Ordre d'implémentation proposé

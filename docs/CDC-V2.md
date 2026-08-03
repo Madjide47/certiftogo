@@ -6,7 +6,7 @@
 | **Projet** | CertifTOGO — plateforme nationale de certification et de traçabilité des diplômes sur blockchain |
 | **Version du document** | 2.0 (structure — chapitres à rédiger) |
 | **Date** | 2 août 2026 |
-| **Statut** | 🖊️ Rédaction en cours — voir « Chapitres rédigés » ci-dessous |
+| **Statut** | ✅ **Rédaction complète** — 37 chapitres, 16 ADR |
 | **Périmètre technique** | Node.js/Express, PostgreSQL, React/Vite, Solidity/Hardhat, Polygon Amoy (MVP) |
 | **Public visé** | équipe de développement, jury de soutenance, futurs mainteneurs |
 
@@ -20,6 +20,8 @@ fichier seraient illisibles en revue et impossibles à relire par diff.
 | Chapitre | Fichier | État |
 |---|---|---|
 | 1 à 7 — Fondations (introduction, vision, objectifs, architecture, acteurs, authentification) | [`cdc/01-07-fondations.md`](cdc/01-07-fondations.md) | ✅ rédigé |
+| 8 à 19 — Domaines métier et cœur de la certification | [`cdc/08-19-domaines-metier.md`](cdc/08-19-domaines-metier.md) | ✅ rédigé |
+| 20 à 32 — Exploitation, fondations techniques, robustesse | [`cdc/20-32-exploitation-robustesse.md`](cdc/20-32-exploitation-robustesse.md) | ✅ rédigé |
 | 24 — Modèle de données | [`cdc/24-modele-donnees.md`](cdc/24-modele-donnees.md) | ✅ rédigé |
 | 33 — Performances et traitement asynchrone | [`cdc/33-performances-asynchrone.md`](cdc/33-performances-asynchrone.md) | ✅ rédigé |
 | 34 — Coûts blockchain et gestion du gas | [`cdc/34-couts-blockchain.md`](cdc/34-couts-blockchain.md) | ✅ rédigé |
@@ -481,12 +483,34 @@ Vérification que rien n'est perdu par l'arbitrage exposé en note méthodologiq
 <a id="annexe-e"></a>
 ## Annexe E — Ce qui a changé entre V1 et V2
 
-*Tableau récapitulatif à compléter au fil de la rédaction, conformément à la
-consigne. Structure retenue :*
-
 | Domaine | V1 | V2 | Impact code |
 |---|---|---|---|
-| *(rempli à mesure que les chapitres sont rédigés)* | | | |
+| **Identité** | un compte lié à UNE fiche étudiant | table `personnes` : une personne, N fiches | migration 004, portefeuille national possible |
+| **Structure académique** | aucune | facultés, filières, années, sessions, promotions, inscriptions | migration 002, 6 tables |
+| **Peuplement** | saisie un par un | + import Excel/CSV, rapport ligne à ligne, simulation | `import.service.js`, ExcelJS |
+| **Transmission** | dossier par dossier | **par lot**, avec rejet partiel | migration 006, `lot.service.js` |
+| **Instruction** | manuelle intégrale | contrôles automatiques + anomalies statistiques | `controle.service.js` |
+| **Gouvernance** | admin crée les établissements | **ministère agrée** : code officiel, habilitations, agent principal | migration 005, route admin supprimée |
+| **Entrée d'un établissement** | aucune procédure | demande d'intégration publique, instruite | table `demandes_integration` |
+| **Rôles internes** | établissement = acteur unique | 3 sous-rôles + mode simple/hiérarchique | migration 012 |
+| **Certification de masse** | synchrone | **file d'ancrage**, worker, retry, DLQ | migration 008, `ancrage.service.js` |
+| **Statut du diplôme** | actif / révoqué | + `en_attente_ancrage`, + **`remplace`** | migrations 008, 011 |
+| **Correction** | impossible | **versionnement** : v1 remplacée par v2, chaîne consultable | migration 011 |
+| **Coût blockchain** | invisible (`gas_used` NULL) | mesuré, stocké, ventilé par établissement | `blockchain.service.js` |
+| **Audit** | table vide, aucune écriture | **43 actions**, avant/après, IP, corrélation blockchain | migration 007, `AsyncLocalStorage` |
+| **Suppression** | définitive | **corbeille** avec restauration à l'identifiant d'origine | table `corbeille` |
+| **Notifications** | OTP seulement | **20 événements**, centre in-app, préférences | migration 009 |
+| **Sessions** | JWT 24 h non révocable | sessions en base, refresh, révocation immédiate | migration 010 |
+| **Anti-force brute** | aucun | 5 essais, code brûlé | `codes_otp.tentatives` |
+| **Énumération de comptes** | 404 / 403 révélateurs | **réponse identique** dans tous les cas | `auth.service.js` |
+| **Limitation de débit** | aucune | 5 surfaces protégées | `rate-limit.middleware.js` |
+| **Second facteur** | aucun | **contrôle à quatre yeux** (seconde personne) | migration 010, ADR-015 |
+| **Cas exceptionnels** | non traités | ERR-001 à ERR-009 implémentés et testés | migrations 011, 013 |
+| **Clé de signature** | valeur de repli codée en dur | registre d'empreintes, procédure de compromission | migration 013 |
+| **Tableaux de bord** | statistiques partielles | 4 vues par rôle + métriques d'API | `tableau-bord.service.js` |
+| **Migrations** | fichier unique destructif | **13 migrations incrémentales** suivies | `run-migrations.js` |
+| **Tests** | 41 | **186** | — |
+| **Documentation** | aucune | 37 chapitres, 16 ADR | `docs/cdc/` |
 
 ---
 
