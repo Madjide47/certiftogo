@@ -14,14 +14,16 @@ import ProtectedRoute from './components/ProtectedRoute.jsx';
 import Layout from './components/layout/Layout.jsx';
 import LoginPage from './pages/auth/LoginPage.jsx';
 import PlaceholderPage from './components/PlaceholderPage.jsx';
-import { NAVIGATION_PAR_ROLE, LIBELLES_ROLES } from './config/navigation.js';
+import { entreesPour, LIBELLES_ROLES } from './config/navigation.js';
 import { pagePour } from './config/pages.jsx';
 
 // Rend les routes internes correspondant au rôle de l'utilisateur connecté.
+// La navigation étant désormais groupée par rubriques, on l'aplatit ici :
+// le routage se moque des rubriques, il ne connaît que des chemins.
 function RoutesInternes() {
   const { utilisateur } = useAuth();
   const role = utilisateur?.role;
-  const entrees = NAVIGATION_PAR_ROLE[role] || [];
+  const entrees = entreesPour(role);
 
   return (
     <Routes>
