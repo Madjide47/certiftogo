@@ -93,6 +93,20 @@ utilisateurs (compte de connexion)
 > la **certification l'active** (`diplome.service.js`). Un compte fermé ne
 > peut pas demander d'OTP (403 `COMPTE_INACTIF`).
 
+**`014_pieces_jointes.sql`** — table `pieces_jointes`. L'établissement
+transmettait des **données** ; il transmet désormais aussi les **actes** qui les
+fondent. Deux portées exclusives : individuelle (`candidat_id` — relevé de
+notes, rapport de stage) et collective (`promotion_id` — procès-verbal de
+délibération, arrêté de jury). Cycle : `deposee → vue → validee | rejetee`.
+
+> Les fichiers vivent dans `backend/stockage/` (privé, ignoré par git), **jamais**
+> dans `uploads/` qui est servi en statique : un PDF de diplôme est fait pour
+> circuler, un relevé de notes non. Chaque lecture passe par
+> `GET /api/pieces/:id/contenu`, qui vérifie le rôle, l'appartenance, puis
+> recalcule l'empreinte SHA-256 — une substitution sur le disque est détectée.
+> Un lot dont une pièce obligatoire manque, a été rejetée ou n'a pas été
+> ouverte ne peut pas être validé (409).
+
 **`003_coherence_promotion_session.sql`** — clé étrangère composite
 `(session_id, annee_id)` : la session d'une promotion doit appartenir à l'année
 de cette promotion, ce que 002 laissait passer.
@@ -166,7 +180,9 @@ npm run db:demo    # reset + seed + démo (données riches pour présentation)
 cd backend
 npm install
 npm run dev       # http://localhost:4000  (nodemon)
-npm test          # 186 tests (intégration + référentiel + WhatsApp + signature)
+npm test          # 228 tests — exécution SÉQUENTIELLE (--test-concurrency=1) :
+                  # les fichiers partagent la base certiftogo_test, et les écrire
+                  # en parallèle corrompt le canal du test runner.
 ```
 
 ### Frontends

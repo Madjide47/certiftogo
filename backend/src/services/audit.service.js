@@ -76,6 +76,13 @@ export const ACTIONS = {
   IMPORT_SIMULE: 'import_simule',
   IMPORT_EXECUTE: 'import_execute',
 
+  // Pièces justificatives
+  PIECE_DEPOSEE: 'piece_deposee',
+  PIECE_CONSULTEE: 'piece_consultee',
+  PIECE_VALIDEE: 'piece_validee',
+  PIECE_REJETEE: 'piece_rejetee',
+  PIECE_SUPPRIMEE: 'piece_supprimee',
+
   // Transmission et instruction
   LOT_TRANSMIS: 'lot_transmis',
   LOT_EXAMINE: 'lot_examine',

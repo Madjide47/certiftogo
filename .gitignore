@@ -31,3 +31,6 @@ coverage/
 
 # Claude Code (paramètres locaux)
 .claude/
+
+# Pièces justificatives déposées par les établissements (stockage privé)
+backend/stockage/

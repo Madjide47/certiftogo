@@ -76,6 +76,9 @@ Dernière mise à jour : 2 août 2026.
 | D-02 | **Transmission d'une promotion entière en un clic** | ✅ |
 | D-03 | **Génération automatique des dossiers** à la transmission | ✅ |
 | D-04 | **Écran de confirmation** « transmettre 250 étudiants ? » | ⬜ |
+| D-09 | **Pièces justificatives** : dépôt par étudiant (relevé de notes, rapport de stage…) et par promotion (procès-verbal) | ✅ |
+| D-10 | **Consultation et décision du ministère** sur chaque pièce (ouverte → vue → validée / rejetée) | ✅ |
+| D-11 | **Blocage de la validation** d'un lot dont une pièce obligatoire manque ou n'a pas été examinée | ✅ |
 | D-05 | Transmission de **données structurées**, jamais de PDF | ✅ |
 | D-06 | **File d'attente du ministère par lot** (et non dossier par dossier) | ✅ |
 | D-07 | **Rejet partiel** : le lot avance, les dossiers fautifs reviennent | ✅ |
@@ -94,6 +97,7 @@ Dernière mise à jour : 2 août 2026.
 | E-07 | Contrôle auto : cohérence de la promotion | ✅ |
 | E-08 | Contrôle auto : format du matricule | ✅ |
 | E-09 | **Détection d'anomalies statistiques** (ex. 250 étudiants nés la même année) | ✅ |
+| E-12 | Contrôle auto : pièces obligatoires présentes, examinées, non rejetées | ✅ |
 | E-10 | Tableau de synthèse d'un lot avant validation humaine | ✅ |
 | E-11 | Validation officielle du lot | ✅ |
 

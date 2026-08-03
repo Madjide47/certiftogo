@@ -16,6 +16,7 @@
 // ─────────────────────────────────────────────────────────────
 import * as lotModel from '../models/lot.model.js';
 import * as habilitationModel from '../models/habilitation.model.js';
+import * as pieces from './piece-jointe.service.js';
 import { estTelephoneValide, MENTIONS } from '../utils/validators.js';
 
 const AGE_MINIMUM = 15;
@@ -51,6 +52,11 @@ export async function controlerLot(lot) {
     if (!doublons.has(candidat_id)) doublons.set(candidat_id, new Set());
     doublons.get(candidat_id).add(type_diplome_existant);
   }
+
+  // E-12 — pièces justificatives. Un dossier sans relevé de notes n'est
+  // pas instruisable : il n'y a rien à vérifier, seulement une
+  // déclaration à croire sur parole.
+  const dossierPieces = await pieces.controlerLot(lot, dossiers);
 
   const aujourdhui = jour(new Date());
   const bloquants = [];
@@ -120,6 +126,9 @@ export async function controlerLot(lot) {
       erreurs.push(`mention inconnue (${d.mention})`);
     }
 
+    // E-12 — pièces manquantes ou rejetées pour cet étudiant.
+    erreurs.push(...(dossierPieces.manquantsParDossier.get(d.id) || []));
+
     if (erreurs.length > 0) {
       bloquants.push({
         dossier_id: d.id,
@@ -131,10 +140,34 @@ export async function controlerLot(lot) {
     }
   }
 
+  const anomalies = detecterAnomalies(lot, dossiers);
+
+  // Les pièces collectives manquent au lot entier, pas à un dossier :
+  // les imputer à un étudiant ferait rejeter la mauvaise personne.
+  if (dossierPieces.manquantsCollectifs.length > 0) {
+    anomalies.push({
+      code: 'PIECES_COLLECTIVES_MANQUANTES',
+      message: `Acte(s) de délibération absent(s) : ${dossierPieces.manquantsCollectifs.join(', ')}. La validation du lot est bloquée tant qu'ils manquent.`,
+    });
+  }
+  if (dossierPieces.nonExaminees > 0) {
+    anomalies.push({
+      code: 'PIECES_NON_EXAMINEES',
+      message: `${dossierPieces.nonExaminees} pièce(s) n'ont pas encore été ouvertes. Le lot ne peut pas être validé avant leur examen.`,
+    });
+  }
+
   return {
-    synthese: synthetiser(lot, dossiers, bloquants),
+    synthese: {
+      ...synthetiser(lot, dossiers, bloquants),
+      pieces: {
+        non_examinees: dossierPieces.nonExaminees,
+        rejetees: dossierPieces.rejetees,
+        collectives_manquantes: dossierPieces.manquantsCollectifs,
+      },
+    },
     bloquants,
-    anomalies: detecterAnomalies(lot, dossiers),
+    anomalies,
   };
 }
 

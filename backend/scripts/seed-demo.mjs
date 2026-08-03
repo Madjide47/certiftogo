@@ -16,6 +16,7 @@ import * as diplomeService from '../src/services/diplome.service.js';
 import * as verificationService from '../src/services/verification.service.js';
 import * as promotionService from '../src/services/promotion.service.js';
 import * as lotService from '../src/services/lot.service.js';
+import * as pieceService from '../src/services/piece-jointe.service.js';
 import { genererReferenceDossier } from '../src/utils/reference-generator.js';
 
 const MINISTERE_ID = '10000000-0000-0000-0000-000000000001';
@@ -124,6 +125,38 @@ async function creerDossierAuStatut(etab, candidat, statutCible) {
  * bouton de création grisé faute d'année académique — la démonstration
  * s'arrêtait au premier clic.
  */
+/**
+ * Dépose une pièce de démonstration.
+ *
+ * On passe par le service, pas par un INSERT : c'est lui qui écrit le
+ * fichier, calcule l'empreinte et refuse ce qui n'est pas un vrai PDF.
+ * Un seed qui court-circuiterait ces règles produirait une base que
+ * l'application elle-même jugerait incohérente.
+ */
+async function deposerPiece({ candidat_id, promotion_id, etablissement_id, agent_id }, type, nom) {
+  const contenu = Buffer.from(
+    `%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n% ${nom}\n`,
+    'latin1'
+  );
+  const fichier = {
+    buffer: contenu,
+    size: contenu.length,
+    originalname: nom,
+    mimetype: 'application/pdf',
+  };
+  const utilisateur = { utilisateur_id: agent_id, role: 'etablissement', etablissement_id };
+
+  try {
+    if (candidat_id) {
+      await pieceService.deposerPourCandidat(candidat_id, utilisateur, { type_piece: type }, fichier);
+    } else {
+      await pieceService.deposerPourPromotion(promotion_id, utilisateur, { type_piece: type }, fichier);
+    }
+  } catch (e) {
+    console.warn(`    ! pièce ${type} : ${e.message}`);
+  }
+}
+
 async function creerChaineAcademique(etab, annee, session, candidats) {
   const { rows: fac } = await query(
     `INSERT INTO facultes (etablissement_id, nom, code, statut)
@@ -167,6 +200,14 @@ async function creerChaineAcademique(etab, annee, session, candidats) {
         const inscription = await promotionService.inscrire(promotion.id, etab.id, {
           candidat_id: candidat.id,
         });
+        // Le relevé de notes conditionne l'instruction : sans lui, chaque
+        // dossier serait bloqué et la file du ministère ne montrerait que
+        // des rejets automatiques.
+        await deposerPiece(
+          { candidat_id: candidat.id, etablissement_id: etab.id, agent_id: etab.agent_id },
+          'releve_notes',
+          `releve-${candidat.numero_etudiant || candidat.id.slice(0, 8)}.pdf`
+        );
         const admis = Math.random() > 0.25;
         await promotionService.enregistrerResultat(promotion.id, inscription.id, etab.id, {
           statut: admis ? 'admis' : 'ajourne',
@@ -177,6 +218,14 @@ async function creerChaineAcademique(etab, annee, session, candidats) {
         console.warn(`    ! inscription ${etab.prefix}: ${e.message}`);
       }
     }
+
+    // Le procès-verbal vaut pour la promotion entière.
+    await deposerPiece(
+      { promotion_id: promotion.id, etablissement_id: etab.id, agent_id: etab.agent_id },
+      'proces_verbal',
+      `pv-deliberation-${promotion.id.slice(0, 8)}.pdf`
+    );
+
     promotions.push(promotion);
   }
 

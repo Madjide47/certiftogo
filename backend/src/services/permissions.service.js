@@ -23,6 +23,7 @@ export const PERMISSIONS = {
     'promotion.modifier',
     'promotion.inscrire',
     'promotion.importer',
+    'piece.deposer',
   ],
   chef_scolarite: [
     'candidat.creer',
@@ -37,6 +38,8 @@ export const PERMISSIONS = {
     'promotion.resultat',
     'promotion.controler',
     'promotion.valider_interne',
+    'piece.deposer',
+    'piece.supprimer',
   ],
   directeur: [
     'candidat.creer',
@@ -53,6 +56,8 @@ export const PERMISSIONS = {
     'promotion.valider_interne',
     'promotion.transmettre',
     'agent.creer',
+    'piece.deposer',
+    'piece.supprimer',
   ],
 };
 

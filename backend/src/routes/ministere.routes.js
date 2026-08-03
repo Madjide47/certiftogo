@@ -7,6 +7,7 @@ import * as ministereController from '../controllers/ministere.controller.js';
 import * as gouvernanceController from '../controllers/gouvernance.controller.js';
 import * as lotController from '../controllers/lot.controller.js';
 import * as ancrageController from '../controllers/ancrage.controller.js';
+import * as pieceController from '../controllers/piece.controller.js';
 import * as correctionService from '../services/correction.service.js';
 import * as quatreYeux from '../services/validation-critique.service.js';
 import * as diplomeService from '../services/diplome.service.js';
@@ -41,6 +42,10 @@ router.patch('/habilitations/:id/statut', gouvernanceController.changerStatutHab
 
 // ── Lots de transmission : la file d'attente est faite de lots, pas de
 // dossiers isolés. L'instruction porte sur le lot, la décision sur le dossier.
+// Les pièces d'un lot : ce que l'agent ouvre avant de statuer.
+router.get('/lots/:id/pieces', pieceController.listerPourLot);
+router.post('/pieces/:id/decision', pieceController.decider);
+
 router.get('/lots', lotController.lister);
 router.get('/lots/:id', lotController.detailler);
 router.post('/lots/:id/examiner', lotController.examiner);

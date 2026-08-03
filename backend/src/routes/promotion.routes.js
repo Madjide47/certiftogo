@@ -3,45 +3,30 @@
 // Cohortes et inscriptions des étudiants.
 // ─────────────────────────────────────────────────────────────
 import { Router } from 'express';
-import multer from 'multer';
 import * as promotionController from '../controllers/promotion.controller.js';
 import * as lotController from '../controllers/lot.controller.js';
+import * as pieceController from '../controllers/piece.controller.js';
 import { authJWT } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/role.middleware.js';
-import { ErreurApp } from '../utils/errors.js';
+import { recevoirFichier } from '../middlewares/televersement.middleware.js';
 import { requirePermission } from '../services/permissions.service.js';
+import { TAILLE_MAX_OCTETS } from '../services/piece-jointe.service.js';
 
 const router = Router();
 
-// Le fichier reste en mémoire : il est analysé puis jeté, jamais stocké.
+// Le classeur reste en mémoire : il est analysé puis jeté, jamais stocké.
 // 5 Mo suffisent largement — un classeur de 12 000 lignes pèse ~1 Mo.
-const EXTENSIONS = /\.(xlsx|csv)$/i;
-const televersement = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
-  fileFilter: (req, fichier, suite) => {
-    if (!EXTENSIONS.test(fichier.originalname || '')) {
-      return suite(
-        new ErreurApp(400, 'FORMAT_NON_SUPPORTE', 'Formats acceptés : .xlsx et .csv.')
-      );
-    }
-    return suite(null, true);
-  },
+const recevoirClasseur = recevoirFichier({
+  tailleMax: 5 * 1024 * 1024,
+  extensions: /\.(xlsx|csv)$/i,
+  messageFormat: 'Formats acceptés : .xlsx et .csv.',
 });
 
-/** Traduit les erreurs de multer en erreurs métier plutôt qu'en 500. */
-function recevoirFichier(req, res, next) {
-  televersement.single('fichier')(req, res, (err) => {
-    if (!err) return next();
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return next(new ErreurApp(413, 'FICHIER_TROP_VOLUMINEUX', 'Fichier limité à 5 Mo.'));
-    }
-    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
-      return next(new ErreurApp(400, 'CHAMP_FICHIER_INVALIDE', 'Le fichier doit être envoyé dans le champ « fichier ».'));
-    }
-    return next(err);
-  });
-}
+const recevoirPiece = recevoirFichier({
+  tailleMax: TAILLE_MAX_OCTETS,
+  extensions: /\.(pdf|jpe?g|png)$/i,
+  messageFormat: 'Formats acceptés : PDF, JPEG, PNG.',
+});
 
 router.use(authJWT, requireRole('etablissement'));
 
@@ -63,7 +48,16 @@ router.put('/:id/inscriptions/:inscriptionId', requirePermission('promotion.resu
 router.delete('/:id/inscriptions/:inscriptionId', promotionController.desinscrire);
 
 // Import d'une promotion entière. `?simulation=true` valide sans écrire.
-router.post('/:id/import', requirePermission('promotion.importer'), recevoirFichier, promotionController.importer);
+router.post('/:id/import', requirePermission('promotion.importer'), recevoirClasseur, promotionController.importer);
+
+// ── Pièces collectives : procès-verbal de délibération, arrêté de jury ──
+router.get('/:id/pieces', pieceController.listerPourPromotion);
+router.post(
+  '/:id/pieces',
+  requirePermission('piece.deposer'),
+  recevoirPiece,
+  pieceController.deposerPourPromotion
+);
 
 // Transmission de la promotion entière au ministère : génère un lot et
 // un dossier par étudiant admis.

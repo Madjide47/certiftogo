@@ -21,7 +21,13 @@ import { genererReferenceDossier } from '../utils/reference-generator.js';
 import { journaliser, journaliserStatutDossier, ACTIONS } from './audit.service.js';
 import * as notifications from './notification.service.js';
 import * as permissions from './permissions.service.js';
-import { nettoyerTexte, estUuidValide, estDansEnum, estDateValide } from '../utils/validators.js';
+import {
+  nettoyerTexte,
+  estUuidValide,
+  estDansEnum,
+  canoniserDate,
+  FORMATS_DATE_ACCEPTES,
+} from '../utils/validators.js';
 
 const STATUTS_LOT = ['transmis', 'en_examen', 'valide', 'partiellement_traite', 'rejete', 'certifie'];
 const INSTRUISABLES = ['transmis', 'en_examen'];
@@ -77,16 +83,22 @@ export async function transmettre(promotion_id, etablissement_id, agent, donnees
   }
 
   // La date de délibération fait foi comme date d'obtention des diplômes.
-  const dateDeliberation = nettoyerTexte(donnees.date_deliberation) || promotion.date_deliberation;
-  if (!dateDeliberation) {
+  const deliberationSaisie =
+    nettoyerTexte(donnees.date_deliberation) || promotion.date_deliberation;
+  if (!deliberationSaisie) {
     throw new ErreurApp(
       400,
       'DELIBERATION_REQUISE',
       'La date de délibération est requise : elle fait foi comme date d\'obtention.'
     );
   }
-  if (!estDateValide(String(dateDeliberation).slice(0, 10))) {
-    throw new ErreurApp(400, 'DATE_INVALIDE', 'Date de délibération invalide (AAAA-MM-JJ).');
+  const dateDeliberation = canoniserDate(deliberationSaisie);
+  if (!dateDeliberation) {
+    throw new ErreurApp(
+      400,
+      'DATE_INVALIDE',
+      `Date de délibération illisible. Formats acceptés : ${FORMATS_DATE_ACCEPTES}.`
+    );
   }
 
   const inscriptions = await inscriptionModel.listerParPromotion(promotion_id);
@@ -278,6 +290,25 @@ export async function valider(id, agent_ministere_id, donnees = {}) {
 
   const controles = await controlerLot(lot);
   const dossiers = await lotModel.listerDossiers(id);
+
+  // « Ouvert, vu, validé » : le ministère ne valide pas un lot dont il
+  // n'a pas ouvert les pièces. Le contrôle est ici, pas seulement à
+  // l'écran — un appel direct à l'API doit buter dessus aussi.
+  const etatPieces = controles.synthese.pieces || {};
+  if (etatPieces.collectives_manquantes?.length > 0) {
+    throw new ErreurApp(
+      409,
+      'PIECES_COLLECTIVES_MANQUANTES',
+      `Ce lot ne peut pas être validé : ${etatPieces.collectives_manquantes.join(', ')} — acte(s) de délibération absent(s). Demandez-les à l'établissement.`
+    );
+  }
+  if (etatPieces.non_examinees > 0) {
+    throw new ErreurApp(
+      409,
+      'PIECES_NON_EXAMINEES',
+      `${etatPieces.non_examinees} pièce(s) n'ont pas encore été ouvertes. Consultez-les puis validez ou rejetez chacune avant de statuer sur le lot.`
+    );
+  }
 
   // Rejets demandés par l'agent, indexés par dossier.
   const rejetsManuels = new Map();

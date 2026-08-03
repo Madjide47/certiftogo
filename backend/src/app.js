@@ -25,6 +25,7 @@ import referentielRoutes from './routes/referentiel.routes.js';
 import structureRoutes from './routes/structure.routes.js';
 import promotionRoutes from './routes/promotion.routes.js';
 import lotRoutes from './routes/lot.routes.js';
+import pieceRoutes from './routes/piece.routes.js';
 import { journalRouter, corbeilleRouter } from './routes/journal.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import tableauBordRoutes from './routes/tableau-bord.routes.js';
@@ -88,6 +89,7 @@ app.use('/api/referentiel', referentielRoutes);
 app.use('/api/structure', structureRoutes);
 app.use('/api/promotions', promotionRoutes);
 app.use('/api/lots', lotRoutes);
+app.use('/api/pieces', pieceRoutes);
 app.use('/api/journal', journalRouter);
 app.use('/api/corbeille', corbeilleRouter);
 app.use('/api/notifications', notificationRoutes);
@@ -135,7 +137,31 @@ function demarrerWorkerAncrage() {
   logger.info(`Worker d'ancrage actif (toutes les ${intervalle / 1000} s).`);
 }
 
+/**
+ * Défaillances hors requête HTTP.
+ *
+ * Une promesse rejetée dans un worker, un minuteur ou un flux ne passe
+ * par aucun middleware : sans ces gardes, elle tue le processus sans que
+ * rien n'en garde trace, et l'API disparaît en silence. On journalise
+ * toujours ; on ne quitte que sur `uncaughtException`, où l'état du
+ * processus n'est plus fiable — et en laissant au superviseur (Render,
+ * systemd, Docker) le soin de relancer.
+ */
+function surveillerLeProcessus() {
+  process.on('unhandledRejection', (raison) => {
+    logger.error('Promesse rejetée sans traitement :', raison?.stack || raison);
+  });
+
+  process.on('uncaughtException', (err) => {
+    logger.error('Exception non capturée :', err?.stack || err?.message);
+    // Un arrêt propre vaut mieux qu'un processus dans un état inconnu qui
+    // continuerait à certifier des diplômes.
+    setTimeout(() => process.exit(1), 100).unref?.();
+  });
+}
+
 if (process.env.NODE_ENV !== 'test') {
+  surveillerLeProcessus();
   demarrerWorkerAncrage();
   app.listen(PORT, () => {
     logger.info(`API CertifTOGO démarrée sur http://localhost:${PORT}`);

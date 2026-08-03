@@ -23,6 +23,7 @@ import {
   certifierLot,
 } from '../../services/lot.service.js';
 import { LIBELLES_MENTION, messageErreur } from '../../utils/libelles.js';
+import PiecesInstruction from '../../components/PiecesInstruction.jsx';
 import {
   EnTetePage,
   Tableau,
@@ -339,6 +340,13 @@ export default function LotsRecusPage() {
                 </Encart>
               </div>
             )}
+
+            {/* Les pièces AVANT la liste des dossiers : on instruit sur
+                actes, la case à cocher vient après la lecture. */}
+            <div className="mb-5 border-t border-gris-200 pt-4">
+              <h3 className="mb-3 text-lg">Pièces justificatives</h3>
+              <PiecesInstruction lotId={lot.id} onChangement={() => ouvrir(lot)} />
+            </div>
 
             <p className="mb-2 text-sm text-gris-500">
               Cochez les dossiers à renvoyer et motivez chacun : les autres poursuivront

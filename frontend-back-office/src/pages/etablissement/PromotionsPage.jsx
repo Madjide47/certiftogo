@@ -31,6 +31,7 @@ import {
 import { listerAnnees, listerSessions } from '../../services/referentiel.service.js';
 import { listerFilieres, monProfil } from '../../services/structure.service.js';
 import { listerCandidats } from '../../services/candidat.service.js';
+import PiecesJointes from '../../components/PiecesJointes.jsx';
 import {
   LIBELLES_STATUT_PROMOTION,
   TON_STATUT_PROMOTION,
@@ -103,6 +104,10 @@ export default function PromotionsPage() {
   const [rapport, setRapport] = useState(null);
   const [erreurImport, setErreurImport] = useState('');
   const [importEnCours, setImportEnCours] = useState(false);
+
+  // Pièces justificatives
+  const [piecesEtudiant, setPiecesEtudiant] = useState(null);
+  const [piecesPromotion, setPiecesPromotion] = useState(null);
 
   // Transmission
   const [transmission, setTransmission] = useState(null);
@@ -516,6 +521,13 @@ export default function PromotionsPage() {
                     Importer
                   </Bouton>
                 )}
+                <Bouton
+                  variante="discret"
+                  className="ml-3"
+                  onClick={() => setPiecesPromotion(p)}
+                >
+                  Pièces
+                </Bouton>
                 {actionsPromotion(p.statut, mode).map((a) => (
                   <Bouton
                     key={a.statut}
@@ -739,6 +751,18 @@ export default function PromotionsPage() {
                     }
                   >
                     Résultat
+                  </Bouton>
+                  <Bouton
+                    variante="discret"
+                    className="ml-3"
+                    onClick={() =>
+                      setPiecesEtudiant({
+                        candidat_id: i.candidat_id,
+                        nom: `${i.nom} ${i.prenom}`,
+                      })
+                    }
+                  >
+                    Pièces
                   </Bouton>
                   {!promotionFigee && (
                     <Bouton
@@ -1054,6 +1078,34 @@ export default function PromotionsPage() {
             </Bouton>
           </div>
         </form>
+      </Modale>
+
+      {/* ── Pièces d'un étudiant ── */}
+      <Modale
+        ouvert={Boolean(piecesEtudiant)}
+        titre={`Pièces justificatives — ${piecesEtudiant?.nom || ''}`}
+        onFermer={() => setPiecesEtudiant(null)}
+        largeur="max-w-3xl"
+      >
+        <PiecesJointes
+          portee="candidat"
+          cibleId={piecesEtudiant?.candidat_id}
+          aide="Ces documents sont ceux que le ministère ouvrira pour instruire le dossier. Le relevé de notes est obligatoire ; le rapport de stage et les autres pièces le complètent."
+        />
+      </Modale>
+
+      {/* ── Pièces de la promotion ── */}
+      <Modale
+        ouvert={Boolean(piecesPromotion)}
+        titre={`Actes de la promotion — ${piecesPromotion?.libelle || ''}`}
+        onFermer={() => setPiecesPromotion(null)}
+        largeur="max-w-3xl"
+      >
+        <PiecesJointes
+          portee="promotion"
+          cibleId={piecesPromotion?.id}
+          aide="Le procès-verbal de délibération vaut pour la promotion entière : il se dépose une fois, pas une fois par étudiant. Sans lui, le ministère ne peut pas valider le lot."
+        />
       </Modale>
     </div>
   );

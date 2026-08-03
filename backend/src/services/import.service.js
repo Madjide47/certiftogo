@@ -19,7 +19,8 @@ import {
   canoniserTelephone,
   estTelephoneValide,
   estEmailValide,
-  estDateValide,
+  canoniserDate,
+  FORMATS_DATE_ACCEPTES,
   SEXES,
   MENTIONS,
 } from '../utils/validators.js';
@@ -66,6 +67,19 @@ function valeurCellule(cellule) {
     return v.richText.map((t) => t.text).join('').trim();
   }
   return String(v).trim();
+}
+
+/**
+ * Excel stocke une date en nombre de jours depuis le 30/12/1899. Une
+ * colonne de dates mise au format « Standard » ressort donc en 36600 —
+ * l'agent voit pourtant une date à l'écran, et ne comprendrait pas qu'on
+ * la lui refuse. Cinq chiffres au minimum : « 2000 » reste une année.
+ */
+function dateDepuisSerieExcel(valeur) {
+  if (typeof valeur !== 'string' || !/^\d{5}(\.\d+)?$/.test(valeur)) return valeur;
+  const serie = Number(valeur);
+  if (serie < 10000 || serie > 99999) return valeur;
+  return new Date(Date.UTC(1899, 11, 30) + Math.floor(serie) * 86400000);
 }
 
 /**
@@ -165,9 +179,19 @@ function validerLigne(brut) {
   d.email = nettoyerTexte(brut.email);
   if (d.email && !estEmailValide(d.email)) erreurs.push(`email invalide (${d.email})`);
 
-  d.date_naissance = nettoyerTexte(brut.date_naissance);
-  if (d.date_naissance && !estDateValide(d.date_naissance)) {
-    erreurs.push(`date de naissance invalide (${d.date_naissance}), format attendu AAAA-MM-JJ`);
+  // La date est CANONISÉE, pas seulement contrôlée : un fichier écrit en
+  // « 15/03/2000 » est parfaitement légitime, c'est la base qui exige
+  // AAAA-MM-JJ. Refuser l'usage local ferait retoucher à la main des
+  // classeurs de plusieurs centaines de lignes.
+  const naissanceBrute = nettoyerTexte(brut.date_naissance);
+  const naissance = canoniserDate(dateDepuisSerieExcel(naissanceBrute));
+  if (naissance === null) {
+    erreurs.push(
+      `date de naissance illisible (${naissanceBrute}), formats acceptés : ${FORMATS_DATE_ACCEPTES}`
+    );
+    d.date_naissance = null;
+  } else {
+    d.date_naissance = naissance ?? null;
   }
 
   d.lieu_naissance = nettoyerTexte(brut.lieu_naissance);
@@ -408,7 +432,7 @@ export async function genererModele() {
     ['prenom', 'Obligatoire.'],
     ['telephone', 'Recommandé : sert d\'identifiant de connexion. Format +228XXXXXXXX. Unique dans le fichier.'],
     ['email', 'Facultatif.'],
-    ['date_naissance', 'Facultatif. Format AAAA-MM-JJ.'],
+    ['date_naissance', `Facultatif. ${FORMATS_DATE_ACCEPTES}. Une colonne Excel au format Date convient aussi.`],
     ['lieu_naissance', 'Facultatif.'],
     ['sexe', 'Facultatif. M ou F.'],
     ['moyenne', 'Facultatif. Nombre entre 0 et 20.'],

@@ -1424,7 +1424,8 @@ describe('Import Excel — promotion entière', () => {
       .post(`/api/promotions/${PROMO_SEED}/import`)
       .set(auth(t))
       .attach('fichier', Buffer.from('nimportequoi'), 'diplome.pdf');
-    assert.equal(res.status, 400);
+    // 415 : le serveur a compris la requête, c'est le média qu'il refuse.
+    assert.equal(res.status, 415);
     assert.equal(res.body.error.code, 'FORMAT_NON_SUPPORTE');
   });
 
@@ -1651,7 +1652,10 @@ describe('Lot de transmission — émission, contrôles, rejet partiel', () => {
   let dossiersGL;
 
   /** Crée une promotion peuplée, avec les résultats demandés. */
-  async function preparerPromotion(token, { filiere_id, niveau, libelle, etudiants }) {
+  async function preparerPromotion(
+    token,
+    { filiere_id, niveau, libelle, etudiants, sansPieces = false }
+  ) {
     const promo = await api().post('/api/promotions').set(auth(token)).send({
       filiere_id, annee_id: ANNEE, libelle, niveau,
     });
@@ -1678,6 +1682,26 @@ describe('Lot de transmission — émission, contrôles, rejet partiel', () => {
         .put(`/api/promotions/${promotionId}/inscriptions/${inscription.body.data.inscription.id}`)
         .set(auth(token))
         .send({ statut: etudiant.statut, mention: etudiant.mention, moyenne: etudiant.moyenne });
+
+      // Le relevé de notes est obligatoire : sans lui, le dossier est
+      // bloqué à l'instruction. Le déposer ici, c'est reproduire le
+      // parcours réel plutôt que tester un cas qui n'arrive jamais.
+      if (!sansPieces) {
+        await api()
+          .post(`/api/candidats/${candidat.body.data.candidat.id}/pieces`)
+          .set(auth(token))
+          .field('type_piece', 'releve_notes')
+          .attach('fichier', PDF, `releve-${etudiant.matricule}.pdf`);
+      }
+    }
+
+    if (!sansPieces) {
+      // Le procès-verbal de délibération vaut pour la promotion entière.
+      await api()
+        .post(`/api/promotions/${promotionId}/pieces`)
+        .set(auth(token))
+        .field('type_piece', 'proces_verbal')
+        .attach('fichier', PDF, `pv-${niveau}-${Date.now()}.pdf`);
     }
 
     await api()
@@ -1685,6 +1709,22 @@ describe('Lot de transmission — émission, contrôles, rejet partiel', () => {
       .set(auth(token))
       .send({ statut: 'ouverte' });
     return promotionId;
+  }
+
+  /**
+   * Ouvre puis valide toutes les pièces d'un lot, comme le ferait un
+   * agent : le serveur refuse de valider un lot dont des pièces n'ont
+   * pas été examinées.
+   */
+  async function instruirePieces(lotId, tokenMinistere) {
+    const dossier = await api().get(`/api/ministere/lots/${lotId}/pieces`).set(auth(tokenMinistere));
+    for (const piece of [...dossier.body.data.collectives, ...dossier.body.data.individuelles]) {
+      await api().get(`/api/pieces/${piece.id}/contenu`).set(auth(tokenMinistere));
+      await api()
+        .post(`/api/ministere/pieces/${piece.id}/decision`)
+        .set(auth(tokenMinistere))
+        .send({ statut: 'validee' });
+    }
   }
 
   test('ne transmet que les étudiants admis et crée un dossier par étudiant', async () => {
@@ -1804,6 +1844,8 @@ describe('Lot de transmission — émission, contrôles, rejet partiel', () => {
     assert.equal(bloquants.length, 1);
     assert.match(bloquants[0].erreurs.join(' '), /non habilité/);
 
+    await instruirePieces(transmission.body.data.lot.id, tMin);
+
     const validation = await api()
       .post(`/api/ministere/lots/${transmission.body.data.lot.id}/valider`)
       .set(auth(tMin)).send({});
@@ -1817,6 +1859,13 @@ describe('Lot de transmission — émission, contrôles, rejet partiel', () => {
     const examen = await api().post(`/api/ministere/lots/${lotGL}/examiner`).set(auth(t));
     assert.equal(examen.status, 200);
     assert.equal(examen.body.data.lot.statut, 'en_examen');
+
+    // Les pièces d'abord : le lot ne se valide pas avant leur examen.
+    const avantExamen = await api().post(`/api/ministere/lots/${lotGL}/valider`).set(auth(t)).send({});
+    assert.equal(avantExamen.status, 409);
+    assert.equal(avantExamen.body.error.code, 'PIECES_NON_EXAMINEES');
+
+    await instruirePieces(lotGL, t);
 
     const aRejeter = dossiersGL[0];
     const res = await api()
@@ -3156,5 +3205,304 @@ describe('Sous-rôles d\'établissement et workflow interne', () => {
       .set(auth(principal)).send({ mode: 'simple' });
     assert.equal(res.status, 200);
     assert.equal(res.body.data.etablissement.mode_workflow, 'simple');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Pièces justificatives — dépôt, instruction, intégrité.
+//
+// Deux affirmations à tenir : un fichier ne devient une pièce
+// d'instruction que s'il est ce qu'il prétend être, et le ministère ne
+// valide rien qu'il n'ait ouvert.
+// ═══════════════════════════════════════════════════════════════════
+
+/** PDF minimal — signature comprise, puisque c'est elle qui est contrôlée. */
+const PDF = Buffer.from(
+  '%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n',
+  'latin1'
+);
+
+describe('Pièces justificatives — dépôt', () => {
+  let jetonEtab;
+  let candidatId;
+
+  before(async () => {
+    jetonEtab = await login('+22890000002');
+    const liste = await api().get('/api/candidats').set(auth(jetonEtab));
+    candidatId = liste.body.data.candidats[0].id;
+  });
+
+  test('expose le catalogue des types avec leur portée', async () => {
+    const res = await api().get('/api/pieces/types').set(auth(jetonEtab));
+    assert.equal(res.status, 200);
+    const releve = res.body.data.types.find((t) => t.code === 'releve_notes');
+    assert.equal(releve.portee, 'candidat');
+    assert.equal(releve.requise, true);
+    assert.equal(res.body.data.types.find((t) => t.code === 'proces_verbal').portee, 'promotion');
+  });
+
+  test('accepte un PDF et le crée « déposée »', async () => {
+    const res = await api()
+      .post(`/api/candidats/${candidatId}/pieces`)
+      .set(auth(jetonEtab))
+      .field('type_piece', 'releve_notes')
+      .attach('fichier', PDF, 'releve.pdf');
+
+    assert.equal(res.status, 201);
+    assert.equal(res.body.data.piece.statut, 'deposee');
+    assert.equal(res.body.data.piece.type_libelle, 'Relevé de notes');
+    // Le chemin sur le disque ne doit jamais franchir l'API.
+    assert.equal('chemin' in res.body.data.piece, false);
+  });
+
+  test('refuse une extension hors liste', async () => {
+    const res = await api()
+      .post(`/api/candidats/${candidatId}/pieces`)
+      .set(auth(jetonEtab))
+      .field('type_piece', 'releve_notes')
+      .attach('fichier', Buffer.from('MZ'), 'virus.exe');
+
+    assert.equal(res.status, 415);
+    assert.equal(res.body.error.code, 'FORMAT_NON_SUPPORTE');
+  });
+
+  test('refuse un contenu qui ne correspond pas au format annoncé', async () => {
+    // Un exécutable renommé « .pdf » : l'extension ment, la signature non.
+    const res = await api()
+      .post(`/api/candidats/${candidatId}/pieces`)
+      .set(auth(jetonEtab))
+      .field('type_piece', 'releve_notes')
+      .attach('fichier', Buffer.from('MZ programme'), 'faux.pdf');
+
+    assert.equal(res.status, 415);
+    assert.equal(res.body.error.code, 'CONTENU_INCOHERENT');
+  });
+
+  test('refuse un acte collectif déposé sur un étudiant', async () => {
+    const res = await api()
+      .post(`/api/candidats/${candidatId}/pieces`)
+      .set(auth(jetonEtab))
+      .field('type_piece', 'proces_verbal')
+      .attach('fichier', PDF, 'pv.pdf');
+
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'PORTEE_INCOHERENTE');
+  });
+
+  test('refuse un type de pièce inconnu', async () => {
+    const res = await api()
+      .post(`/api/candidats/${candidatId}/pieces`)
+      .set(auth(jetonEtab))
+      .field('type_piece', 'photo_de_vacances')
+      .attach('fichier', PDF, 'doc.pdf');
+
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'TYPE_PIECE_INCONNU');
+  });
+
+  test('refuse un dépôt sans fichier', async () => {
+    const res = await api()
+      .post(`/api/candidats/${candidatId}/pieces`)
+      .set(auth(jetonEtab))
+      .field('type_piece', 'releve_notes');
+
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'FICHIER_REQUIS');
+  });
+
+  test('refuse un étudiant inexistant sans erreur serveur', async () => {
+    const res = await api()
+      .post('/api/candidats/99999999-9999-9999-9999-999999999999/pieces')
+      .set(auth(jetonEtab))
+      .field('type_piece', 'releve_notes')
+      .attach('fichier', PDF, 'releve.pdf');
+
+    assert.equal(res.status, 404);
+    assert.equal(res.body.error.code, 'CANDIDAT_INTROUVABLE');
+  });
+});
+
+describe('Pièces justificatives — instruction et intégrité', () => {
+  let jetonEtab;
+  let jetonMinistere;
+  let candidatId;
+  let pieceId;
+
+  before(async () => {
+    jetonEtab = await login('+22890000002');
+    jetonMinistere = await login('+22890000001');
+    const liste = await api().get('/api/candidats').set(auth(jetonEtab));
+    candidatId = liste.body.data.candidats[0].id;
+
+    const res = await api()
+      .post(`/api/candidats/${candidatId}/pieces`)
+      .set(auth(jetonEtab))
+      .field('type_piece', 'rapport_stage')
+      .field('libelle', 'Stage de fin de cycle')
+      .attach('fichier', PDF, 'rapport.pdf');
+    pieceId = res.body.data.piece.id;
+  });
+
+  test('la consultation par le ministère marque « vue », pas « validée »', async () => {
+    const res = await api().get(`/api/pieces/${pieceId}/contenu`).set(auth(jetonMinistere));
+    assert.equal(res.status, 200);
+    assert.match(res.headers['content-type'], /application\/pdf/);
+    assert.match(res.headers['content-disposition'], /inline/);
+
+    const { rows } = await pool.query(`SELECT statut FROM pieces_jointes WHERE id=$1`, [pieceId]);
+    assert.equal(rows[0].statut, 'vue');
+  });
+
+  test('un rejet sans motif est refusé', async () => {
+    const res = await api()
+      .post(`/api/ministere/pieces/${pieceId}/decision`)
+      .set(auth(jetonMinistere))
+      .send({ statut: 'rejetee' });
+
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'MOTIF_REQUIS');
+  });
+
+  test('une décision inconnue est refusée', async () => {
+    const res = await api()
+      .post(`/api/ministere/pieces/${pieceId}/decision`)
+      .set(auth(jetonMinistere))
+      .send({ statut: 'peut_etre' });
+
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'DECISION_INCONNUE');
+  });
+
+  test('l\'établissement ne décide pas à la place du ministère', async () => {
+    const res = await api()
+      .post(`/api/ministere/pieces/${pieceId}/decision`)
+      .set(auth(jetonEtab))
+      .send({ statut: 'validee' });
+
+    assert.equal(res.status, 403);
+  });
+
+  test('une pièce instruite ne peut plus être retirée', async () => {
+    await api()
+      .post(`/api/ministere/pieces/${pieceId}/decision`)
+      .set(auth(jetonMinistere))
+      .send({ statut: 'validee' });
+
+    const res = await api().delete(`/api/pieces/${pieceId}`).set(auth(jetonEtab));
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'PIECE_INSTRUITE');
+  });
+
+  test('une pièce non instruite se retire', async () => {
+    const creation = await api()
+      .post(`/api/candidats/${candidatId}/pieces`)
+      .set(auth(jetonEtab))
+      .field('type_piece', 'attestation')
+      .attach('fichier', PDF, 'attestation.pdf');
+
+    const res = await api()
+      .delete(`/api/pieces/${creation.body.data.piece.id}`)
+      .set(auth(jetonEtab));
+    assert.equal(res.status, 200);
+
+    const { rows } = await pool.query(`SELECT id FROM pieces_jointes WHERE id=$1`, [
+      creation.body.data.piece.id,
+    ]);
+    assert.equal(rows.length, 0);
+  });
+
+  test('un fichier disparu du disque le dit, au lieu de servir du vide', async () => {
+    const creation = await api()
+      .post(`/api/candidats/${candidatId}/pieces`)
+      .set(auth(jetonEtab))
+      .field('type_piece', 'acte_naissance')
+      .attach('fichier', PDF, 'acte.pdf');
+
+    // Disparition du fichier sous la ligne qui le référence.
+    await pool.query(`UPDATE pieces_jointes SET chemin='pieces/introuvable.pdf' WHERE id=$1`, [
+      creation.body.data.piece.id,
+    ]);
+
+    const res = await api()
+      .get(`/api/pieces/${creation.body.data.piece.id}/contenu`)
+      .set(auth(jetonEtab));
+
+    assert.equal(res.status, 410);
+    assert.equal(res.body.error.code, 'FICHIER_ABSENT');
+  });
+
+  test('un contenu modifié sur le disque est détecté par son empreinte', async () => {
+    const creation = await api()
+      .post(`/api/candidats/${candidatId}/pieces`)
+      .set(auth(jetonEtab))
+      .field('type_piece', 'piece_identite')
+      .attach('fichier', PDF, 'cni.pdf');
+
+    await pool.query(`UPDATE pieces_jointes SET empreinte=$2 WHERE id=$1`, [
+      creation.body.data.piece.id,
+      'f'.repeat(64),
+    ]);
+
+    const res = await api()
+      .get(`/api/pieces/${creation.body.data.piece.id}/contenu`)
+      .set(auth(jetonEtab));
+
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'PIECE_ALTEREE');
+  });
+
+  test('un identifiant qui n\'est pas un UUID donne 404, pas 500', async () => {
+    const res = await api().get('/api/pieces/pas-un-uuid/contenu').set(auth(jetonEtab));
+    assert.equal(res.status, 404);
+    assert.equal(res.body.error.code, 'PIECE_INTROUVABLE');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Défaillances techniques — aucune ne doit sortir en « erreur interne ».
+//
+// Ce qui casse en production n'est presque jamais le cas nominal : c'est
+// un corps mal formé, une route absente, un identifiant fantaisiste. Si
+// ces cas répondent 500, l'exploitant cherche une panne serveur là où il
+// n'y a qu'une requête invalide.
+// ═══════════════════════════════════════════════════════════════════
+describe('Robustesse — erreurs techniques traduites', () => {
+  test('un corps JSON illisible donne 400, pas 500', async () => {
+    const res = await api()
+      .post('/api/auth/request-otp')
+      .set('Content-Type', 'application/json')
+      .send('{"telephone": ');
+
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'CORPS_INVALIDE');
+  });
+
+  test('une route inexistante répond au format standard', async () => {
+    const res = await api().get('/api/nexiste-pas');
+    assert.equal(res.status, 404);
+    assert.equal(res.body.success, false);
+    assert.equal(res.body.error.code, 'ROUTE_INTROUVABLE');
+  });
+
+  test('un identifiant non-UUID ne remonte jamais une erreur PostgreSQL', async () => {
+    const t = await login('+22890000002');
+    for (const chemin of [
+      '/api/candidats/xxx',
+      '/api/promotions/xxx',
+      '/api/dossiers/xxx',
+      '/api/pieces/xxx/contenu',
+    ]) {
+      const res = await api().get(chemin).set(auth(t));
+      assert.ok(res.status < 500, `${chemin} a répondu ${res.status}`);
+    }
+  });
+
+  test('une erreur métier garde son message, une erreur serveur non', async () => {
+    const t = await login('+22890000002');
+    const res = await api().post('/api/candidats').set(auth(t)).send({ nom: 'SANS' });
+    assert.equal(res.status, 400);
+    // Le message métier est destiné à l'agent : il doit être explicite.
+    assert.ok(res.body.error.message.length > 10);
+    assert.notEqual(res.body.error.message, 'Une erreur interne est survenue.');
   });
 });
