@@ -8,6 +8,9 @@ import * as gouvernanceController from '../controllers/gouvernance.controller.js
 import * as lotController from '../controllers/lot.controller.js';
 import * as ancrageController from '../controllers/ancrage.controller.js';
 import * as correctionService from '../services/correction.service.js';
+import * as quatreYeux from '../services/validation-critique.service.js';
+import * as diplomeService from '../services/diplome.service.js';
+import * as ancrageService from '../services/ancrage.service.js';
 import { authJWT } from '../middlewares/auth.middleware.js';
 import { requireRole } from '../middlewares/role.middleware.js';
 
@@ -52,6 +55,43 @@ router.post('/ancrage/:id/relancer', ancrageController.relancer);
 router.get('/ancrage', ancrageController.etat);
 router.post('/lots/:id/certifier', ancrageController.certifierLot);
 router.get('/lots/:id/ancrage', ancrageController.progression);
+
+// ── Contrôle à quatre yeux (ADR-015) ──────────────────────────────
+// Les exécuteurs sont injectés ici : sans cela, le service de validation
+// dépendrait de `diplome` et `ancrage`, qui dépendent déjà de lui.
+const EXECUTEURS = {
+  [quatreYeux.ACTIONS_CRITIQUES.DIPLOME_REVOQUER]: (charge) =>
+    diplomeService.revoquer(charge.diplome_id, charge.motif, { approuve: true }),
+  [quatreYeux.ACTIONS_CRITIQUES.LOT_CERTIFIER]: (charge) =>
+    ancrageService.certifierLot(charge.lot_id, charge.ministere_id, { approuve: true }),
+};
+
+router.get('/validations', async (req, res, next) => {
+  try {
+    const validations = await quatreYeux.lister(req.utilisateur, req.query);
+    return res.json({ success: true, data: { validations, active: quatreYeux.estActive() } });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/validations/:id/approuver', async (req, res, next) => {
+  try {
+    const data = await quatreYeux.approuver(req.params.id, req.utilisateur, EXECUTEURS);
+    return res.json({ success: true, data });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/validations/:id/refuser', async (req, res, next) => {
+  try {
+    const validation = await quatreYeux.refuser(req.params.id, req.utilisateur, (req.body || {}).motif);
+    return res.json({ success: true, data: { validation } });
+  } catch (err) {
+    return next(err);
+  }
+});
 
 router.get('/demandes', gouvernanceController.listerDemandes);
 router.post('/demandes/:id/examiner', gouvernanceController.examinerDemande);

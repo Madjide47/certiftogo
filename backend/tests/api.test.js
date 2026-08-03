@@ -2603,6 +2603,157 @@ describe('Notifications — catalogue, centre in-app et préférences', () => {
   });
 });
 
+// ── Contrôle à quatre yeux et portefeuille de service ──────────
+describe('Contrôle à quatre yeux (ADR-015)', () => {
+  let secondAgent;
+  let diplomeId;
+
+  before(async () => {
+    // Il faut deux agents ministère : c'est tout l'intérêt du dispositif.
+    const admin = await login('+22890000003');
+    await api().post('/api/admin/utilisateurs').set(auth(admin)).send({
+      nom: 'SECOND', prenom: 'Regard', telephone: '+22898000001', role: 'ministere',
+      ministere_id: '10000000-0000-0000-0000-000000000001',
+    });
+    secondAgent = '+22898000001';
+
+    const { rows } = await pool.query(
+      `SELECT id FROM diplomes WHERE statut = 'actif' ORDER BY date_certification DESC LIMIT 1`
+    );
+    diplomeId = rows[0].id;
+  });
+
+  test('désactivé par défaut : la révocation reste immédiate', async () => {
+    const t = await login('+22890000001');
+    const res = await api().get('/api/ministere/validations').set(auth(t));
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.active, false);
+  });
+
+  test('activé : la révocation attend un second agent (202)', async () => {
+    process.env.DOUBLE_VALIDATION = 'true';
+    try {
+      const t = await login('+22890000001');
+      const res = await api()
+        .post(`/api/ministere/diplomes/${diplomeId}/revoquer`)
+        .set(auth(t))
+        .send({ motif: 'Erreur de délibération constatée.' });
+
+      assert.equal(res.status, 202, JSON.stringify(res.body));
+      assert.equal(res.body.data.en_attente_validation, true);
+      assert.equal(res.body.data.validation.action, 'diplome.revoquer');
+
+      // Le diplôme n'est PAS révoqué tant que personne n'a approuvé.
+      const { rows } = await pool.query(`SELECT statut FROM diplomes WHERE id = $1`, [diplomeId]);
+      assert.equal(rows[0].statut, 'actif');
+    } finally {
+      delete process.env.DOUBLE_VALIDATION;
+    }
+  });
+
+  test('le demandeur ne peut pas s\'approuver lui-même', async () => {
+    process.env.DOUBLE_VALIDATION = 'true';
+    try {
+      const t = await login('+22890000001');
+      const liste = await api().get('/api/ministere/validations').set(auth(t));
+      const attente = liste.body.data.validations.find((v) => v.statut === 'en_attente');
+      assert.ok(attente, 'une demande est en attente');
+
+      const res = await api()
+        .post(`/api/ministere/validations/${attente.id}/approuver`)
+        .set(auth(t));
+      assert.equal(res.status, 403);
+      assert.equal(res.body.error.code, 'AUTO_APPROBATION_INTERDITE');
+    } finally {
+      delete process.env.DOUBLE_VALIDATION;
+    }
+  });
+
+  test('un second agent approuve : l\'action s\'exécute', async () => {
+    process.env.DOUBLE_VALIDATION = 'true';
+    try {
+      const premier = await login('+22890000001');
+      const liste = await api().get('/api/ministere/validations').set(auth(premier));
+      const attente = liste.body.data.validations.find((v) => v.statut === 'en_attente');
+
+      const second = await login(secondAgent);
+      const res = await api()
+        .post(`/api/ministere/validations/${attente.id}/approuver`)
+        .set(auth(second));
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      assert.equal(res.body.data.action, 'diplome.revoquer');
+
+      // Cette fois le diplôme est bien révoqué.
+      const { rows } = await pool.query(`SELECT statut FROM diplomes WHERE id = $1`, [diplomeId]);
+      assert.equal(rows[0].statut, 'revoque');
+
+      // Et la demande ne se rejoue pas.
+      const rejeu = await api()
+        .post(`/api/ministere/validations/${attente.id}/approuver`)
+        .set(auth(second));
+      assert.equal(rejeu.status, 409);
+      assert.equal(rejeu.body.error.code, 'DEJA_INSTRUITE');
+    } finally {
+      delete process.env.DOUBLE_VALIDATION;
+    }
+  });
+
+  test('un refus exige un motif et clôt la demande', async () => {
+    process.env.DOUBLE_VALIDATION = 'true';
+    try {
+      const premier = await login('+22890000001');
+      const { rows } = await pool.query(
+        `SELECT id FROM diplomes WHERE statut = 'actif' LIMIT 1`
+      );
+      if (!rows.length) return;
+
+      await api()
+        .post(`/api/ministere/diplomes/${rows[0].id}/revoquer`)
+        .set(auth(premier)).send({ motif: 'Demande à refuser.' });
+
+      const liste = await api().get('/api/ministere/validations').set(auth(premier));
+      const attente = liste.body.data.validations.find((v) => v.statut === 'en_attente');
+
+      const second = await login(secondAgent);
+      const sansMotif = await api()
+        .post(`/api/ministere/validations/${attente.id}/refuser`)
+        .set(auth(second)).send({});
+      assert.equal(sansMotif.status, 400);
+      assert.equal(sansMotif.body.error.code, 'MOTIF_REQUIS');
+
+      const refus = await api()
+        .post(`/api/ministere/validations/${attente.id}/refuser`)
+        .set(auth(second)).send({ motif: 'Révocation non justifiée.' });
+      assert.equal(refus.status, 200);
+      assert.equal(refus.body.data.validation.statut, 'refusee');
+
+      // Le diplôme reste actif : le refus protège le titulaire.
+      const { rows: apres } = await pool.query(
+        `SELECT statut FROM diplomes WHERE id = $1`,
+        [rows[0].id]
+      );
+      assert.equal(apres[0].statut, 'actif');
+    } finally {
+      delete process.env.DOUBLE_VALIDATION;
+    }
+  });
+
+  test('surveille l\'autonomie du portefeuille de service', async () => {
+    const admin = await login('+22890000003');
+    const res = await api().get('/api/tableau-bord').set(auth(admin));
+    assert.equal(res.status, 200);
+
+    const p = res.body.data.tableau.portefeuille;
+    assert.ok(p, 'le portefeuille figure au tableau de bord administrateur');
+    assert.equal(typeof p.solde, 'number');
+    // Le seuil est exprimé en JOURS : « 4 jours restants » dit ce qu'un
+    // montant en POL ne dit pas.
+    assert.equal(p.seuil_jours, 30);
+    assert.ok(['normal', 'bas', 'critique', 'inconnu'].includes(p.niveau));
+    assert.ok(p.operations_30j >= 0);
+  });
+});
+
 // ── Cas exceptionnels ──────────────────────────────────────────
 // Un système national se juge moins sur son parcours nominal que sur ce
 // qu'il fait quand la réalité s'en écarte.

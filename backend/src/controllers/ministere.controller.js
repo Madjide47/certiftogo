@@ -132,8 +132,11 @@ export async function recupererDiplome(req, res, next) {
 /** POST /api/ministere/diplomes/:id/revoquer  body: { motif } */
 export async function revoquerDiplome(req, res, next) {
   try {
-    const diplome = await diplomeService.revoquer(req.params.id, req.body?.motif);
-    return res.json({ success: true, data: { diplome } });
+    const resultat = await diplomeService.revoquer(req.params.id, req.body?.motif);
+    if (resultat?.en_attente_validation) {
+      return res.status(202).json({ success: true, data: resultat });
+    }
+    return res.json({ success: true, data: { diplome: resultat } });
   } catch (err) {
     return next(err);
   }

@@ -18,6 +18,7 @@ import * as lotModel from '../models/lot.model.js';
 import * as blockchain from './blockchain.service.js';
 import { journaliser, journaliserStatutDossier, ACTIONS } from './audit.service.js';
 import * as notifications from './notification.service.js';
+import * as quatreYeux from './validation-critique.service.js';
 import { construireDiplomeDepuisDossier } from './diplome.service.js';
 import { ErreurApp } from '../utils/errors.js';
 import { estUuidValide, versEntier } from '../utils/validators.js';
@@ -31,7 +32,7 @@ const TAILLE_LOT_WORKER = Number(process.env.ANCRAGE_TAILLE_LOT || 10);
  * Certifie tous les dossiers validés d'un lot.
  * Les diplômes sont créés immédiatement, l'ancrage est mis en file.
  */
-export async function certifierLot(lot_id, ministere_id) {
+export async function certifierLot(lot_id, ministere_id, options = {}) {
   if (!ministere_id) {
     throw new ErreurApp(403, 'MINISTERE_REQUIS', 'Compte ministère requis pour certifier.');
   }
@@ -44,6 +45,18 @@ export async function certifierLot(lot_id, ministere_id) {
       'LOT_NON_CERTIFIABLE',
       `Un lot « ${lot.statut} » ne peut pas être certifié. Validez-le d'abord.`
     );
+  }
+
+  // Certifier des milliers de diplomes d'un geste merite un second regard.
+  if (quatreYeux.estActive() && !options.approuve) {
+    const demande = await quatreYeux.demander({
+      action: quatreYeux.ACTIONS_CRITIQUES.LOT_CERTIFIER,
+      entite: 'lots_transmission',
+      entite_id: lot_id,
+      charge_utile: { lot_id, ministere_id },
+      motif: `Certification du lot ${lot.reference} (${lot.effectif} dossiers).`,
+    });
+    return { en_attente_validation: true, validation: demande };
   }
 
   const dossiers = await lotModel.listerDossiers(lot_id);
@@ -291,4 +304,66 @@ export async function relancer(id) {
 export async function traiterMaintenant(taille) {
   const n = versEntier(taille) || TAILLE_LOT_WORKER;
   return traiterTranche(Math.min(Math.max(n, 1), 100));
+}
+
+// ── Surveillance du portefeuille de service (CDC §34.2) ────────────
+
+/** Coût moyen d'une opération, en POL. Mesuré sur Amoy. */
+const COUT_MOYEN_POL = Number(process.env.COUT_MOYEN_POL || 0.0075);
+/** Seuil d'alerte, exprimé en jours de consommation restante. */
+const SEUIL_JOURS = Number(process.env.SOLDE_SEUIL_JOURS || 30);
+
+/**
+ * Évalue l'autonomie du portefeuille de service.
+ *
+ * Le seuil est exprimé en JOURS plutôt qu'en montant : c'est ce qui laisse
+ * le temps d'agir. Un solde de 2 POL ne dit rien ; « 4 jours restants »
+ * dit tout.
+ */
+export async function surveillerSolde() {
+  let portefeuille;
+  try {
+    portefeuille = await blockchain.soldeService();
+  } catch (err) {
+    return { disponible: false, erreur: err.message };
+  }
+
+  // Consommation observée sur les 30 derniers jours.
+  const { rows } = await (await import('../config/database.js')).query(
+    `SELECT COUNT(*)::int AS operations
+       FROM transactions_blockchain
+      WHERE date_transaction >= now() - INTERVAL '30 days'`
+  );
+
+  const parJour = rows[0].operations / 30;
+  const coutJournalier = parJour * COUT_MOYEN_POL;
+  const jours = coutJournalier > 0 ? Math.floor(portefeuille.solde / coutJournalier) : null;
+
+  const niveau =
+    jours === null ? 'inconnu' : jours <= 7 ? 'critique' : jours <= SEUIL_JOURS ? 'bas' : 'normal';
+
+  const etat = {
+    ...portefeuille,
+    operations_30j: rows[0].operations,
+    cout_journalier_pol: Number(coutJournalier.toFixed(6)),
+    jours_restants: jours,
+    seuil_jours: SEUIL_JOURS,
+    niveau,
+  };
+
+  if (niveau === 'bas' || niveau === 'critique') {
+    await journaliser({
+      action: ACTIONS.SOLDE_BAS,
+      entite: 'blockchain',
+      resultat: 'echec',
+      message: `Portefeuille de service : ${jours} jour(s) d'autonomie (seuil ${SEUIL_JOURS}).`,
+    });
+    await notifications.notifierRole(notifications.EVENEMENTS.SOLDE_BAS, 'admin_systeme', {
+      jours,
+      solde: portefeuille.solde,
+      niveau,
+    });
+  }
+
+  return etat;
 }

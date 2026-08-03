@@ -147,3 +147,37 @@ export async function verifierOnChain(hash) {
     certificateur: r[4],
   };
 }
+
+/**
+ * Solde du portefeuille de service, celui qui paie le gas.
+ *
+ * Un portefeuille vide arrête la certification du pays : c'est un risque
+ * d'exploitation, pas un incident technique, et il se surveille comme tel.
+ *
+ * @returns {Promise<{ adresse, solde_wei, solde, mock }>}
+ */
+export async function soldeService() {
+  if (MODE === 'mock') {
+    return {
+      adresse: '0xMOCK',
+      solde_wei: '5000000000000000000',
+      solde: 5,
+      mock: true,
+    };
+  }
+
+  if (!PRIVATE_KEY) {
+    throw new Error('BLOCKCHAIN_PRIVATE_KEY absent : solde du portefeuille illisible.');
+  }
+  const provider = new ethers.JsonRpcProvider(RPC_URL);
+  const signataire = new ethers.Wallet(PRIVATE_KEY, provider);
+  const adresse = await signataire.getAddress();
+  const solde = await provider.getBalance(adresse);
+
+  return {
+    adresse,
+    solde_wei: solde.toString(),
+    solde: Number(solde) / 1e18,
+    mock: false,
+  };
+}

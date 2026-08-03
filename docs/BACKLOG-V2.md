@@ -122,7 +122,7 @@ Dernière mise à jour : 2 août 2026.
 | G-05 | Indicateur de progression « 8 245 / 12 000 ancrés » | ✅ |
 | G-06 | Comportement du candidat pendant l'ancrage | ✅ |
 | G-07 | Réponse de la vérification publique pendant l'ancrage | ✅ |
-| G-08 | Notification admin en cas d'échec de transaction | ⬜ |
+| G-08 | Notification admin en cas d'échec de transaction | ✅ |
 
 ## H. Coûts blockchain
 
@@ -130,7 +130,7 @@ Dernière mise à jour : 2 août 2026.
 |---|---|---|
 | H-01 | **`gas_used` remonté** dans `transactions_blockchain` (aujourd'hui toujours NULL) | ✅ |
 | H-02 | Coût cumulé par établissement et par période | ✅ |
-| H-03 | **Wallet de service** : solde, seuil d'alerte bas, procédure de recharge | 🔨 *procédure et seuils définis, lecture du solde à faire* |
+| H-03 | **Wallet de service** : solde, seuil d'alerte bas, procédure de recharge | ✅ |
 | H-04 | **Batching** de plusieurs certifications | 🔨 *documenté avec son coût, non implémenté* |
 | H-05 | **Arbre de Merkle** : une racine par promotion + preuves individuelles | 🔨 *documenté avec son coût cache, non implémenté* |
 | H-06 | Ancre individuelle à la révocation (le Merkle seul l'empêche) | ✅ *compromis retenu et justifié* |
@@ -206,7 +206,7 @@ Dernière mise à jour : 2 août 2026.
 | L-05 | **Anti-brute force OTP** (nombre d'essais) | ✅ |
 | L-06 | **Anti-énumération de comptes** | ✅ |
 | L-07 | **Gestion de session** : refresh token, révocation, sessions concurrentes | ✅ |
-| L-08 | **Double validation à quatre yeux** pour les actions critiques | 🔨 *table et contrainte à quatre yeux posées, activation à brancher* |
+| L-08 | **Double validation à quatre yeux** pour les actions critiques | ✅ |
 | L-09 | **Clé privée du ministère hors serveur applicatif** (KMS / HSM) | 🔨 *registre et emplacement déclarés ; KMS/HSM à raccorder* |
 | L-10 | Audit de chaque signature | ⬜ |
 | L-11 | **Rotation de clés** et procédure de compromission | ✅ |
@@ -298,7 +298,7 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 163 |
+| ✅ fait et testé | 166 |
 | 🔨 partiel ou en cours | 17 |
 | ⬜ à faire | 8 |
 | **Total** | **174** |

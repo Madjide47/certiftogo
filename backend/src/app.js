@@ -102,7 +102,41 @@ app.use(gestionErreurs);
 
 // ── Démarrage du serveur ───────────────────────────────────────────
 // En mode test (supertest), on n'ouvre pas de port : l'app est importée telle quelle.
+/**
+ * Worker d'ancrage : vide la file au rythme du réseau blockchain.
+ *
+ * Intégré au processus applicatif tant qu'un service dédié n'est pas
+ * justifié (voir chapitre 37 : `ancrage` est le premier candidat à
+ * l'extraction). `unref()` pour ne pas empêcher l'arrêt du processus.
+ */
+function demarrerWorkerAncrage() {
+  const intervalle = Number(process.env.ANCRAGE_INTERVALLE_MS || 30_000);
+  if (process.env.ANCRAGE_WORKER === 'off') {
+    logger.info("Worker d'ancrage désactivé (ANCRAGE_WORKER=off).");
+    return;
+  }
+
+  const minuteur = setInterval(async () => {
+    try {
+      const { traiterTranche } = await import('./services/ancrage.service.js');
+      const bilan = await traiterTranche();
+      if (bilan.traitees > 0) {
+        logger.info(
+          `[ancrage] ${bilan.confirmees} confirmée(s), ${bilan.echouees} en échec sur ${bilan.traitees}.`
+        );
+      }
+    } catch (err) {
+      // Le worker ne doit jamais faire tomber le serveur.
+      logger.error(`[ancrage] Tranche en échec : ${err.message}`);
+    }
+  }, intervalle);
+
+  minuteur.unref?.();
+  logger.info(`Worker d'ancrage actif (toutes les ${intervalle / 1000} s).`);
+}
+
 if (process.env.NODE_ENV !== 'test') {
+  demarrerWorkerAncrage();
   app.listen(PORT, () => {
     logger.info(`API CertifTOGO démarrée sur http://localhost:${PORT}`);
     logger.info(`Environnement : ${process.env.NODE_ENV || 'development'}`);

@@ -35,6 +35,7 @@ export const EVENEMENTS = {
   AGENT_DESACTIVE: 'agent_desactive',
 
   CLE_COMPROMISE: 'cle_compromise',
+  SOLDE_BAS: 'solde_bas',
   ANCRAGE_ECHOUE: 'ancrage_echoue',
   ANCRAGE_RETABLI: 'ancrage_retabli',
 };
@@ -196,6 +197,16 @@ export const CATALOGUE = {
     sujet: 'Clé de signature compromise',
     corps:
       'La clé {{empreinte}}… est déclarée compromise. Motif : {{motif}}. {{diplomes}} diplôme(s) sont concernés et doivent être re-signés.',
+  },
+
+  [EVENEMENTS.SOLDE_BAS]: {
+    destinataire: 'administrateur système',
+    canaux: ['in_app', 'whatsapp'],
+    priorite: 'haute',
+    critique: true,
+    sujet: 'Portefeuille de service à recharger',
+    corps:
+      "Le portefeuille qui paie les frais blockchain n'a plus que {{jours}} jour(s) d'autonomie ({{solde}} POL). Sans recharge, la certification s'arrêtera.",
   },
 
   [EVENEMENTS.ANCRAGE_ECHOUE]: {

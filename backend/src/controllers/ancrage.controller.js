@@ -7,7 +7,8 @@ import * as ancrageService from '../services/ancrage.service.js';
 export async function certifierLot(req, res, next) {
   try {
     const data = await ancrageService.certifierLot(req.params.id, req.utilisateur.ministere_id);
-    return res.status(201).json({ success: true, data });
+    // 202 : la demande est acceptée mais attend l'approbation d'un second agent.
+    return res.status(data.en_attente_validation ? 202 : 201).json({ success: true, data });
   } catch (err) {
     return next(err);
   }

@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────
 import * as tb from '../models/tableau-bord.model.js';
 import * as ancrageModel from '../models/ancrage.model.js';
+import { surveillerSolde } from './ancrage.service.js';
 import { instantane } from '../middlewares/metriques.middleware.js';
 import { ErreurApp } from '../utils/errors.js';
 import { versEntier } from '../utils/validators.js';
@@ -97,11 +98,12 @@ async function candidat(utilisateur) {
 // ── Administrateur ─────────────────────────────────────────────────
 
 async function admin({ jours }) {
-  const [sante, cout, file, verifications] = await Promise.all([
+  const [sante, cout, file, verifications, portefeuille] = await Promise.all([
     tb.santeBase(),
     tb.coutBlockchain(),
     ancrageModel.etatFile(),
     tb.verificationsParJour(jours),
+    surveillerSolde(),
   ]);
 
   const transactions = Number(cout.transactions) || 0;
@@ -120,6 +122,7 @@ async function admin({ jours }) {
         transactions === 0 ? null : Math.round((confirmees / transactions) * 10000) / 100,
     },
     file_ancrage: parStatut(file),
+    portefeuille,
     verifications_par_jour: verifications,
   };
 }

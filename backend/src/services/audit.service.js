@@ -37,6 +37,10 @@ export const ACTIONS = {
   RECUPERATION_VALIDEE: 'recuperation_validee',
   RECUPERATION_REFUSEE: 'recuperation_refusee',
   CLE_COMPROMISE: 'cle_compromise',
+  VALIDATION_DEMANDEE: 'validation_demandee',
+  VALIDATION_APPROUVEE: 'validation_approuvee',
+  VALIDATION_REFUSEE: 'validation_refusee',
+  SOLDE_BAS: 'solde_bas',
   MODE_WORKFLOW_CHANGE: 'mode_workflow_change',
 
   // Gouvernance

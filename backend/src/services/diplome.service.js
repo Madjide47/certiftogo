@@ -13,6 +13,7 @@ import * as dossierModel from '../models/dossier.model.js';
 import * as txModel from '../models/transaction-blockchain.model.js';
 import { withTransaction } from '../config/database.js';
 import { journaliser, journaliserStatutDossier, ACTIONS } from './audit.service.js';
+import * as quatreYeux from './validation-critique.service.js';
 import * as notifications from './notification.service.js';
 import { ErreurApp } from '../utils/errors.js';
 import { genererReferenceDiplome } from '../utils/reference-generator.js';
@@ -242,7 +243,7 @@ export async function certifier(dossier_id, ministere_id) {
 }
 
 /** Révoque un diplôme actif (motif requis). */
-export async function revoquer(id, motif) {
+export async function revoquer(id, motif, options = {}) {
   const motifNet = typeof motif === 'string' ? motif.trim() : '';
   if (!motifNet) {
     throw new ErreurApp(400, 'MOTIF_REQUIS', 'Un motif de révocation est requis.');
@@ -253,6 +254,20 @@ export async function revoquer(id, motif) {
   }
   if (diplome.statut !== 'actif') {
     throw new ErreurApp(409, 'DIPLOME_NON_REVOCABLE', 'Ce diplôme est déjà révoqué.');
+  }
+
+  // Retirer un diplôme à son titulaire ne doit pas être la décision d'une
+  // seule personne. Quand le contrôle à quatre yeux est actif, l'action
+  // est mise en attente d'un second agent (ADR-015).
+  if (quatreYeux.estActive() && !options.approuve) {
+    const demande = await quatreYeux.demander({
+      action: quatreYeux.ACTIONS_CRITIQUES.DIPLOME_REVOQUER,
+      entite: 'diplomes',
+      entite_id: id,
+      charge_utile: { diplome_id: id, motif: motifNet },
+      motif: motifNet,
+    });
+    return { en_attente_validation: true, validation: demande };
   }
 
   const tx = await blockchain.revoquer({
