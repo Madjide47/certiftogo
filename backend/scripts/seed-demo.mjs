@@ -228,8 +228,20 @@ async function main() {
        RETURNING id`,
       [e.prefix, `+2289${String(randInt(100000000)).padStart(8, '0')}`, cree.id]
     );
+    // Sans habilitation, un établissement ne peut RIEN faire certifier :
+    // le contrôle automatique bloque chaque dossier au motif qu'il n'est
+    // pas autorisé à délivrer ce type de diplôme. Un agrément qui n'en
+    // accorde aucune produit un établissement inerte.
+    for (const type of TYPES) {
+      await query(
+        `INSERT INTO habilitations (etablissement_id, type_diplome, reference_arrete, date_debut)
+         VALUES ($1, $2, $3, CURRENT_DATE - INTERVAL '2 years')`,
+        [cree.id, type, `N° 2024-${String(100 + randInt(800))}/MESR`]
+      );
+    }
+
     etabs.push({ id: cree.id, nom: cree.nom, prefix: e.prefix, agent_id: agent[0].id });
-    console.log(`  + établissement ${cree.nom}`);
+    console.log(`  + établissement ${cree.nom} (${TYPES.length} habilitations)`);
   }
   // Un établissement suspendu pour la démo admin.
   await etablissementModel.definirStatut(etabs[etabs.length - 1].id, 'suspendu');

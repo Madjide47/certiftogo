@@ -1,14 +1,18 @@
 // ─────────────────────────────────────────────────────────────
-// Référentiel national (ministère) : années académiques et sessions.
-// Une seule année peut être ouverte à la fois — le serveur le garantit,
-// l'écran se contente d'expliquer le refus.
+// Référentiel national : années académiques et sessions.
+//
+// Cet écran commande tout le reste. Tant qu'aucune année n'est ouverte,
+// aucun établissement du pays ne peut créer de promotion — et donc rien
+// ne peut être transmis ni certifié. C'est le point d'entrée du cycle
+// annuel, et l'écran le dit explicitement plutôt que de laisser les
+// établissements buter sur un bouton grisé.
+//
+// Une seule année peut être ouverte à la fois : la base le garantit par
+// un index unique partiel. L'interface annonce la conséquence — ouvrir
+// une année suppose de clôturer la précédente — au lieu de laisser
+// découvrir le refus après coup.
 // ─────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react';
-import Modal from '../../components/ui/Modal.jsx';
-import PageHeader from '../../components/ui/PageHeader.jsx';
-import Badge from '../../components/ui/Badge.jsx';
-import Icon from '../../components/ui/Icon.jsx';
-import { INPUT, BTN_PRIMARY, BTN_GHOST, TABLE_WRAP, TH, TD, ROW, ACT } from '../../components/ui/classes.js';
 import {
   listerAnnees,
   creerAnnee,
@@ -21,23 +25,58 @@ import {
 } from '../../services/referentiel.service.js';
 import {
   LIBELLES_STATUT_ANNEE,
-  BADGE_STATUT_ANNEE,
   LIBELLES_TYPE_SESSION,
   OPTIONS_TYPE_SESSION,
   messageErreur,
 } from '../../utils/libelles.js';
+import {
+  EnTetePage,
+  Tableau,
+  Etiquette,
+  Encart,
+  EtatVide,
+  Modale,
+  Bouton,
+  Champ,
+  Saisie,
+  Liste,
+  Icone,
+} from '../../components/ui/index.jsx';
 
 const ANNEE_VIDE = { libelle: '', date_debut: '', date_fin: '' };
 const SESSION_VIDE = { type: 'normale', libelle: '', date_debut: '', date_fin: '' };
 
-function Champ({ label, children }) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-on-surface-variant">{label}</span>
-      {children}
-    </label>
-  );
-}
+const TONS_ANNEE = {
+  preparation: 'info',
+  ouverte: 'vert',
+  cloturee: 'neutre',
+};
+
+const TONS_SESSION = {
+  preparation: 'info',
+  ouverte: 'succes',
+  cloturee: 'neutre',
+};
+
+/**
+ * Transitions proposées — miroir de TRANSITIONS_ANNEE côté serveur.
+ * Une année clôturée ne se rouvre pas : les diplômes qu'elle a produits
+ * sont ancrés sur la blockchain, son périmètre est définitif.
+ */
+const ACTIONS_ANNEE = {
+  preparation: [
+    { statut: 'ouverte', libelle: 'Ouvrir' },
+    { statut: 'cloturee', libelle: 'Clôturer' },
+  ],
+  ouverte: [{ statut: 'cloturee', libelle: 'Clôturer' }],
+  cloturee: [],
+};
+
+const ACTIONS_SESSION = {
+  preparation: [{ statut: 'ouverte', libelle: 'Ouvrir' }],
+  ouverte: [{ statut: 'cloturee', libelle: 'Clôturer' }],
+  cloturee: [],
+};
 
 const dateCourte = (v) => (v ? new Date(v).toLocaleDateString('fr-FR') : '—');
 
@@ -45,13 +84,13 @@ export default function AnneesAcademiquesPage() {
   const [annees, setAnnees] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState('');
+  const [succes, setSucces] = useState('');
 
   const [modaleAnnee, setModaleAnnee] = useState(false);
   const [formAnnee, setFormAnnee] = useState(ANNEE_VIDE);
   const [erreurForm, setErreurForm] = useState('');
   const [enregistrement, setEnregistrement] = useState(false);
 
-  // Panneau des sessions de l'année sélectionnée.
   const [anneeSessions, setAnneeSessions] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [formSession, setFormSession] = useState(SESSION_VIDE);
@@ -80,6 +119,8 @@ export default function AnneesAcademiquesPage() {
     try {
       await creerAnnee(formAnnee);
       setModaleAnnee(false);
+      setFormAnnee(ANNEE_VIDE);
+      setSucces("Année créée en préparation. Ouvrez-la pour que les établissements puissent s'en servir.");
       await charger();
     } catch (err) {
       setErreurForm(messageErreur(err));
@@ -88,10 +129,24 @@ export default function AnneesAcademiquesPage() {
     }
   }
 
-  async function basculerStatut(annee, statut) {
+  async function appliquerStatutAnnee(annee, statut) {
+    if (statut === 'cloturee') {
+      const ok = window.confirm(
+        `Clôturer l'année « ${annee.libelle} » ?\n\n` +
+          "Une année clôturée ne se rouvre pas : les diplômes qu'elle a produits sont ancrés " +
+          'sur la blockchain, son périmètre devient définitif.'
+      );
+      if (!ok) return;
+    }
     setErreur('');
+    setSucces('');
     try {
       await changerStatutAnnee(annee.id, statut);
+      setSucces(
+        statut === 'ouverte'
+          ? `Année ${annee.libelle} ouverte. Les établissements peuvent désormais y rattacher leurs promotions.`
+          : `Année ${annee.libelle} clôturée.`
+      );
       await charger();
     } catch (err) {
       setErreur(messageErreur(err));
@@ -99,7 +154,7 @@ export default function AnneesAcademiquesPage() {
   }
 
   async function retirerAnnee(annee) {
-    if (!window.confirm(`Supprimer l'année ${annee.libelle} ?`)) return;
+    if (!window.confirm(`Supprimer l'année « ${annee.libelle} » ?`)) return;
     setErreur('');
     try {
       await supprimerAnnee(annee.id);
@@ -109,11 +164,11 @@ export default function AnneesAcademiquesPage() {
     }
   }
 
+  // ── Sessions ──────────────────────────────────────────────────
   async function ouvrirSessions(annee) {
     setAnneeSessions(annee);
-    setFormSession(SESSION_VIDE);
     setErreurSession('');
-    setSessions([]);
+    setFormSession(SESSION_VIDE);
     try {
       setSessions(await listerSessions(annee.id));
     } catch (err) {
@@ -121,287 +176,350 @@ export default function AnneesAcademiquesPage() {
     }
   }
 
-  async function ajouterSession(e) {
+  async function rafraichirSessions() {
+    setSessions(await listerSessions(anneeSessions.id));
+  }
+
+  async function soumettreSession(e) {
     e.preventDefault();
     setErreurSession('');
     try {
       await creerSession(anneeSessions.id, formSession);
       setFormSession(SESSION_VIDE);
-      setSessions(await listerSessions(anneeSessions.id));
+      await rafraichirSessions();
     } catch (err) {
       setErreurSession(messageErreur(err));
     }
   }
 
-  async function actionSession(session, action) {
+  async function appliquerStatutSession(session, statut) {
     setErreurSession('');
     try {
-      if (action === 'supprimer') await supprimerSession(session.id);
-      else await changerStatutSession(session.id, action);
-      setSessions(await listerSessions(anneeSessions.id));
+      await changerStatutSession(session.id, statut);
+      await rafraichirSessions();
     } catch (err) {
       setErreurSession(messageErreur(err));
     }
   }
+
+  async function retirerSession(session) {
+    setErreurSession('');
+    try {
+      await supprimerSession(session.id);
+      await rafraichirSessions();
+    } catch (err) {
+      setErreurSession(messageErreur(err));
+    }
+  }
+
+  const anneeOuverte = annees.find((a) => a.statut === 'ouverte');
 
   return (
     <div>
-      <PageHeader
+      <EnTetePage
         titre="Années académiques"
-        sous="Référentiel national — une seule année peut être ouverte à la fois"
+        description="Le calendrier national. Les établissements y rattachent leurs promotions."
+        fil={[{ libelle: 'Référentiel' }, { libelle: 'Années académiques' }]}
       >
-        <button
-          onClick={() => {
-            setFormAnnee(ANNEE_VIDE);
-            setErreurForm('');
-            setModaleAnnee(true);
-          }}
-          className={BTN_PRIMARY}
-        >
-          <Icon name="add" size={20} /> Nouvelle année
-        </button>
-      </PageHeader>
+        <Bouton icone="add" onClick={() => setModaleAnnee(true)}>
+          Nouvelle année
+        </Bouton>
+      </EnTetePage>
 
       {erreur && (
-        <div className="mb-4 rounded-lg bg-error-container px-4 py-3 text-sm text-on-error-container">
-          {erreur}
+        <div className="mb-4">
+          <Encart ton="erreur">{erreur}</Encart>
+        </div>
+      )}
+      {succes && (
+        <div className="mb-4">
+          <Encart ton="succes">{succes}</Encart>
         </div>
       )}
 
-      <div className={TABLE_WRAP}>
-        <table className="w-full">
-          <thead className="bg-surface-container-low/60">
-            <tr>
-              <th className={TH}>Année</th>
-              <th className={TH}>Début</th>
-              <th className={TH}>Fin</th>
-              <th className={TH}>Statut</th>
-              <th className={`${TH} text-right`}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {chargement ? (
-              <tr>
-                <td colSpan={5} className="px-5 py-10 text-center text-on-surface-variant">
-                  Chargement…
-                </td>
-              </tr>
-            ) : annees.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-5 py-10 text-center text-on-surface-variant">
-                  Aucune année académique. Créez-en une pour permettre aux établissements
-                  d'y rattacher leurs promotions.
-                </td>
-              </tr>
-            ) : (
-              annees.map((a) => (
-                <tr key={a.id} className={ROW}>
-                  <td className={`${TD} font-semibold`}>{a.libelle}</td>
-                  <td className={`${TD} text-on-surface-variant`}>{dateCourte(a.date_debut)}</td>
-                  <td className={`${TD} text-on-surface-variant`}>{dateCourte(a.date_fin)}</td>
-                  <td className={TD}>
-                    <Badge className={BADGE_STATUT_ANNEE[a.statut]}>
-                      {LIBELLES_STATUT_ANNEE[a.statut]}
-                    </Badge>
-                  </td>
-                  <td className={`${TD} text-right whitespace-nowrap`}>
-                    <button
-                      onClick={() => ouvrirSessions(a)}
-                      className={`${ACT} text-primary hover:bg-primary-container/10`}
-                    >
-                      Sessions
-                    </button>
-                    {a.statut === 'preparation' && (
-                      <button
-                        onClick={() => basculerStatut(a, 'ouverte')}
-                        className={`${ACT} ml-1 text-emerald-700 hover:bg-emerald-50`}
-                      >
-                        Ouvrir
-                      </button>
-                    )}
-                    {a.statut === 'ouverte' && (
-                      <button
-                        onClick={() => basculerStatut(a, 'cloturee')}
-                        className={`${ACT} ml-1 text-amber-700 hover:bg-amber-50`}
-                      >
-                        Clôturer
-                      </button>
-                    )}
-                    <button
-                      onClick={() => retirerAnnee(a)}
-                      className={`${ACT} ml-1 text-error hover:bg-error-container/50`}
-                    >
-                      Supprimer
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* Le blocage le plus coûteux du système, et le plus invisible :
+          sans année ouverte, tout le pays est à l'arrêt. */}
+      {!anneeOuverte && (
+        <div className="mb-5">
+          <Encart ton="alerte" titre="Aucune année académique ouverte">
+            Tant qu'aucune année n'est ouverte, <strong>aucun établissement</strong> ne peut
+            créer de promotion, donc rien ne peut être transmis ni certifié. Créez une année
+            puis ouvrez-la.
+          </Encart>
+        </div>
+      )}
+
+      {anneeOuverte && (
+        <div className="mb-5">
+          <Encart ton="succes" titre={`Année en cours : ${anneeOuverte.libelle}`}>
+            Du {dateCourte(anneeOuverte.date_debut)} au {dateCourte(anneeOuverte.date_fin)}.
+            Une seule année peut être ouverte à la fois : en ouvrir une autre suppose de
+            clôturer celle-ci.
+          </Encart>
+        </div>
+      )}
+
+      <Tableau
+        legende="Années académiques"
+        chargement={chargement}
+        lignes={annees}
+        colonnes={[
+          {
+            cle: 'libelle',
+            libelle: 'Année',
+            rendu: (a) => <span className="font-medium">{a.libelle}</span>,
+          },
+          {
+            cle: 'periode',
+            libelle: 'Période',
+            tabulaire: true,
+            rendu: (a) => `${dateCourte(a.date_debut)} — ${dateCourte(a.date_fin)}`,
+          },
+          {
+            cle: 'statut',
+            libelle: 'Statut',
+            rendu: (a) => (
+              <Etiquette ton={TONS_ANNEE[a.statut] || 'neutre'}>
+                {LIBELLES_STATUT_ANNEE[a.statut] || a.statut}
+              </Etiquette>
+            ),
+          },
+          {
+            cle: 'actions',
+            libelle: 'Actions',
+            alignement: 'droite',
+            rendu: (a) => (
+              <span className="whitespace-nowrap">
+                <Bouton variante="discret" onClick={() => ouvrirSessions(a)}>
+                  Sessions
+                </Bouton>
+                {(ACTIONS_ANNEE[a.statut] || []).map((action) => (
+                  <Bouton
+                    key={action.statut}
+                    variante="discret"
+                    className="ml-3"
+                    onClick={() => appliquerStatutAnnee(a, action.statut)}
+                  >
+                    {action.libelle}
+                  </Bouton>
+                ))}
+                {a.statut === 'preparation' && (
+                  <Bouton
+                    variante="discret"
+                    className="ml-3 text-erreur hover:text-erreur"
+                    onClick={() => retirerAnnee(a)}
+                  >
+                    Supprimer
+                  </Bouton>
+                )}
+              </span>
+            ),
+          },
+        ]}
+        vide={
+          <EtatVide
+            icone="calendar_month"
+            titre="Aucune année académique"
+            action={
+              <Bouton icone="add" onClick={() => setModaleAnnee(true)}>
+                Créer la première année
+              </Bouton>
+            }
+          >
+            L'année académique est le socle du calendrier national : tout s'y rattache.
+          </EtatVide>
+        }
+      />
 
       {/* ── Création d'une année ── */}
-      <Modal ouvert={modaleAnnee} titre="Nouvelle année académique" onFermer={() => setModaleAnnee(false)}>
+      <Modale
+        ouvert={modaleAnnee}
+        titre="Nouvelle année académique"
+        onFermer={() => setModaleAnnee(false)}
+      >
         <form onSubmit={soumettreAnnee} className="space-y-4">
-          {erreurForm && (
-            <div className="rounded-lg bg-error-container px-4 py-2.5 text-sm text-on-error-container">
-              {erreurForm}
-            </div>
-          )}
-          <Champ label="Libellé * (format AAAA-AAAA)">
-            <input
+          {erreurForm && <Encart ton="erreur">{erreurForm}</Encart>}
+
+          <Champ
+            label="Libellé"
+            htmlFor="an-libelle"
+            requis
+            aide="Format usuel : 2024-2025."
+          >
+            <Saisie
+              id="an-libelle"
               required
               placeholder="2025-2026"
               value={formAnnee.libelle}
-              onChange={(e) => setFormAnnee((f) => ({ ...f, libelle: e.target.value }))}
-              className={INPUT}
+              onChange={(e) => setFormAnnee({ ...formAnnee, libelle: e.target.value })}
             />
           </Champ>
-          <div className="grid grid-cols-2 gap-4">
-            <Champ label="Date de début *">
-              <input
-                required
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Champ label="Date de début" htmlFor="an-debut" requis>
+              <Saisie
+                id="an-debut"
                 type="date"
+                required
                 value={formAnnee.date_debut}
-                onChange={(e) => setFormAnnee((f) => ({ ...f, date_debut: e.target.value }))}
-                className={INPUT}
+                onChange={(e) => setFormAnnee({ ...formAnnee, date_debut: e.target.value })}
               />
             </Champ>
-            <Champ label="Date de fin *">
-              <input
-                required
+            <Champ label="Date de fin" htmlFor="an-fin" requis>
+              <Saisie
+                id="an-fin"
                 type="date"
+                required
                 value={formAnnee.date_fin}
-                onChange={(e) => setFormAnnee((f) => ({ ...f, date_fin: e.target.value }))}
-                className={INPUT}
+                onChange={(e) => setFormAnnee({ ...formAnnee, date_fin: e.target.value })}
               />
             </Champ>
           </div>
-          <p className="text-xs text-on-surface-variant">
-            L'année est créée « en préparation ». Ouvrez-la ensuite pour que les établissements
-            puissent y rattacher leurs promotions.
-          </p>
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={() => setModaleAnnee(false)} className={BTN_GHOST}>
+
+          <Encart ton="info">
+            L'année est créée en préparation : les établissements ne la voient pas encore.
+            Ouvrez-la quand le calendrier est arrêté.
+          </Encart>
+
+          <div className="flex justify-end gap-2 border-t border-gris-200 pt-4">
+            <Bouton variante="neutre" onClick={() => setModaleAnnee(false)}>
               Annuler
-            </button>
-            <button type="submit" disabled={enregistrement} className={BTN_PRIMARY}>
-              {enregistrement ? 'Enregistrement…' : 'Créer'}
-            </button>
+            </Bouton>
+            <Bouton type="submit" enCours={enregistrement}>
+              Créer
+            </Bouton>
           </div>
         </form>
-      </Modal>
+      </Modale>
 
-      {/* ── Sessions de l'année ── */}
-      <Modal
+      {/* ── Sessions d'une année ── */}
+      <Modale
         ouvert={Boolean(anneeSessions)}
         titre={`Sessions — ${anneeSessions?.libelle || ''}`}
         onFermer={() => setAnneeSessions(null)}
-        largeur="max-w-2xl"
+        largeur="max-w-3xl"
       >
         {erreurSession && (
-          <div className="mb-4 rounded-lg bg-error-container px-4 py-2.5 text-sm text-on-error-container">
-            {erreurSession}
+          <div className="mb-4">
+            <Encart ton="erreur">{erreurSession}</Encart>
           </div>
         )}
 
-        {sessions.length === 0 ? (
-          <p className="mb-5 text-sm text-on-surface-variant">Aucune session pour cette année.</p>
-        ) : (
-          <ul className="mb-5 space-y-2">
-            {sessions.map((s) => (
-              <li
-                key={s.id}
-                className="flex items-center justify-between rounded-xl border border-outline-variant/25 px-4 py-3"
-              >
-                <div>
-                  <p className="text-sm font-semibold text-on-surface">
-                    {LIBELLES_TYPE_SESSION[s.type]}
-                    {s.libelle ? ` — ${s.libelle}` : ''}
-                  </p>
-                  <p className="text-xs text-on-surface-variant">
-                    {dateCourte(s.date_debut)} → {dateCourte(s.date_fin)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Badge className={BADGE_STATUT_ANNEE[s.statut]}>
-                    {LIBELLES_STATUT_ANNEE[s.statut]}
-                  </Badge>
+        <Tableau
+          legende="Sessions de l'année"
+          lignes={sessions}
+          colonnes={[
+            {
+              cle: 'type',
+              libelle: 'Type',
+              rendu: (s) => (
+                <span className="font-medium">{LIBELLES_TYPE_SESSION[s.type] || s.type}</span>
+              ),
+            },
+            { cle: 'libelle', libelle: 'Libellé', rendu: (s) => s.libelle || '—' },
+            {
+              cle: 'periode',
+              libelle: 'Période',
+              tabulaire: true,
+              rendu: (s) => `${dateCourte(s.date_debut)} — ${dateCourte(s.date_fin)}`,
+            },
+            {
+              cle: 'statut',
+              libelle: 'Statut',
+              rendu: (s) => (
+                <Etiquette ton={TONS_SESSION[s.statut] || 'neutre'}>
+                  {LIBELLES_STATUT_ANNEE[s.statut] || s.statut}
+                </Etiquette>
+              ),
+            },
+            {
+              cle: 'actions',
+              libelle: 'Actions',
+              alignement: 'droite',
+              rendu: (s) => (
+                <span className="whitespace-nowrap">
+                  {(ACTIONS_SESSION[s.statut] || []).map((a) => (
+                    <Bouton
+                      key={a.statut}
+                      variante="discret"
+                      onClick={() => appliquerStatutSession(s, a.statut)}
+                    >
+                      {a.libelle}
+                    </Bouton>
+                  ))}
                   {s.statut === 'preparation' && (
-                    <button
-                      onClick={() => actionSession(s, 'ouverte')}
-                      className={`${ACT} text-emerald-700 hover:bg-emerald-50`}
+                    <Bouton
+                      variante="discret"
+                      className="ml-3 text-erreur hover:text-erreur"
+                      onClick={() => retirerSession(s)}
                     >
-                      Ouvrir
-                    </button>
+                      Supprimer
+                    </Bouton>
                   )}
-                  {s.statut === 'ouverte' && (
-                    <button
-                      onClick={() => actionSession(s, 'cloturee')}
-                      className={`${ACT} text-amber-700 hover:bg-amber-50`}
-                    >
-                      Clôturer
-                    </button>
-                  )}
-                  <button
-                    onClick={() => actionSession(s, 'supprimer')}
-                    className={`${ACT} text-error hover:bg-error-container/50`}
-                  >
-                    Supprimer
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+                </span>
+              ),
+            },
+          ]}
+          vide={
+            <EtatVide icone="event" titre="Aucune session">
+              Une session découpe l'année : session normale, rattrapage. Une promotion s'y
+              rattache pour situer sa délibération.
+            </EtatVide>
+          }
+        />
 
-        <form onSubmit={ajouterSession} className="space-y-4 border-t border-outline-variant/25 pt-5">
-          <div className="grid grid-cols-2 gap-4">
-            <Champ label="Type *">
-              <select
-                value={formSession.type}
-                onChange={(e) => setFormSession((f) => ({ ...f, type: e.target.value }))}
-                className={INPUT}
-              >
-                {OPTIONS_TYPE_SESSION.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </Champ>
-            <Champ label="Libellé">
-              <input
-                value={formSession.libelle}
-                onChange={(e) => setFormSession((f) => ({ ...f, libelle: e.target.value }))}
-                className={INPUT}
-              />
-            </Champ>
-            <Champ label="Début">
-              <input
-                type="date"
-                value={formSession.date_debut}
-                onChange={(e) => setFormSession((f) => ({ ...f, date_debut: e.target.value }))}
-                className={INPUT}
-              />
-            </Champ>
-            <Champ label="Fin">
-              <input
-                type="date"
-                value={formSession.date_fin}
-                onChange={(e) => setFormSession((f) => ({ ...f, date_fin: e.target.value }))}
-                className={INPUT}
-              />
-            </Champ>
-          </div>
-          <div className="flex justify-end">
-            <button type="submit" className={BTN_PRIMARY}>
-              <Icon name="add" size={20} /> Ajouter la session
-            </button>
-          </div>
-        </form>
-      </Modal>
+        {anneeSessions?.statut !== 'cloturee' && (
+          <form onSubmit={soumettreSession} className="mt-5 border-t border-gris-200 pt-5">
+            <h3 className="mb-3 text-base font-bold">Ajouter une session</h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Champ label="Type" htmlFor="se-type" requis>
+                <Liste
+                  id="se-type"
+                  vide={null}
+                  value={formSession.type}
+                  onChange={(e) => setFormSession({ ...formSession, type: e.target.value })}
+                  options={OPTIONS_TYPE_SESSION}
+                />
+              </Champ>
+              <Champ label="Libellé" htmlFor="se-libelle">
+                <Saisie
+                  id="se-libelle"
+                  placeholder="Session normale 2026"
+                  value={formSession.libelle}
+                  onChange={(e) => setFormSession({ ...formSession, libelle: e.target.value })}
+                />
+              </Champ>
+              <Champ label="Date de début" htmlFor="se-debut" requis>
+                <Saisie
+                  id="se-debut"
+                  type="date"
+                  required
+                  value={formSession.date_debut}
+                  onChange={(e) => setFormSession({ ...formSession, date_debut: e.target.value })}
+                />
+              </Champ>
+              <Champ label="Date de fin" htmlFor="se-fin" requis>
+                <Saisie
+                  id="se-fin"
+                  type="date"
+                  required
+                  value={formSession.date_fin}
+                  onChange={(e) => setFormSession({ ...formSession, date_fin: e.target.value })}
+                />
+              </Champ>
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <p className="flex items-start gap-1.5 text-sm text-gris-500">
+                <Icone nom="info" taille={16} className="mt-0.5 shrink-0" />
+                Les dates doivent tomber dans celles de l'année.
+              </p>
+              <Bouton type="submit" icone="add">
+                Ajouter
+              </Bouton>
+            </div>
+          </form>
+        )}
+      </Modale>
     </div>
   );
 }

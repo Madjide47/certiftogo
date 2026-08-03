@@ -1,13 +1,17 @@
 // ─────────────────────────────────────────────────────────────
-// Ministère — dossiers reçus : instruction du cycle soumis → en_examen →
-// validé / rejeté, puis certification d'un dossier validé.
+// Dossiers reçus — instruction à l'unité.
+//
+// La voie normale est le LOT : un établissement transmet une promotion,
+// le ministère l'instruit d'un bloc depuis « Lots reçus ». Cet écran sert
+// aux cas qui échappent au lot — un dossier isolé, un dossier renvoyé
+// puis retransmis seul, une régularisation.
+//
+// Il reste aussi le seul endroit où l'on voit un dossier indépendamment
+// de son lot : utile quand un diplômé conteste et qu'on part de sa seule
+// référence.
 // ─────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react';
-import Modal from '../../components/ui/Modal.jsx';
-import PageHeader from '../../components/ui/PageHeader.jsx';
-import Badge from '../../components/ui/Badge.jsx';
-import Icon from '../../components/ui/Icon.jsx';
-import { INPUT, BTN_PRIMARY, BTN_GHOST, BTN_DANGER, TABLE_WRAP, TH, TD, ROW, ACT } from '../../components/ui/classes.js';
+import { Link } from 'react-router-dom';
 import {
   listerDossiersRecus,
   examinerDossier,
@@ -17,30 +21,59 @@ import {
 } from '../../services/ministere.service.js';
 import {
   LIBELLES_STATUT_DOSSIER,
-  BADGE_STATUT_DOSSIER,
   LIBELLES_MENTION,
   LIBELLES_TYPE_DIPLOME,
   messageErreur,
 } from '../../utils/libelles.js';
+import {
+  EnTetePage,
+  Tableau,
+  Etiquette,
+  Encart,
+  EtatVide,
+  Modale,
+  Bouton,
+  Champ,
+  Zone,
+  Onglets,
+} from '../../components/ui/index.jsx';
 
-const A_INSTRUIRE = ['soumis', 'en_examen'];
+const TONS = {
+  brouillon: 'neutre',
+  soumis: 'info',
+  en_examen: 'alerte',
+  valide: 'succes',
+  rejete: 'erreur',
+  en_attente_ancrage: 'alerte',
+  certifie: 'vert',
+};
+
+const ONGLETS = [
+  { cle: 'soumis', libelle: 'À prendre en charge' },
+  { cle: 'en_examen', libelle: 'En examen' },
+  { cle: 'valide', libelle: 'À certifier' },
+  { cle: 'rejete', libelle: 'Rejetés' },
+  { cle: '', libelle: 'Tous' },
+];
+
+const date = (v) => (v ? new Date(v).toLocaleDateString('fr-FR') : '—');
 
 export default function DossiersRecusPage() {
   const [dossiers, setDossiers] = useState([]);
-  const [filtreStatut, setFiltreStatut] = useState('');
+  const [onglet, setOnglet] = useState('soumis');
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState('');
-  const [actionEnCours, setActionEnCours] = useState(null);
+  const [succes, setSucces] = useState('');
+  const [enCours, setEnCours] = useState(null);
 
   const [rejetCible, setRejetCible] = useState(null);
   const [motif, setMotif] = useState('');
-  const [erreurRejet, setErreurRejet] = useState('');
 
   async function charger() {
     setChargement(true);
     setErreur('');
     try {
-      setDossiers(await listerDossiersRecus({ statut: filtreStatut }));
+      setDossiers(await listerDossiersRecus({ statut: onglet }));
     } catch (err) {
       setErreur(messageErreur(err));
     } finally {
@@ -51,212 +84,247 @@ export default function DossiersRecusPage() {
   useEffect(() => {
     charger();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtreStatut]);
+  }, [onglet]);
 
-  async function agir(id, action) {
-    setActionEnCours(id);
+  async function agir(dossier, action, message) {
+    setEnCours(dossier.id);
     setErreur('');
+    setSucces('');
     try {
-      await action(id);
+      await action(dossier.id);
+      setSucces(message);
       await charger();
     } catch (err) {
       setErreur(messageErreur(err));
     } finally {
-      setActionEnCours(null);
+      setEnCours(null);
     }
-  }
-
-  async function certifier(d) {
-    if (
-      !window.confirm(
-        `Certifier définitivement le dossier ${d.reference} ?\n` +
-          'Un diplôme signé et ancré en blockchain sera émis. Action irréversible.'
-      )
-    )
-      return;
-    await agir(d.id, certifierDossier);
-  }
-
-  function ouvrirRejet(d) {
-    setRejetCible(d);
-    setMotif('');
-    setErreurRejet('');
   }
 
   async function confirmerRejet(e) {
     e.preventDefault();
-    if (!motif.trim()) {
-      setErreurRejet('Le motif de rejet est requis.');
-      return;
-    }
+    setEnCours(rejetCible.id);
+    setErreur('');
     try {
       await rejeterDossier(rejetCible.id, motif.trim());
+      setSucces(
+        `Dossier ${rejetCible.reference} renvoyé à l'établissement, qui pourra le corriger et le retransmettre.`
+      );
       setRejetCible(null);
+      setMotif('');
       await charger();
     } catch (err) {
-      setErreurRejet(messageErreur(err));
+      setErreur(messageErreur(err));
+    } finally {
+      setEnCours(null);
     }
   }
 
   return (
     <div>
-      <PageHeader titre="Dossiers reçus" sous={`${dossiers.length} dossier(s) transmis`} />
-
-      <div className="mb-4 flex items-center gap-2">
-        <span className="text-sm text-on-surface-variant">Statut :</span>
-        <select
-          value={filtreStatut}
-          onChange={(e) => setFiltreStatut(e.target.value)}
-          className={`${INPUT} mt-0 w-auto py-2`}
-        >
-          <option value="">Tous (transmis)</option>
-          {Object.entries(LIBELLES_STATUT_DOSSIER)
-            .filter(([v]) => v !== 'brouillon')
-            .map(([v, l]) => (
-              <option key={v} value={v}>
-                {l}
-              </option>
-            ))}
-        </select>
-      </div>
+      <EnTetePage
+        titre="Dossiers reçus"
+        description="Instruction dossier par dossier, pour les cas qui n'entrent pas dans un lot."
+        fil={[{ libelle: 'Instruction' }, { libelle: 'Dossiers' }]}
+      />
 
       {erreur && (
-        <div className="mb-4 rounded-lg bg-error-container px-4 py-3 text-sm text-on-error-container">
-          {erreur}
+        <div className="mb-4">
+          <Encart ton="erreur">{erreur}</Encart>
+        </div>
+      )}
+      {succes && (
+        <div className="mb-4">
+          <Encart ton="succes">{succes}</Encart>
         </div>
       )}
 
-      <div className={TABLE_WRAP}>
-        <table className="w-full">
-          <thead className="bg-surface-container-low/60">
-            <tr>
-              <th className={TH}>Référence</th>
-              <th className={TH}>Établissement</th>
-              <th className={TH}>Candidat</th>
-              <th className={TH}>Type</th>
-              <th className={TH}>Mention</th>
-              <th className={TH}>Statut</th>
-              <th className={`${TH} text-right`}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {chargement ? (
-              <tr>
-                <td colSpan={7} className="px-5 py-10 text-center text-on-surface-variant">
-                  Chargement…
-                </td>
-              </tr>
-            ) : dossiers.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-5 py-10 text-center text-on-surface-variant">
-                  Aucun dossier transmis.
-                </td>
-              </tr>
-            ) : (
-              dossiers.map((d) => {
-                const occupe = actionEnCours === d.id;
-                const instruisable = A_INSTRUIRE.includes(d.statut);
-                return (
-                  <tr key={d.id} className={ROW}>
-                    <td className={`${TD} font-semibold`}>{d.reference}</td>
-                    <td className={`${TD} text-on-surface-variant`}>{d.etablissement_nom}</td>
-                    <td className={TD}>
-                      {d.candidat_prenom} {d.candidat_nom}
-                    </td>
-                    <td className={`${TD} text-on-surface-variant`}>
-                      {LIBELLES_TYPE_DIPLOME[d.type_diplome] || '—'}
-                    </td>
-                    <td className={`${TD} text-on-surface-variant`}>
-                      {LIBELLES_MENTION[d.mention] || '—'}
-                    </td>
-                    <td className={TD}>
-                      <Badge className={BADGE_STATUT_DOSSIER[d.statut]}>
-                        {LIBELLES_STATUT_DOSSIER[d.statut] || d.statut}
-                      </Badge>
-                    </td>
-                    <td className={`${TD} text-right`}>
-                      {instruisable ? (
-                        <div className="flex justify-end gap-1">
-                          {d.statut === 'soumis' && (
-                            <button
-                              disabled={occupe}
-                              onClick={() => agir(d.id, examinerDossier)}
-                              className={`${ACT} text-secondary hover:bg-secondary-fixed/40 disabled:opacity-50`}
-                            >
-                              Examiner
-                            </button>
-                          )}
-                          <button
-                            disabled={occupe}
-                            onClick={() => agir(d.id, validerDossier)}
-                            className={`${ACT} text-emerald-600 hover:bg-emerald-50 disabled:opacity-50`}
-                          >
-                            Valider
-                          </button>
-                          <button
-                            disabled={occupe}
-                            onClick={() => ouvrirRejet(d)}
-                            className={`${ACT} text-error hover:bg-error-container/50 disabled:opacity-50`}
-                          >
-                            Rejeter
-                          </button>
-                        </div>
-                      ) : d.statut === 'valide' ? (
-                        <button
-                          disabled={occupe}
-                          onClick={() => certifier(d)}
-                          className={`${BTN_PRIMARY} px-3 py-1.5 text-xs`}
-                        >
-                          <Icon name="workspace_premium" size={16} filled />
-                          {occupe ? 'Certification…' : 'Certifier'}
-                        </button>
-                      ) : d.statut === 'rejete' && d.motif_rejet ? (
-                        <span className="text-xs text-on-surface-variant/70" title={d.motif_rejet}>
-                          Motif renseigné
-                        </span>
-                      ) : (
-                        <span className="text-xs text-on-surface-variant/60">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+      <div className="mb-5">
+        <Encart ton="info">
+          Pour une promotion entière, passez par{' '}
+          <Link to="/lots-recus" className="underline underline-offset-2">
+            Lots reçus
+          </Link>{' '}
+          : l'instruction y bénéficie des contrôles automatiques et du rejet partiel.
+        </Encart>
       </div>
 
-      <Modal
-        ouvert={!!rejetCible}
-        titre={rejetCible ? `Rejeter le dossier ${rejetCible.reference}` : 'Rejeter'}
+      <Onglets onglets={ONGLETS} actif={onglet} onChanger={setOnglet} />
+
+      <Tableau
+        legende="Dossiers transmis au ministère"
+        chargement={chargement}
+        lignes={dossiers}
+        colonnes={[
+          {
+            cle: 'reference',
+            libelle: 'Référence',
+            tabulaire: true,
+            rendu: (d) => (
+              <span>
+                <span className="font-medium">{d.reference}</span>
+                {d.lot_reference && (
+                  <span className="block text-xs text-gris-500">lot {d.lot_reference}</span>
+                )}
+              </span>
+            ),
+          },
+          {
+            cle: 'candidat',
+            libelle: 'Étudiant',
+            rendu: (d) => (
+              <span>
+                <span className="font-medium">{d.candidat_nom}</span> {d.candidat_prenom}
+                <span className="block text-xs text-gris-500">
+                  {d.candidat_numero_etudiant}
+                </span>
+              </span>
+            ),
+          },
+          { cle: 'etablissement_nom', libelle: 'Établissement' },
+          {
+            cle: 'diplome',
+            libelle: 'Diplôme',
+            rendu: (d) => (
+              <span>
+                {LIBELLES_TYPE_DIPLOME[d.type_diplome] || '—'}
+                {d.mention && (
+                  <span className="block text-xs text-gris-500">
+                    mention {LIBELLES_MENTION[d.mention]}
+                  </span>
+                )}
+              </span>
+            ),
+          },
+          {
+            cle: 'date_transmission',
+            libelle: 'Reçu le',
+            rendu: (d) => date(d.date_transmission),
+          },
+          {
+            cle: 'statut',
+            libelle: 'Statut',
+            rendu: (d) => (
+              <span>
+                <Etiquette ton={TONS[d.statut] || 'neutre'}>
+                  {LIBELLES_STATUT_DOSSIER[d.statut] || d.statut}
+                </Etiquette>
+                {d.motif_rejet && (
+                  <span className="block max-w-xs text-xs text-erreur">{d.motif_rejet}</span>
+                )}
+              </span>
+            ),
+          },
+          {
+            cle: 'actions',
+            libelle: 'Actions',
+            alignement: 'droite',
+            rendu: (d) => {
+              const occupe = enCours === d.id;
+              if (d.statut === 'soumis') {
+                return (
+                  <Bouton
+                    variante="discret"
+                    disabled={occupe}
+                    onClick={() =>
+                      agir(d, examinerDossier, `Dossier ${d.reference} pris en examen.`)
+                    }
+                  >
+                    Prendre en examen
+                  </Bouton>
+                );
+              }
+              if (d.statut === 'en_examen') {
+                return (
+                  <span className="whitespace-nowrap">
+                    <Bouton
+                      variante="discret"
+                      disabled={occupe}
+                      onClick={() =>
+                        agir(d, validerDossier, `Dossier ${d.reference} validé, prêt à certifier.`)
+                      }
+                    >
+                      Valider
+                    </Bouton>
+                    <Bouton
+                      variante="discret"
+                      className="ml-3 text-erreur hover:text-erreur"
+                      onClick={() => {
+                        setRejetCible(d);
+                        setMotif('');
+                      }}
+                    >
+                      Rejeter
+                    </Bouton>
+                  </span>
+                );
+              }
+              if (d.statut === 'valide') {
+                return (
+                  <Bouton
+                    variante="discret"
+                    disabled={occupe}
+                    onClick={() =>
+                      agir(
+                        d,
+                        certifierDossier,
+                        `Diplôme émis pour ${d.candidat_nom} ${d.candidat_prenom}.`
+                      )
+                    }
+                  >
+                    Certifier
+                  </Bouton>
+                );
+              }
+              return <span className="text-gris-500">—</span>;
+            },
+          },
+        ]}
+        vide={
+          <EtatVide icone="folder_open" titre="Aucun dossier">
+            {onglet === 'soumis'
+              ? 'Tout ce qui a été transmis est déjà pris en charge.'
+              : 'Aucun dossier ne correspond à ce filtre.'}
+          </EtatVide>
+        }
+      />
+
+      <Modale
+        ouvert={Boolean(rejetCible)}
+        titre={`Rejeter ${rejetCible?.reference || ''}`}
         onFermer={() => setRejetCible(null)}
       >
         <form onSubmit={confirmerRejet} className="space-y-4">
-          {erreurRejet && (
-            <div className="rounded-lg bg-error-container px-4 py-2.5 text-sm text-on-error-container">
-              {erreurRejet}
-            </div>
-          )}
-          <label className="block">
-            <span className="text-sm font-medium text-on-surface-variant">Motif du rejet *</span>
-            <textarea
+          <Encart ton="info">
+            Le dossier repart à l'établissement, qui pourra le corriger et le retransmettre. Ce
+            n'est pas un refus définitif.
+          </Encart>
+
+          <Champ
+            label="Motif du rejet"
+            htmlFor="motif-dossier"
+            requis
+            aide="Lu tel quel par l'établissement : indiquez précisément ce qui doit être corrigé."
+          >
+            <Zone
+              id="motif-dossier"
               rows={4}
+              required
               value={motif}
               onChange={(e) => setMotif(e.target.value)}
-              placeholder="Précisez la raison du rejet (transmise à l'établissement)."
-              className={INPUT}
             />
-          </label>
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={() => setRejetCible(null)} className={BTN_GHOST}>
+          </Champ>
+
+          <div className="flex justify-end gap-2 border-t border-gris-200 pt-4">
+            <Bouton variante="neutre" onClick={() => setRejetCible(null)}>
               Annuler
-            </button>
-            <button type="submit" className={BTN_DANGER}>
-              Confirmer le rejet
-            </button>
+            </Bouton>
+            <Bouton type="submit" variante="danger" disabled={!motif.trim()}>
+              Rejeter le dossier
+            </Bouton>
           </div>
         </form>
-      </Modal>
+      </Modale>
     </div>
   );
 }
