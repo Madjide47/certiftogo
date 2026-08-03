@@ -7,6 +7,7 @@
 import * as diplomeModel from '../models/diplome.model.js';
 import * as verificationModel from '../models/verification.model.js';
 import * as blockchain from './blockchain.service.js';
+import * as notifications from './notification.service.js';
 
 const METHODES = ['hash', 'qr', 'pdf'];
 const RE_HASH = /^[0-9a-f]{64}$/i;
@@ -82,6 +83,13 @@ export async function verifier(valeur, { methode = 'hash', ip = null, userAgent 
 
   if (!diplome) return { resultat: 'introuvable' };
 
+  // Le titulaire est averti que son diplôme a été consulté (I-10). Hors
+  // du chemin de réponse : un employeur n'a pas à attendre l'envoi d'une
+  // notification qui ne le concerne pas.
+  avertirTitulaire(diplome).catch(() => {
+    /* déjà journalisé par le service de notifications */
+  });
+
   const vue = vuePublique(diplome, resultat);
   vue.ancrage_blockchain = await lireAncrage(diplome.hash_sha256);
 
@@ -95,6 +103,36 @@ export async function verifier(valeur, { methode = 'hash', ip = null, userAgent 
   }
 
   return vue;
+}
+
+/**
+ * Fenêtre de regroupement des avis de consultation.
+ *
+ * Un recruteur qui recharge la page, un QR scanné trois fois pendant un
+ * entretien : sans regroupement, le titulaire reçoit une rafale d'avis
+ * pour une seule vérification, et finit par tous les désactiver. Une
+ * alerte qu'on éteint ne protège plus personne.
+ */
+const FENETRE_AVIS_CONSULTATION_H = 6;
+
+/** Avertit le titulaire qu'un tiers a consulté son diplôme (I-10). */
+async function avertirTitulaire(diplome) {
+  const dejaAverti = await verificationModel.derniereNotificationConsultation(
+    diplome.id,
+    FENETRE_AVIS_CONSULTATION_H
+  );
+  if (dejaAverti) return;
+
+  await notifications.notifierDiplome(
+    notifications.EVENEMENTS.QR_CONSULTE,
+    diplome.candidat_id,
+    {
+      reference: diplome.reference,
+      date: new Date().toLocaleDateString('fr-FR'),
+      entite: 'diplomes',
+      entite_id: diplome.id,
+    }
+  );
 }
 
 /**

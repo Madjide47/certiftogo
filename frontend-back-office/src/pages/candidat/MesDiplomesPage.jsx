@@ -97,6 +97,15 @@ function CarteDiplome({ d, onCopie }) {
           </div>
         )}
 
+        {d.consultations > 0 && (
+          <p className="mt-3 flex items-start gap-1.5 text-sm text-gris-500">
+            <Icone nom="visibility" taille={16} className="mt-0.5 shrink-0" />
+            Vérifié {d.consultations} fois par des tiers
+            {d.derniere_consultation && ` — dernière fois le ${date(d.derniere_consultation)}`}.
+            L’identité de ceux qui vérifient n’est pas conservée.
+          </p>
+        )}
+
         {!revoque && lien && (
           <div className="mt-5 border-t border-gris-200 pt-4">
             <p className="mb-2 text-sm font-bold text-gris-700">

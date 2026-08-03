@@ -128,7 +128,38 @@ export async function creerUtilisateur(donnees) {
     throw new ErreurApp(409, 'TELEPHONE_EXISTANT', 'Ce numéro est déjà utilisé.');
   }
 
-  return utilisateurModel.creer({ nom, prenom, telephone, role, sous_role, ...rattachement });
+  const compte = await utilisateurModel.creer({
+    nom,
+    prenom,
+    telephone,
+    role,
+    sous_role,
+    ...rattachement,
+  });
+
+  // Le titulaire ne sait pas qu'un compte existe à son nom : sans ce
+  // message, il découvre son accès parce que quelqu'un le lui a dit de
+  // vive voix. On ne l'envoie PAS aux comptes candidat : ceux-là naissent
+  // fermés et ne s'ouvrent qu'à la certification — annoncer « connectez-
+  // vous » à quelqu'un que le serveur refusera serait un mensonge.
+  if (role !== 'candidat') {
+    await notifications.notifier(
+      notifications.EVENEMENTS.COMPTE_CREE,
+      [{ id: compte.id, telephone: compte.telephone, nom: compte.nom, prenom: compte.prenom }],
+      { etablissement_id: rattachement.etablissement_id || null }
+    );
+  }
+
+  await journaliser({
+    action: ACTIONS.COMPTE_CREE,
+    entite: 'utilisateurs',
+    entite_id: compte.id,
+    etablissement_id: rattachement.etablissement_id || null,
+    apres: { nom, prenom, telephone, role, sous_role },
+    message: `Compte ${role} créé pour ${nom} ${prenom}.`,
+  });
+
+  return compte;
 }
 
 /** Active / désactive un compte. */

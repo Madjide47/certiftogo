@@ -4,6 +4,7 @@
 // diplômes de tous les établissements fréquentés.
 // ─────────────────────────────────────────────────────────────
 import * as diplomeModel from '../models/diplome.model.js';
+import * as verificationModel from '../models/verification.model.js';
 import { ErreurApp } from '../utils/errors.js';
 
 // `en_attente_ancrage` fait partie du cycle depuis la file d'ancrage
@@ -42,7 +43,16 @@ export async function lister(personne_id) {
     throw new ErreurApp(403, 'CANDIDAT_REQUIS', 'Compte candidat requis.');
   }
   const diplomes = await diplomeModel.listerParPersonne(personne_id);
-  return diplomes.map(vue);
+
+  // Combien de fois chaque diplôme a été vérifié (K-11). En une requête :
+  // une par diplôme ferait dix allers-retours pour dix lignes.
+  const consultations = await verificationModel.compterParDiplome(diplomes.map((d) => d.id));
+
+  return diplomes.map((d) => ({
+    ...vue(d),
+    consultations: consultations.get(d.id)?.total || 0,
+    derniere_consultation: consultations.get(d.id)?.derniere || null,
+  }));
 }
 
 /** Statistiques du portefeuille (répartition par statut). */

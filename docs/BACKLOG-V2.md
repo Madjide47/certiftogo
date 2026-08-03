@@ -23,7 +23,7 @@ Dernière mise à jour : 2 août 2026.
 | A-08 | **Demande d'intégration** d'un établissement : formulaire, instruction, acceptation/refus | ✅ |
 | A-09 | **Vérification d'habilitation** : types de diplômes qu'un établissement peut délivrer | ✅ |
 | A-10 | **Un agent principal peut créer d'autres agents** de son établissement | ✅ |
-| A-11 | Message de bienvenue à la création d'un compte (WhatsApp/SMS) | ⬜ |
+| A-11 | Message de bienvenue à la création d'un compte (WhatsApp/SMS) | ✅ *hors comptes candidat, qui naissent fermés* |
 | A-12 | Compte candidat créé à la saisie, activé à la certification | ✅ |
 | A-13 | Identité nationale : une personne, plusieurs fiches établissement | ✅ |
 | A-14 | **Changement de numéro volontaire** : OTP ancien numéro puis nouveau | 🔨 *changement volontaire à double OTP non implémenté ; la récupération médiée l est* |
@@ -152,7 +152,7 @@ Dernière mise à jour : 2 août 2026.
 | I-07 | Dossier rejeté avec motif | ✅ |
 | I-08 | **Diplôme certifié** (« connectez-vous à CertifTOGO ») | ✅ |
 | I-09 | Diplôme révoqué | ✅ |
-| I-10 | QR consulté par un tiers (option candidat) | 🔨 *modèle prêt, déclencheur à brancher* |
+| I-10 | QR consulté par un tiers (option candidat) | ✅ *regroupé sur 6 h : un recruteur qui recharge ne déclenche qu'un avis* |
 | I-11 | Tentative de connexion échouée | ✅ |
 | I-12 | Session suspecte | ✅ |
 | I-13 | Établissement suspendu | ✅ |
@@ -195,7 +195,7 @@ Dernière mise à jour : 2 août 2026.
 | K-09 | Établissement : délai moyen avant certification | ✅ |
 | K-10 | Établissement : **motifs de rejet agrégés** | ✅ |
 | K-11 | Candidat : nombre de vérifications de ses diplômes | ✅ |
-| K-12 | Candidat : **alertes de consultation** | 🔨 *compteur exposé, alerte à brancher* |
+| K-12 | Candidat : **alertes de consultation** | ✅ *compteur et date sur chaque fiche, sans jamais révéler qui a vérifié* |
 | K-13 | Admin : santé système, taux de succès blockchain, taille de file, temps de réponse, charge base | ✅ |
 | K-14 | Exports et rapports planifiés | ✅ |
 

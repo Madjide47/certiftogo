@@ -3480,6 +3480,80 @@ describe('Pièces justificatives — instruction et intégrité', () => {
 // ces cas répondent 500, l'exploitant cherche une panne serveur là où il
 // n'y a qu'une requête invalide.
 // ═══════════════════════════════════════════════════════════════════
+describe('Notifications — bienvenue et consultation', () => {
+  test('un compte agent créé reçoit un message de bienvenue', async () => {
+    const t = await login('+22890000003');
+    const etabs = await api().get('/api/admin/etablissements').set(auth(t));
+
+    const res = await api().post('/api/admin/utilisateurs').set(auth(t)).send({
+      nom: 'BIENVENUE', prenom: 'Agent', telephone: '+22890000884',
+      role: 'etablissement', etablissement_id: etabs.body.data.etablissements[0].id,
+    });
+    assert.equal(res.status, 201, JSON.stringify(res.body.error || res.body));
+
+    const { rows } = await pool.query(
+      `SELECT evenement FROM notifications WHERE destinataire_id = $1`,
+      [res.body.data.utilisateur.id]
+    );
+    assert.ok(rows.some((n) => n.evenement === 'compte_cree'), 'message de bienvenue attendu');
+  });
+
+  test('un compte candidat n\'est pas invité à se connecter avant sa certification', async () => {
+    // Le compte naît fermé : lui dire « connectez-vous » produirait un
+    // 403 COMPTE_INACTIF et une perte de confiance immédiate.
+    const t = await login('+22890000002');
+    const res = await api().post('/api/candidats').set(auth(t)).send({
+      numero_etudiant: 'NOTIF-001', nom: 'SANS', prenom: 'Bienvenue',
+      telephone: '+22890000885',
+    });
+    assert.equal(res.status, 201);
+
+    const { rows } = await pool.query(
+      `SELECT n.evenement FROM notifications n
+        JOIN utilisateurs u ON u.id = n.destinataire_id
+       WHERE u.telephone = $1 AND n.evenement = 'compte_cree'`,
+      ['+22890000885']
+    );
+    assert.equal(rows.length, 0);
+  });
+
+  test('la consultation publique avertit le titulaire, une seule fois par fenêtre', async () => {
+    const tMin = await login('+22890000001');
+    const diplomes = await api().get('/api/ministere/diplomes').set(auth(tMin));
+    const diplome = diplomes.body.data.diplomes.find((d) => d.statut === 'actif');
+    assert.ok(diplome, 'un diplôme actif est nécessaire');
+
+    // Trois consultations d'affilée : un recruteur qui recharge sa page.
+    for (let i = 0; i < 3; i += 1) {
+      const v = await api().get(`/api/verification/${diplome.reference}`);
+      assert.equal(v.status, 200);
+    }
+    // L'avis part hors du chemin de réponse : on lui laisse un instant.
+    await new Promise((r) => setTimeout(r, 400));
+
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM notifications
+        WHERE evenement = 'qr_consulte' AND entite_id = $1`,
+      [diplome.id]
+    );
+    assert.equal(rows[0].total, 1, 'un seul avis malgré trois consultations');
+  });
+
+  test('le portefeuille expose le nombre de consultations, jamais qui a consulté', async () => {
+    const t = await login('+22890000011');
+    const res = await api().get('/api/candidat/diplomes').set(auth(t));
+    assert.equal(res.status, 200);
+
+    for (const d of res.body.data.diplomes) {
+      assert.equal(typeof d.consultations, 'number');
+      // Ni IP ni user-agent : un employeur qui vérifie ne doit pas être
+      // identifiable par le candidat qu'il vérifie.
+      assert.equal('adresse_ip' in d, false);
+      assert.equal('user_agent' in d, false);
+    }
+  });
+});
+
 describe('Administration — création de comptes', () => {
   test('accepte la fonction de l’agent et la conserve', async () => {
     const t = await login('+22890000003');
