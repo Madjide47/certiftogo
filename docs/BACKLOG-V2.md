@@ -216,7 +216,7 @@ Dernière mise à jour : 2 août 2026.
 | L-11 | **Rotation de clés** et procédure de compromission | ✅ |
 | L-12 | Sort des diplômes signés avec l'ancienne clé | ✅ *diplômes concernés dénombrés, marche à suivre produite* |
 | L-13 | Protection CSRF | ✅ *sans objet : auth par en-tête Bearer, aucun cookie de session* |
-| L-14 | Dépendances vulnérables (`tar` critique, `body-parser`, `brace-expansion`) | ⬜ |
+| L-14 | Dépendances vulnérables (`tar` critique, `body-parser`, `brace-expansion`) | 🔨 *backend assaini (0 critique, 0 haute) et audit ajouté à la CI ; mise à jour des deux fronts en attente — voir [`docs/SECURITE-DEPENDANCES.md`](SECURITE-DEPENDANCES.md)* |
 
 ## M. Cas exceptionnels
 
