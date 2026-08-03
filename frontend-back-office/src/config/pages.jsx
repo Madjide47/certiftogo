@@ -12,6 +12,8 @@ import PromotionsPage from '../pages/etablissement/PromotionsPage.jsx';
 import LotsPage from '../pages/etablissement/LotsPage.jsx';
 import AgentsPage from '../pages/etablissement/AgentsPage.jsx';
 import JournalPage from '../pages/commun/JournalPage.jsx';
+import NotificationsPage from '../pages/commun/NotificationsPage.jsx';
+import RecuperationsPage from '../pages/commun/RecuperationsPage.jsx';
 import LotsRecusPage from '../pages/ministere/LotsRecusPage.jsx';
 import ValidationsPage from '../pages/ministere/ValidationsPage.jsx';
 import AncragePage from '../pages/ministere/AncragePage.jsx';
@@ -39,6 +41,7 @@ export const PAGES_PAR_ROLE = {
     '/dossiers': DossiersPage,
     '/agents': AgentsPage,
     '/journal': JournalPage,
+    '/notifications': NotificationsPage,
   },
   ministere: {
     '/': MinistereDashboardPage,
@@ -51,18 +54,23 @@ export const PAGES_PAR_ROLE = {
     '/demandes': DemandesPage,
     '/annees': AnneesAcademiquesPage,
     '/journal': JournalPage,
+    '/recuperations': RecuperationsPage,
+    '/notifications': NotificationsPage,
   },
   candidat: {
     '/': PortefeuillePage,
     '/mes-diplomes': MesDiplomesPage,
     '/parametres': ParametresPage,
+    '/notifications': NotificationsPage,
   },
   admin_systeme: {
     '/': AdminDashboardPage,
     '/utilisateurs': UtilisateursPage,
     '/etablissements': AdminEtablissementsPage,
     '/journal': JournalPage,
+    '/recuperations': RecuperationsPage,
     '/configuration': ConfigurationPage,
+    '/notifications': NotificationsPage,
   },
 };
 

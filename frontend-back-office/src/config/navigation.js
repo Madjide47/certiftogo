@@ -78,7 +78,10 @@ export const NAVIGATION_PAR_ROLE = {
     },
     {
       rubrique: 'Supervision',
-      entrees: [{ libelle: 'Journal', chemin: '/journal', icone: 'history' }],
+      entrees: [
+        { libelle: 'Journal', chemin: '/journal', icone: 'history' },
+        { libelle: 'Récupérations', chemin: '/recuperations', icone: 'phonelink_lock' },
+      ],
     },
   ],
 

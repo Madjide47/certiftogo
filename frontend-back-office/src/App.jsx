@@ -15,7 +15,22 @@ import Layout from './components/layout/Layout.jsx';
 import LoginPage from './pages/auth/LoginPage.jsx';
 import PlaceholderPage from './components/PlaceholderPage.jsx';
 import { entreesPour, LIBELLES_ROLES } from './config/navigation.js';
-import { pagePour } from './config/pages.jsx';
+import { pagePour, PAGES_PAR_ROLE } from './config/pages.jsx';
+
+/**
+ * Chemins routables d'un rôle : ses entrées de navigation, PLUS les pages
+ * qu'il a le droit d'ouvrir sans figurer dans la barre latérale.
+ *
+ * Les notifications sont dans ce second cas : on y accède par la cloche de
+ * l'en-tête, présente sur tous les écrans. Router à partir de la seule
+ * navigation renvoyait la cloche vers le tableau de bord — un compteur qui
+ * annonce trois messages et ne mène nulle part.
+ */
+function cheminsPour(role) {
+  const chemins = entreesPour(role).map((e) => e.chemin);
+  const enPlus = Object.keys(PAGES_PAR_ROLE[role] || {}).filter((c) => !chemins.includes(c));
+  return [...chemins, ...enPlus];
+}
 
 // Rend les routes internes correspondant au rôle de l'utilisateur connecté.
 // La navigation étant désormais groupée par rubriques, on l'aplatit ici :
@@ -28,20 +43,21 @@ function RoutesInternes() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        {entrees.map((entree) => {
+        {cheminsPour(role).map((chemin) => {
           // Vraie page si elle existe pour ce rôle, sinon placeholder.
-          const Page = pagePour(role, entree.chemin);
+          const Page = pagePour(role, chemin);
+          const libelle = entrees.find((e) => e.chemin === chemin)?.libelle || chemin;
           return (
             <Route
-              key={entree.chemin}
-              path={entree.chemin}
+              key={chemin}
+              path={chemin}
               element={
                 Page ? (
                   <Page />
                 ) : (
                   <PlaceholderPage
-                    titre={entree.libelle}
-                    description={`Espace ${LIBELLES_ROLES[role]} — ${entree.libelle}.`}
+                    titre={libelle}
+                    description={`Espace ${LIBELLES_ROLES[role]} — ${libelle}.`}
                   />
                 )
               }
