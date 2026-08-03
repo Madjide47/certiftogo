@@ -392,6 +392,31 @@ export default function PromotionsPage() {
         </div>
       )}
 
+      {/* Un bouton grisé sans explication est une impasse : l'agent ne
+          peut pas deviner que le blocage vient du ministère ou d'une
+          filière manquante. On nomme le prérequis et on y renvoie. */}
+      {annees.length === 0 && (
+        <div className="mb-4">
+          <Encart ton="alerte" titre="Aucune année académique ouverte">
+            Une promotion se rattache toujours à une année académique, et c'est le{' '}
+            <strong>ministère</strong> qui les ouvre. Tant qu'aucune année n'est ouverte, aucune
+            promotion ne peut être créée — signalez-le à votre correspondant au ministère.
+          </Encart>
+        </div>
+      )}
+
+      {annees.length > 0 && filieres.length === 0 && (
+        <div className="mb-4">
+          <Encart ton="alerte" titre="Aucune filière active">
+            Une promotion se rattache à une filière, qui elle-même dépend d'une faculté.{' '}
+            <Link to="/structure" className="underline underline-offset-2">
+              Créez votre structure
+            </Link>{' '}
+            avant de revenir ici.
+          </Encart>
+        </div>
+      )}
+
       {mode === 'hierarchique' && (
         <div className="mb-4">
           <Encart ton="info" titre="Mode hiérarchique">
@@ -484,7 +509,7 @@ export default function PromotionsPage() {
             rendu: (p) => (
               <span className="whitespace-nowrap">
                 <Bouton variante="discret" onClick={() => ouvrirEtudiants(p)}>
-                  Étudiants
+                  Inscrire / noter ({p.effectif_inscrit})
                 </Bouton>
                 {['brouillon', 'ouverte'].includes(p.statut) && (
                   <Bouton variante="discret" className="ml-3" onClick={() => ouvrirImport(p)}>
@@ -649,7 +674,7 @@ export default function PromotionsPage() {
       {/* ── Étudiants de la promotion ── */}
       <Modale
         ouvert={Boolean(promotionOuverte)}
-        titre={`Étudiants — ${promotionOuverte?.libelle || ''}`}
+        titre={`Inscrire et noter — ${promotionOuverte?.libelle || ''}`}
         onFermer={() => setPromotionOuverte(null)}
         largeur="max-w-4xl"
       >
