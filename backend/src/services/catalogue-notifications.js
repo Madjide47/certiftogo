@@ -34,6 +34,7 @@ export const EVENEMENTS = {
   ETABLISSEMENT_SUSPENDU: 'etablissement_suspendu',
   AGENT_DESACTIVE: 'agent_desactive',
 
+  CLE_COMPROMISE: 'cle_compromise',
   ANCRAGE_ECHOUE: 'ancrage_echoue',
   ANCRAGE_RETABLI: 'ancrage_retabli',
 };
@@ -185,6 +186,16 @@ export const CATALOGUE = {
     critique: true,
     sujet: 'Votre compte a été désactivé',
     corps: 'Votre accès à CertifTOGO a été désactivé le {{date}}.',
+  },
+
+  [EVENEMENTS.CLE_COMPROMISE]: {
+    destinataire: 'administrateur système',
+    canaux: ['in_app', 'whatsapp'],
+    priorite: 'haute',
+    critique: true,
+    sujet: 'Clé de signature compromise',
+    corps:
+      'La clé {{empreinte}}… est déclarée compromise. Motif : {{motif}}. {{diplomes}} diplôme(s) sont concernés et doivent être re-signés.',
   },
 
   [EVENEMENTS.ANCRAGE_ECHOUE]: {

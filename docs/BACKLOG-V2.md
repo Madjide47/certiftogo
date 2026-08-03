@@ -26,13 +26,13 @@ Dernière mise à jour : 2 août 2026.
 | A-11 | Message de bienvenue à la création d'un compte (WhatsApp/SMS) | ⬜ |
 | A-12 | Compte candidat créé à la saisie, activé à la certification | ✅ |
 | A-13 | Identité nationale : une personne, plusieurs fiches établissement | ✅ |
-| A-14 | **Changement de numéro volontaire** : OTP ancien numéro puis nouveau | ⬜ |
-| A-15 | **Récupération après perte du téléphone** : procédure médiée par un agent | ⬜ |
+| A-14 | **Changement de numéro volontaire** : OTP ancien numéro puis nouveau | 🔨 *changement volontaire à double OTP non implémenté ; la récupération médiée l est* |
+| A-15 | **Récupération après perte du téléphone** : procédure médiée par un agent | ✅ |
 | A-16 | **Normalisation du téléphone à la saisie** (sinon le regroupement d'identité fuit) | ✅ |
 | A-17 | **Téléphone obligatoire** pour un candidat (option A) avec statut « en attente de numéro » | ⬜ |
 | A-18 | **Désactivation immédiate** d'un agent qui quitte son établissement | ✅ |
 | A-19 | **Révocation des sessions actives** à la désactivation | ✅ |
-| A-20 | **Transfert des dossiers en cours** d'un agent partant vers un autre | ⬜ |
+| A-20 | **Transfert des dossiers en cours** d'un agent partant vers un autre | ✅ |
 
 ## B. Rôles internes à un établissement
 
@@ -207,10 +207,10 @@ Dernière mise à jour : 2 août 2026.
 | L-06 | **Anti-énumération de comptes** | ✅ |
 | L-07 | **Gestion de session** : refresh token, révocation, sessions concurrentes | ✅ |
 | L-08 | **Double validation à quatre yeux** pour les actions critiques | 🔨 *table et contrainte à quatre yeux posées, activation à brancher* |
-| L-09 | **Clé privée du ministère hors serveur applicatif** (KMS / HSM) | ⬜ |
+| L-09 | **Clé privée du ministère hors serveur applicatif** (KMS / HSM) | 🔨 *registre et emplacement déclarés ; KMS/HSM à raccorder* |
 | L-10 | Audit de chaque signature | ⬜ |
-| L-11 | **Rotation de clés** et procédure de compromission | ⬜ |
-| L-12 | Sort des diplômes signés avec l'ancienne clé | ⬜ |
+| L-11 | **Rotation de clés** et procédure de compromission | ✅ |
+| L-12 | Sort des diplômes signés avec l'ancienne clé | ✅ *diplômes concernés dénombrés, marche à suivre produite* |
 | L-13 | Protection CSRF | ✅ *sans objet : auth par en-tête Bearer, aucun cookie de session* |
 | L-14 | Dépendances vulnérables (`tar` critique, `body-parser`, `brace-expansion`) | ⬜ |
 
@@ -220,14 +220,14 @@ Dernière mise à jour : 2 août 2026.
 |---|---|---|
 | M-01 | ERR-001 changement de nom | ✅ |
 | M-02 | ERR-002 erreur après certification → révocation + réémission | ✅ |
-| M-03 | ERR-003 perte du téléphone | ⬜ |
-| M-04 | ERR-004 départ d'un agent | ⬜ |
-| M-05 | ERR-005 établissement suspendu ou fermé — effets sur dossiers, diplômes, agents | ⬜ |
-| M-06 | ERR-006 compromission de la clé privée | ⬜ |
-| M-07 | ERR-007 échec de transaction blockchain | ⬜ |
+| M-03 | ERR-003 perte du téléphone | ✅ |
+| M-04 | ERR-004 départ d'un agent | ✅ |
+| M-05 | ERR-005 établissement suspendu ou fermé — effets sur dossiers, diplômes, agents | ✅ |
+| M-06 | ERR-006 compromission de la clé privée | ✅ |
+| M-07 | ERR-007 échec de transaction blockchain | ✅ |
 | M-08 | ERR-008 double certification | ✅ |
 | M-09 | ERR-009 consultation d'un diplôme révoqué | ✅ |
-| M-10 | **Transmission gelée** pour un établissement suspendu | ⬜ |
+| M-10 | **Transmission gelée** pour un établissement suspendu | ✅ |
 
 ## N. Architecture et intégration
 
@@ -275,7 +275,7 @@ ci-dessus : voici ce que seul le CDC mentionne.
 | P-10 | Environnements : dev, test, démo, production | 5.5 | ⬜ |
 | P-11 | **Nomenclatures en base** : `types_diplome`, `mentions` (aujourd'hui des `CHECK` figés) | 24.3.4 | ⬜ |
 | P-12 | **Table `historique_statuts_dossier`** | 24.3.6 | ✅ |
-| P-13 | **Table `cles_publiques_ministere`** | 24.3.9 | ⬜ |
+| P-13 | **Table `cles_publiques_ministere`** | ✅ | ✅ |
 | P-14 | **Table `sessions`** (jetons, révocation) | ✅ | ✅ |
 | P-15 | Diagramme entité-association d'ensemble | 24.4 | ⬜ |
 | P-16 | Stratégie de migration depuis le schéma actuel | 24.6 | 🔨 |
@@ -298,9 +298,9 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 135 |
+| ✅ fait et testé | 149 |
 | 🔨 partiel ou en cours | 17 |
-| ⬜ à faire | 22 |
+| ⬜ à faire | 8 |
 | **Total** | **174** |
 
 ## Ordre d'implémentation proposé

@@ -2603,6 +2603,234 @@ describe('Notifications — catalogue, centre in-app et préférences', () => {
   });
 });
 
+// ── Cas exceptionnels ──────────────────────────────────────────
+// Un système national se juge moins sur son parcours nominal que sur ce
+// qu'il fait quand la réalité s'en écarte.
+describe('Cas exceptionnels — ERR-003 à ERR-006', () => {
+  const IAI = '20000000-0000-0000-0000-000000000001';
+
+  test('ERR-003 : dépôt public d\'une demande de récupération', async () => {
+    // Le demandeur a perdu son téléphone : il ne peut par définition pas
+    // s'authentifier pour signaler qu'il ne peut plus s'authentifier.
+    const res = await api().post('/api/recuperation').send({
+      nom: 'DOSSEH', prenom: 'Yao',
+      telephone_ancien: '+22890000013',
+      telephone_nouveau: '+22897000001',
+      numero_etudiant: 'IAI-2021-003',
+      piece_justificative: 'CNI n° 1234567',
+    });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    assert.match(res.body.data.reference, /^REC-\d{4}-\d{5}$/);
+    assert.match(res.body.data.message, /pièce d'identité/);
+  });
+
+  test('refuse un nouveau numéro déjà rattaché à un compte', async () => {
+    const res = await api().post('/api/recuperation').send({
+      nom: 'X', prenom: 'Y',
+      telephone_nouveau: '+22890000002', // agent existant
+    });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'TELEPHONE_EXISTANT');
+  });
+
+  test('un agent valide la récupération : le compte bascule et les sessions tombent', async () => {
+    const agent = await login('+22890000002');
+
+    const liste = await api().get('/api/recuperation?statut=soumise').set(auth(agent));
+    assert.equal(liste.status, 200);
+    const demande = liste.body.data.demandes.find((d) => d.telephone_nouveau === '+22897000001');
+    assert.ok(demande, 'la demande est visible par l\'établissement du diplômé');
+
+    // Session ouverte AVANT la récupération : elle doit être coupée.
+    await api().post('/api/auth/request-otp').send({ telephone: '+22890000013' });
+    const { rows: codes } = await pool.query(
+      `SELECT code FROM codes_otp WHERE telephone='+22890000013' AND utilise=FALSE
+        ORDER BY date_creation DESC LIMIT 1`
+    );
+    const avant = await api()
+      .post('/api/auth/verify-otp')
+      .send({ telephone: '+22890000013', code: codes[0].code });
+    assert.equal(avant.status, 200);
+
+    const validation = await api()
+      .post(`/api/recuperation/${demande.id}/valider`)
+      .set(auth(agent))
+      .send({});
+    assert.equal(validation.status, 200, JSON.stringify(validation.body));
+    assert.equal(validation.body.data.nouveau_telephone, '+22897000001');
+
+    // L'ancien appareil est peut-être entre d'autres mains.
+    const apres = await api().get('/api/auth/me').set(auth(avant.body.data.token));
+    assert.equal(apres.status, 401);
+    assert.equal(apres.body.error.code, 'SESSION_REVOQUEE');
+
+    // Et le diplômé se connecte avec son nouveau numéro.
+    assert.ok(await login('+22897000001'));
+  });
+
+  test('une demande déjà instruite ne se rejoue pas', async () => {
+    const agent = await login('+22890000002');
+    const liste = await api().get('/api/recuperation').set(auth(agent));
+    const traitee = liste.body.data.demandes.find((d) => d.statut === 'acceptee');
+
+    const res = await api()
+      .post(`/api/recuperation/${traitee.id}/refuser`)
+      .set(auth(agent)).send({ motif: 'Trop tard' });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'DEMANDE_DEJA_TRAITEE');
+  });
+
+  test('ERR-004 : le départ d\'un agent transfère ses dossiers en cours', async () => {
+    const principal = await login('+22890000002');
+
+    const partant = await api().post('/api/structure/agents').set(auth(principal)).send({
+      nom: 'PARTANT', prenom: 'Kossi', telephone: '+22897000010',
+    });
+    const repreneur = await api().post('/api/structure/agents').set(auth(principal)).send({
+      nom: 'REPRENEUR', prenom: 'Afi', telephone: '+22897000011',
+    });
+
+    // L'agent partant laisse un dossier en cours.
+    const tPartant = await login('+22897000010');
+    const candidat = await api().post('/api/candidats').set(auth(tPartant)).send({
+      numero_etudiant: 'DEP-001', nom: 'ORPHELIN', prenom: 'Dossier',
+      telephone: '+22897000012',
+    });
+    const dossier = await api().post('/api/dossiers').set(auth(tPartant)).send({
+      candidat_id: candidat.body.data.candidat.id,
+      type_diplome: 'licence', mention: 'bien', date_obtention: '2024-07-01',
+    });
+    assert.equal(dossier.status, 201);
+
+    const res = await api().post('/api/agents/transfert').set(auth(principal)).send({
+      agent_id: partant.body.data.agent.id,
+      repreneur_id: repreneur.body.data.agent.id,
+    });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.ok(res.body.data.dossiers_transferes >= 1);
+    assert.equal(res.body.data.desactive, true);
+
+    // Le dossier a changé de main, il n'est pas orphelin.
+    const { rows } = await pool.query(
+      `SELECT agent_etablissement_id FROM dossiers WHERE id = $1`,
+      [dossier.body.data.dossier.id]
+    );
+    assert.equal(rows[0].agent_etablissement_id, repreneur.body.data.agent.id);
+
+    // Et l'agent parti ne peut plus se connecter.
+    const otp = await api().post('/api/auth/request-otp').send({ telephone: '+22897000010' });
+    assert.equal(otp.status, 200);
+    assert.equal(otp.body.data.code_dev, undefined, 'compte fermé : aucun code');
+  });
+
+  test('refuse un transfert vers soi-même ou hors établissement', async () => {
+    const principal = await login('+22890000002');
+    const { rows } = await pool.query(
+      `SELECT id FROM utilisateurs WHERE telephone = '+22897000011'`
+    );
+
+    const boucle = await api().post('/api/agents/transfert').set(auth(principal)).send({
+      agent_id: rows[0].id, repreneur_id: rows[0].id,
+    });
+    assert.equal(boucle.status, 400);
+    assert.equal(boucle.body.error.code, 'REPRENEUR_INVALIDE');
+  });
+
+  test('ERR-005 : un établissement suspendu ne transmet plus', async () => {
+    const admin = await login('+22890000003');
+    const etab = await login('+22890000002');
+
+    const suspension = await api()
+      .patch(`/api/admin/etablissements/${IAI}/statut`)
+      .set(auth(admin)).send({ statut: 'suspendu' });
+    assert.equal(suspension.status, 200);
+
+    // Une promotion prête ne part plus.
+    const promo = await api().post('/api/promotions').set(auth(etab)).send({
+      filiere_id: '70000000-0000-0000-0000-000000000001',
+      annee_id: '50000000-0000-0000-0000-000000000001',
+      libelle: 'Suspendu — test', niveau: 1,
+    });
+    // La création reste possible : la suspension gèle la transmission,
+    // pas le travail interne.
+    assert.equal(promo.status, 409, 'niveau 1 déjà pris — on réutilise l\'existant');
+
+    const { rows } = await pool.query(
+      `SELECT p.id FROM promotions p JOIN filieres f ON f.id = p.filiere_id
+        WHERE p.statut = 'ouverte' AND f.faculte_id = '60000000-0000-0000-0000-000000000001'
+        LIMIT 1`
+    );
+    if (rows.length) {
+      const envoi = await api()
+        .post(`/api/promotions/${rows[0].id}/transmettre`)
+        .set(auth(etab)).send({ date_deliberation: '2025-07-15' });
+      assert.equal(envoi.status, 409);
+      assert.equal(envoi.body.error.code, 'ETABLISSEMENT_SUSPENDU');
+    }
+
+    // Les diplômes déjà certifiés restent valides : la suspension vise
+    // l'avenir, pas le passé.
+    const { rows: diplome } = await pool.query(
+      `SELECT hash_sha256 FROM diplomes WHERE etablissement_id = $1 AND statut = 'actif' LIMIT 1`,
+      [IAI]
+    );
+    if (diplome.length) {
+      const verif = await api().get(`/api/verification/${diplome[0].hash_sha256}`);
+      assert.equal(verif.body.data.resultat, 'authentique');
+    }
+
+    // Les agents en sont informés.
+    const { rows: notifs } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM notifications WHERE evenement = 'etablissement_suspendu'`
+    );
+    assert.ok(notifs[0].n > 0);
+
+    // Rétablissement pour la suite de la suite.
+    await api().patch(`/api/admin/etablissements/${IAI}/statut`).set(auth(admin))
+      .send({ statut: 'actif' });
+  });
+
+  test('ERR-006 : registre des clés et déclaration de compromission', async () => {
+    const admin = await login('+22890000003');
+
+    const enregistrement = await api().post('/api/admin/cles/enregistrer').set(auth(admin)).send({});
+    assert.equal(enregistrement.status, 201);
+    assert.equal(enregistrement.body.data.empreinte.length, 64);
+
+    const etat = await api().get('/api/admin/cles').set(auth(admin));
+    assert.equal(etat.status, 200);
+    assert.ok(etat.body.data.cles.length >= 1);
+    // On expose l'empreinte, jamais la clé.
+    assert.equal(etat.body.data.empreinte_courante.length, 64);
+    assert.equal(
+      JSON.stringify(etat.body.data).includes(process.env.MINISTERE_SIGNING_SECRET),
+      false,
+      'le secret ne fuit nulle part'
+    );
+
+    const sansMotif = await api().post('/api/admin/cles/compromission').set(auth(admin)).send({});
+    assert.equal(sansMotif.status, 400);
+    assert.equal(sansMotif.body.error.code, 'MOTIF_REQUIS');
+
+    const res = await api().post('/api/admin/cles/compromission').set(auth(admin)).send({
+      motif: 'Poste de signature compromis lors d\'un incident.',
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.statut, 'compromise');
+    // Le système ne prétend pas réparer : il dit quoi faire.
+    assert.ok(Array.isArray(res.body.data.marche_a_suivre));
+    assert.match(res.body.data.marche_a_suivre.join(' '), /KMS ou HSM/);
+  });
+
+  test('la déclaration de compromission est réservée à l\'administrateur', async () => {
+    const ministere = await login('+22890000001');
+    const res = await api().post('/api/admin/cles/compromission').set(auth(ministere)).send({
+      motif: 'Test',
+    });
+    assert.equal(res.status, 403);
+  });
+});
+
 // ── Sous-rôles et workflow interne ─────────────────────────────
 // « L'établissement » n'est pas un acteur unique : celui qui saisit
 // n'est pas celui qui engage l'institution auprès du ministère.

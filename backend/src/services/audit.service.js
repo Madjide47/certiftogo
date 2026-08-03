@@ -32,6 +32,11 @@ export const ACTIONS = {
   COMPTE_ACTIVE: 'compte_active',
   COMPTE_DESACTIVE: 'compte_desactive',
   AGENT_CREE: 'agent_cree',
+  AGENT_DEPART: 'agent_depart',
+  RECUPERATION_DEMANDEE: 'recuperation_demandee',
+  RECUPERATION_VALIDEE: 'recuperation_validee',
+  RECUPERATION_REFUSEE: 'recuperation_refusee',
+  CLE_COMPROMISE: 'cle_compromise',
   MODE_WORKFLOW_CHANGE: 'mode_workflow_change',
 
   // Gouvernance

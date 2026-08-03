@@ -28,6 +28,7 @@ import lotRoutes from './routes/lot.routes.js';
 import { journalRouter, corbeilleRouter } from './routes/journal.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import tableauBordRoutes from './routes/tableau-bord.routes.js';
+import { recuperationRouter, departRouter, clesRouter } from './routes/exceptions.routes.js';
 import { metriques } from './middlewares/metriques.middleware.js';
 import { contexteRequete } from './config/contexte.js';
 import { UPLOADS_DIR, UPLOADS_URL_PREFIX, assurerDossierUploads } from './config/storage.js';
@@ -91,6 +92,9 @@ app.use('/api/journal', journalRouter);
 app.use('/api/corbeille', corbeilleRouter);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/tableau-bord', tableauBordRoutes);
+app.use('/api/recuperation', recuperationRouter);
+app.use('/api/agents', departRouter);
+app.use('/api/admin/cles', clesRouter);
 
 // ── Gestion des erreurs (toujours en dernier) ──────────────────────
 app.use(nonTrouve);

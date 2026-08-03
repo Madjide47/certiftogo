@@ -7,6 +7,8 @@ import * as utilisateurModel from '../models/utilisateur.model.js';
 import * as etablissementModel from '../models/etablissement.model.js';
 import { ErreurApp } from '../utils/errors.js';
 import * as sessions from './session.service.js';
+import * as notifications from './notification.service.js';
+import { journaliser, ACTIONS } from './audit.service.js';
 import {
   nettoyerTexte,
   estDansEnum,
@@ -131,5 +133,25 @@ export async function definirStatutEtablissement(id, statut) {
   if (!maj) {
     throw new ErreurApp(404, 'ETABLISSEMENT_INTROUVABLE', 'Établissement introuvable.');
   }
+
+  // Les agents doivent l'apprendre autrement qu'en voyant leur
+  // transmission refusée sans explication.
+  if (statut !== 'actif') {
+    await notifications.notifierEtablissement(
+      notifications.EVENEMENTS.ETABLISSEMENT_SUSPENDU,
+      id,
+      { etablissement: maj.nom, statut }
+    );
+  }
+
+  await journaliser({
+    action: ACTIONS.ETABLISSEMENT_SUSPENDU,
+    entite: 'etablissements',
+    entite_id: id,
+    etablissement_id: id,
+    apres: { statut },
+    message: `${maj.nom} (${maj.code}) → ${statut}.`,
+  });
+
   return maj;
 }

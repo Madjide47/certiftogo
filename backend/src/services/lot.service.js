@@ -48,6 +48,21 @@ export async function transmettre(promotion_id, etablissement_id, agent, donnees
   }
   // En mode hiérarchique, seule une promotion validée en interne part au
   // ministère : celui qui saisit n'est pas celui qui engage l'établissement.
+  // ERR-005 : un établissement suspendu ne transmet plus. Ses diplômes
+  // déjà certifiés restent valides — la suspension vise l'avenir, pas le
+  // passé — et ses dossiers en cours restent consultables.
+  const { rows: etat } = await (await import('../config/database.js')).query(
+    `SELECT statut FROM etablissements WHERE id = $1`,
+    [etablissement_id]
+  );
+  if (etat[0] && etat[0].statut !== 'actif') {
+    throw new ErreurApp(
+      409,
+      'ETABLISSEMENT_SUSPENDU',
+      `Établissement ${etat[0].statut} : les transmissions au ministère sont gelées.`
+    );
+  }
+
   const mode = await permissions.modeWorkflow(etablissement_id);
   const statutRequis = mode === 'hierarchique' ? 'validee_interne' : 'ouverte';
 

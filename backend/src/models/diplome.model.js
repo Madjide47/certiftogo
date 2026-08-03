@@ -120,8 +120,9 @@ export async function creer(data, client) {
     `INSERT INTO diplomes
        (reference, dossier_id, candidat_id, etablissement_id, ministere_id,
         donnees_signees, hash_sha256, signature_numerique, transaction_id,
-        qr_code_url, pdf_url, statut, version, diplome_precedent_id, motif_version)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        qr_code_url, pdf_url, statut, version, diplome_precedent_id, motif_version,
+        cle_signature_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
      RETURNING id`,
     [
       data.reference,
@@ -139,6 +140,7 @@ export async function creer(data, client) {
       data.version || 1,
       data.diplome_precedent_id || null,
       data.motif_version || null,
+      data.cle_signature_id || null,
     ]
   );
   return trouverParId(rows[0].id, client);
