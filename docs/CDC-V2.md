@@ -6,9 +6,27 @@
 | **Projet** | CertifTOGO — plateforme nationale de certification et de traçabilité des diplômes sur blockchain |
 | **Version du document** | 2.0 (structure — chapitres à rédiger) |
 | **Date** | 2 août 2026 |
-| **Statut** | 📝 Table des matières soumise à validation |
+| **Statut** | 🖊️ Rédaction en cours — voir « Chapitres rédigés » ci-dessous |
 | **Périmètre technique** | Node.js/Express, PostgreSQL, React/Vite, Solidity/Hardhat, Polygon Amoy (MVP) |
 | **Public visé** | équipe de développement, jury de soutenance, futurs mainteneurs |
+
+---
+
+## Chapitres rédigés
+
+Le document est découpé en fichiers dans `docs/cdc/` : 120 pages dans un seul
+fichier seraient illisibles en revue et impossibles à relire par diff.
+
+| Chapitre | Fichier | État |
+|---|---|---|
+| 35 — Décisions d'architecture (16 ADR) | [`cdc/35-decisions-architecture.md`](cdc/35-decisions-architecture.md) | ✅ rédigé |
+| 36 — Argumentaire pour le jury | [`cdc/36-argumentaire-jury.md`](cdc/36-argumentaire-jury.md) | ✅ rédigé |
+
+> Les ADR ont été rédigées en premier parce qu'elles gouvernent la lecture de
+> tout le reste : chaque chapitre suivant peut s'y référer au lieu de
+> re-justifier les mêmes choix. Quatre d'entre elles (ADR-013 à ADR-016) ne
+> figuraient pas au cadrage initial — elles ont été imposées par des problèmes
+> rencontrés en construisant le système.
 
 ---
 

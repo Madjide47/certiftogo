@@ -248,9 +248,9 @@ Dernière mise à jour : 2 août 2026.
 |---|---|---|
 | O-01 | Table des matières du CDC V2 | ✅ |
 | O-02 | Rédaction des 37 chapitres | ⬜ |
-| O-03 | **12 ADR** au format Nygard | ⬜ |
-| O-04 | Argumentaire jury : détention de la clé privée | ⬜ |
-| O-05 | Argumentaire jury : blockchain vs base de données, en 4 points | ⬜ |
+| O-03 | **12 ADR** au format Nygard | ✅ *16 ADR, dont 4 nées de la construction* |
+| O-04 | Argumentaire jury : détention de la clé privée | ✅ |
+| O-05 | Argumentaire jury : blockchain vs base de données, en 4 points | ✅ |
 | O-06 | DDL PostgreSQL complet commenté (`COMMENT ON`) | 🔨 |
 | O-07 | Tableau « ce qui a changé entre V1 et V2 » | ⬜ |
 | O-08 | Priorisation `[MVP]` / `[V1]` / `[VISION]` de chaque exigence | ⬜ |
@@ -283,10 +283,10 @@ ci-dessus : voici ce que seul le CDC mentionne.
 | P-18 | Interopérabilité internationale | 32.2 | ⬜ |
 | P-19 | Reconnaissance optique et reprise de l'existant papier | 32.3 | ⬜ |
 | P-20 | Ouverture à d'autres ministères | 32.4 | ⬜ |
-| P-21 | Objections probables et réponses préparées (jury) | 36.3 | ⬜ |
-| P-22 | Limites assumées du dispositif | 36.4 | ⬜ |
-| P-23 | Critères déclenchant une extraction en micro-service | 37.7 | ⬜ |
-| P-24 | Ce qui ne doit **pas** être découplé, et pourquoi | 37.8 | ⬜ |
+| P-21 | Objections probables et réponses préparées (jury) | 36.3 | ✅ |
+| P-22 | Limites assumées du dispositif | 36.4 | ✅ |
+| P-23 | Critères déclenchant une extraction en micro-service | 37.7 | ✅ |
+| P-24 | Ce qui ne doit **pas** être découplé, et pourquoi | 37.8 | ✅ |
 | P-25 | Taxonomie des erreurs et contrat d'erreur de l'API | 28.1-28.2 | 🔨 |
 | P-26 | Restitution des erreurs à l'écran : message, action corrective, recours | 28.3 | 🔨 |
 | P-27 | Erreurs silencieuses et détection | 28.4 | ⬜ |
@@ -298,7 +298,7 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 149 |
+| ✅ fait et testé | 156 |
 | 🔨 partiel ou en cours | 17 |
 | ⬜ à faire | 8 |
 | **Total** | **174** |
