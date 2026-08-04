@@ -24,7 +24,8 @@ import * as dossierModel from '../models/dossier.model.js';
 import * as txModel from '../models/transaction-blockchain.model.js';
 import * as blockchain from './blockchain.service.js';
 import { calculerHash } from './hash.service.js';
-import { signer } from './signature.service.js';
+import { signer, empreinteCle } from './signature.service.js';
+import { idCleCourante } from './exceptions.service.js';
 import { genererQrFichier, genererQrDataUrl } from './qr.service.js';
 import { genererPdfDiplome } from './pdf.service.js';
 import { genererReferenceDiplome } from '../utils/reference-generator.js';
@@ -186,6 +187,7 @@ export async function corriger(diplome_id, ministere_id, donnees = {}) {
 
   const hash = calculerHash(snapshot);
   const signature = signer(hash);
+  const cleSignature = await idCleCourante();
   const reference = genererReferenceDiplome();
 
   // ── 3. Chaîne : révoquer l'ancien hash, ancrer le nouveau ──
@@ -230,6 +232,10 @@ export async function corriger(diplome_id, ministere_id, donnees = {}) {
         donnees_signees: snapshot,
         hash_sha256: hash,
         signature_numerique: signature,
+        // L-10 — la version corrigée est signée comme l'originale : elle
+        // doit dire avec quelle clé, sinon la moitié du stock devient
+        // intraçable au premier changement de clé.
+        cle_signature_id: cleSignature,
         transaction_id: txEmission.transactionHash,
         qr_code_url: qr.url,
         pdf_url: pdf.url,
@@ -265,6 +271,7 @@ export async function corriger(diplome_id, ministere_id, donnees = {}) {
       mention: dossierCorrige.mention,
       filiere: dossierCorrige.filiere,
       type_diplome: dossierCorrige.type_diplome,
+      signature_empreinte_cle: empreinteCle(),
     };
 
     await client.query(

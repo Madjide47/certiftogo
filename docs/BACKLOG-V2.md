@@ -212,7 +212,7 @@ Dernière mise à jour : 2 août 2026.
 | L-07 | **Gestion de session** : refresh token, révocation, sessions concurrentes | ✅ |
 | L-08 | **Double validation à quatre yeux** pour les actions critiques | ✅ |
 | L-09 | **Clé privée du ministère hors serveur applicatif** (KMS / HSM) | 🔨 *registre et emplacement déclarés ; KMS/HSM à raccorder* |
-| L-10 | Audit de chaque signature | ⬜ |
+| L-10 | Audit de chaque signature | ✅ *clé signataire enregistrée sur chaque diplôme, signature recontrôlable* |
 | L-11 | **Rotation de clés** et procédure de compromission | ✅ |
 | L-12 | Sort des diplômes signés avec l'ancienne clé | ✅ *diplômes concernés dénombrés, marche à suivre produite* |
 | L-13 | Protection CSRF | ✅ *sans objet : auth par en-tête Bearer, aucun cookie de session* |

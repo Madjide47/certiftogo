@@ -11,14 +11,16 @@
 import * as diplomeModel from '../models/diplome.model.js';
 import * as dossierModel from '../models/dossier.model.js';
 import * as txModel from '../models/transaction-blockchain.model.js';
-import { withTransaction } from '../config/database.js';
+import { withTransaction, query } from '../config/database.js';
 import { journaliser, journaliserStatutDossier, ACTIONS } from './audit.service.js';
 import * as quatreYeux from './validation-critique.service.js';
 import * as notifications from './notification.service.js';
 import { ErreurApp } from '../utils/errors.js';
 import { genererReferenceDiplome } from '../utils/reference-generator.js';
+import { estUuidValide } from '../utils/validators.js';
 import { calculerHash } from './hash.service.js';
-import { signer } from './signature.service.js';
+import { signer, empreinteCle, verifier as verifierSignature } from './signature.service.js';
+import { idCleCourante } from './exceptions.service.js';
 import * as blockchain from './blockchain.service.js';
 import { genererQrFichier, genererQrDataUrl } from './qr.service.js';
 import { genererPdfDiplome } from './pdf.service.js';
@@ -82,6 +84,11 @@ export async function construireDiplomeDepuisDossier(dossier) {
   const signature = signer(hash);
   const reference = await genererReferenceUnique();
 
+  // L-10 — on retient AVEC QUOI on a signé. Sans ce lien, une clé
+  // compromise obligerait à re-signer tout le stock : impossible de dire
+  // quels diplômes sont concernés.
+  const cle_signature_id = await idCleCourante();
+
   // IO hors transaction : réutilisables si l'insertion échoue.
   const qr = await genererQrFichier(hash, reference);
   const qrDataUrl = await genererQrDataUrl(hash);
@@ -116,9 +123,53 @@ export async function construireDiplomeDepuisDossier(dossier) {
       donnees_signees: snapshot,
       hash_sha256: hash,
       signature_numerique: signature,
+      cle_signature_id,
       qr_code_url: qr.url,
       pdf_url: pdf.url,
     },
+  };
+}
+
+/**
+ * Contrôle la signature d'un diplôme (L-10).
+ *
+ * `verifier()` existait sans être appelé nulle part : la signature était
+ * apposée puis jamais relue. Cet endpoint la rend contrôlable, ce qui est
+ * la seule façon de savoir qu'elle vaut encore quelque chose — et de
+ * constater, après une rotation de clé, ce qui doit être re-signé.
+ */
+export async function controlerSignature(diplome_id) {
+  // Sans ce garde-fou, un identifiant fantaisiste atteindrait PostgreSQL
+  // et une faute de frappe deviendrait une erreur serveur.
+  if (!estUuidValide(diplome_id)) {
+    throw new ErreurApp(404, 'DIPLOME_INTROUVABLE', 'Diplôme introuvable.');
+  }
+  const diplome = await diplomeModel.trouverParId(diplome_id);
+  if (!diplome) throw new ErreurApp(404, 'DIPLOME_INTROUVABLE', 'Diplôme introuvable.');
+
+  const empreinteCourante = empreinteCle();
+  const { rows } = await query(
+    `SELECT empreinte, statut FROM cles_signature WHERE id = $1`,
+    [diplome.cle_signature_id || null]
+  );
+  const cle = rows[0] || null;
+  const memeCle = cle ? cle.empreinte === empreinteCourante : null;
+
+  return {
+    reference: diplome.reference,
+    hash: diplome.hash_sha256,
+    // Recalculable seulement si la clé en vigueur est celle qui a signé :
+    // avec une autre, un « non conforme » ne dirait rien de la validité
+    // du diplôme, seulement du changement de clé.
+    signature_conforme: memeCle === true ? verifierSignature(diplome.hash_sha256, diplome.signature_numerique) : null,
+    cle_signature: cle
+      ? { empreinte: cle.empreinte, statut: cle.statut, en_vigueur: memeCle }
+      : null,
+    message: !cle
+      ? 'Ce diplôme a été signé avant la tenue du registre des clés : la clé signataire est inconnue.'
+      : memeCle
+        ? null
+        : 'Ce diplôme a été signé avec une clé qui n\'est plus en vigueur. Sa validité repose sur son ancrage blockchain, pas sur cette signature.',
   };
 }
 
@@ -221,7 +272,16 @@ export async function certifier(dossier_id, ministere_id) {
         action: ACTIONS.DIPLOME_CERTIFIE,
         entite: 'diplomes',
         entite_id: cree.id,
-        apres: { reference, hash_sha256: hash, dossier_id },
+        // L'empreinte de la clé entre dans la trace de certification
+        // plutôt que dans une seconde ligne « signature apposée » : même
+        // instant, même auteur, même entité — une ligne de plus par
+        // diplôme doublerait le journal sans rien apprendre.
+        apres: {
+          reference,
+          hash_sha256: hash,
+          dossier_id,
+          signature_empreinte_cle: empreinteCle(),
+        },
         transaction_hash: tx.transactionHash,
         etablissement_id: dossier.etablissement_id,
         message: `${dossier.candidat_nom} ${dossier.candidat_prenom} — ${reference}.`,

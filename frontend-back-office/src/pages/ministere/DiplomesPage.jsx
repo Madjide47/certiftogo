@@ -19,6 +19,7 @@ import {
   revoquerDiplome,
   corrigerDiplome,
   versionsDiplome,
+  controlerSignature,
 } from '../../services/ministere.service.js';
 import {
   LIBELLES_STATUT_DIPLOME,
@@ -102,6 +103,7 @@ export default function DiplomesPage() {
   const [formCorr, setFormCorr] = useState(null);
 
   const [historique, setHistorique] = useState(null);
+  const [signature, setSignature] = useState(null);
 
   async function charger() {
     setChargement(true);
@@ -181,6 +183,22 @@ export default function DiplomesPage() {
     } catch (err) {
       setErreur(messageErreur(err));
       setHistorique(null);
+    }
+  }
+
+  /**
+   * Contrôle de signature (L-10). La réponse est volontairement à trois
+   * états : conforme, non conforme, ou incontrôlable parce que la clé
+   * signataire n'est plus celle en vigueur — ce dernier cas n'est PAS
+   * une alerte de fraude.
+   */
+  async function verifierSignature(d) {
+    setSignature({ diplome: d, data: null });
+    try {
+      setSignature({ diplome: d, data: await controlerSignature(d.id) });
+    } catch (err) {
+      setErreur(messageErreur(err));
+      setSignature(null);
     }
   }
 
@@ -296,6 +314,9 @@ export default function DiplomesPage() {
                     Versions
                   </Bouton>
                 )}
+                <Bouton variante="discret" className="ml-3" onClick={() => verifierSignature(d)}>
+                  Signature
+                </Bouton>
                 {d.statut === 'actif' && (
                   <>
                     <Bouton
@@ -469,6 +490,72 @@ export default function DiplomesPage() {
               </Bouton>
             </div>
           </form>
+        )}
+      </Modale>
+
+      {/* ── Contrôle de signature ── */}
+      <Modale
+        ouvert={Boolean(signature)}
+        titre={`Signature — ${signature?.diplome?.reference || ''}`}
+        onFermer={() => setSignature(null)}
+        largeur="max-w-2xl"
+      >
+        {!signature?.data ? (
+          <Chargement libelle="Contrôle en cours…" />
+        ) : (
+          <>
+            {signature.data.signature_conforme === true && (
+              <Encart ton="succes" titre="Signature conforme">
+                L’empreinte du diplôme, recalculée avec la clé en vigueur, correspond à la
+                signature enregistrée. Le document n’a pas été altéré en base.
+              </Encart>
+            )}
+            {signature.data.signature_conforme === false && (
+              <Encart ton="erreur" titre="Signature non conforme">
+                La signature enregistrée ne correspond pas à l’empreinte du diplôme. Signalez-le
+                immédiatement à l’administration système : une donnée a été modifiée hors des
+                circuits de l’application.
+              </Encart>
+            )}
+            {signature.data.signature_conforme === null && (
+              <Encart ton="info" titre="Signature non recontrôlable">
+                {signature.data.message}
+              </Encart>
+            )}
+
+            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <dt className="text-gris-500">Empreinte du diplôme</dt>
+                <dd className="break-all font-mono text-xs">{signature.data.hash}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-gris-500">Clé signataire</dt>
+                <dd className="break-all font-mono text-xs">
+                  {signature.data.cle_signature?.empreinte || '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-gris-500">État de la clé</dt>
+                <dd>
+                  {signature.data.cle_signature ? (
+                    <Etiquette
+                      ton={signature.data.cle_signature.en_vigueur ? 'succes' : 'neutre'}
+                    >
+                      {signature.data.cle_signature.en_vigueur ? 'En vigueur' : 'Retirée'}
+                    </Etiquette>
+                  ) : (
+                    '—'
+                  )}
+                </dd>
+              </div>
+            </dl>
+
+            <p className="mt-4 flex items-start gap-1.5 text-sm text-gris-500">
+              <Icone nom="link" taille={16} className="mt-0.5 shrink-0" />
+              La validité d’un diplôme repose sur son ancrage blockchain. La signature atteste que
+              la copie conservée en base n’a pas bougé depuis l’émission.
+            </p>
+          </>
         )}
       </Modale>
 

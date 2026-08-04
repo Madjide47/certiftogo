@@ -51,6 +51,17 @@ export function signer(hash) {
   return crypto.createHmac('sha256', SECRET).update(hash, 'utf8').digest('hex');
 }
 
+/**
+ * Empreinte de la clé en vigueur — jamais la clé elle-même.
+ *
+ * C'est ce qui permet de dire « ce diplôme a été signé avec CETTE clé »
+ * sans rien révéler du secret. Sans elle, une compromission oblige à
+ * re-signer tout le stock faute de savoir ce qui est concerné.
+ */
+export function empreinteCle() {
+  return crypto.createHash('sha256').update(SECRET).digest('hex');
+}
+
 /** Vérifie qu'une signature correspond bien à l'empreinte (comparaison constante). */
 export function verifier(hash, signature) {
   const attendue = signer(hash);

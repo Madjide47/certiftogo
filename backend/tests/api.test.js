@@ -3754,6 +3754,111 @@ describe('Administration — création de comptes', () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// Audit des signatures (L-10).
+//
+// Une signature qu'on n'a jamais relue ne prouve rien, et une clé dont
+// on ignore ce qu'elle a signé rend la procédure de compromission
+// inapplicable : il faudrait re-signer tout le stock.
+// ═══════════════════════════════════════════════════════════════════
+describe('Signatures — traçabilité de la clé', () => {
+  let diplome;
+
+  before(async () => {
+    const t = await login('+22890000001');
+    const res = await api().get('/api/ministere/diplomes').set(auth(t));
+    diplome = res.body.data.diplomes.find((d) => d.statut === 'actif');
+  });
+
+  test('chaque diplôme retient la clé qui l’a signé', async () => {
+    assert.ok(diplome, 'un diplôme actif est nécessaire');
+    const { rows } = await pool.query(
+      `SELECT cle_signature_id FROM diplomes WHERE id = $1`,
+      [diplome.id]
+    );
+    assert.ok(rows[0].cle_signature_id, 'cle_signature_id renseignée');
+  });
+
+  test('la clé en vigueur s’inscrit d’elle-même au registre', async () => {
+    // Si l'inscription dépendait d'un clic d'administrateur, le registre
+    // serait vide le jour où l'on en a besoin : celui d'une compromission.
+    const t = await login('+22890000003');
+    const res = await api().get('/api/admin/cles').set(auth(t));
+    assert.equal(res.status, 200);
+
+    const courante = res.body.data.cles.find(
+      (c) => c.empreinte === res.body.data.empreinte_courante
+    );
+    assert.ok(courante, 'la clé en vigueur figure au registre');
+    assert.ok(courante.diplomes > 0, 'et le nombre de diplômes signés est connu');
+  });
+
+  test('la signature est relue et déclarée conforme', async () => {
+    const t = await login('+22890000001');
+    const res = await api().get(`/api/ministere/diplomes/${diplome.id}/signature`).set(auth(t));
+
+    assert.equal(res.status, 200, JSON.stringify(res.body.error || {}));
+    assert.equal(res.body.data.signature_conforme, true);
+    assert.equal(res.body.data.cle_signature.en_vigueur, true);
+  });
+
+  test('une signature altérée est détectée', async () => {
+    const t = await login('+22890000001');
+    const { rows } = await pool.query(
+      `SELECT signature_numerique FROM diplomes WHERE id = $1`,
+      [diplome.id]
+    );
+    await pool.query(`UPDATE diplomes SET signature_numerique = $2 WHERE id = $1`, [
+      diplome.id,
+      'a'.repeat(64),
+    ]);
+
+    const res = await api().get(`/api/ministere/diplomes/${diplome.id}/signature`).set(auth(t));
+    assert.equal(res.body.data.signature_conforme, false);
+
+    await pool.query(`UPDATE diplomes SET signature_numerique = $2 WHERE id = $1`, [
+      diplome.id,
+      rows[0].signature_numerique,
+    ]);
+  });
+
+  test('une clé qui n’est plus en vigueur ne rend pas le diplôme suspect', async () => {
+    // Le diplôme vaut par son ancrage blockchain, pas par la
+    // disponibilité de la clé. Répondre « non conforme » ferait croire à
+    // une fraude là où il n'y a qu'une rotation de clé.
+    const t = await login('+22890000001');
+    const { rows } = await pool.query(
+      `INSERT INTO cles_signature (empreinte, emplacement, statut)
+       VALUES ($1, 'variable_environnement', 'retiree') RETURNING id`,
+      ['b'.repeat(64)]
+    );
+    const { rows: avant } = await pool.query(
+      `SELECT cle_signature_id FROM diplomes WHERE id = $1`,
+      [diplome.id]
+    );
+    await pool.query(`UPDATE diplomes SET cle_signature_id = $2 WHERE id = $1`, [
+      diplome.id,
+      rows[0].id,
+    ]);
+
+    const res = await api().get(`/api/ministere/diplomes/${diplome.id}/signature`).set(auth(t));
+    assert.equal(res.body.data.signature_conforme, null);
+    assert.equal(res.body.data.cle_signature.en_vigueur, false);
+    assert.match(res.body.data.message, /ancrage blockchain/);
+
+    await pool.query(`UPDATE diplomes SET cle_signature_id = $2 WHERE id = $1`, [
+      diplome.id,
+      avant[0].cle_signature_id,
+    ]);
+  });
+
+  test('un identifiant fantaisiste donne 404, pas 500', async () => {
+    const t = await login('+22890000001');
+    const res = await api().get('/api/ministere/diplomes/pas-un-uuid/signature').set(auth(t));
+    assert.equal(res.status, 404);
+  });
+});
+
 describe('Corbeille — résistance à la dérive du schéma', () => {
   test('restaure en ignorant les champs qui ne sont plus des colonnes', async () => {
     // Le JSON déposé est un instantané : il survit aux migrations, et

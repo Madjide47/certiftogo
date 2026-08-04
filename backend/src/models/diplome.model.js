@@ -14,7 +14,7 @@ const SELECT_DIPLOME = `
   d.id, d.reference, d.dossier_id, d.candidat_id, d.etablissement_id, d.ministere_id,
   d.donnees_signees, d.hash_sha256, d.signature_numerique, d.transaction_id,
   d.qr_code_url, d.pdf_url, d.statut, d.motif_revocation,
-  d.version, d.diplome_precedent_id, d.motif_version,
+  d.version, d.diplome_precedent_id, d.motif_version, d.cle_signature_id,
   d.date_certification, d.date_revocation,
   c.nom AS candidat_nom, c.prenom AS candidat_prenom,
   c.numero_etudiant AS candidat_numero_etudiant,

@@ -123,6 +123,16 @@ router.post('/diplomes/:id/corriger', async (req, res, next) => {
   }
 });
 
+// Contrôle de la signature d'un diplôme (L-10) : la signature est enfin
+// relue, pas seulement apposée.
+router.get('/diplomes/:id/signature', async (req, res, next) => {
+  try {
+    return res.json({ success: true, data: await diplomeService.controlerSignature(req.params.id) });
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.get('/diplomes/:id/versions', async (req, res, next) => {
   try {
     return res.json({

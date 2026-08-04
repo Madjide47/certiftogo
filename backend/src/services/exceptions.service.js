@@ -11,6 +11,8 @@ import * as utilisateurModel from '../models/utilisateur.model.js';
 import * as sessions from './session.service.js';
 import { journaliser, ACTIONS } from './audit.service.js';
 import * as notifications from './notification.service.js';
+import { empreinteCle } from './signature.service.js';
+import { logger } from '../utils/logger.js';
 import { ErreurApp } from '../utils/errors.js';
 import {
   nettoyerTexte,
@@ -323,10 +325,16 @@ export async function transfererDossiers(demandeur, { agent_id, repreneur_id, de
 
 // ═══ ERR-006 — Clé de signature ═════════════════════════════════════
 
-/** Empreinte de la clé courante, sans jamais exposer la clé elle-même. */
+/**
+ * Empreinte de la clé courante, sans jamais exposer la clé elle-même.
+ *
+ * Elle vient du service de signature, qui est le seul à connaître le
+ * secret réellement en usage — y compris le secret éphémère utilisé hors
+ * production. La recalculer ici depuis l'environnement donnerait une
+ * empreinte qui ne correspond à aucune signature émise.
+ */
 function empreinteCleCourante() {
-  const secret = process.env.MINISTERE_SIGNING_SECRET || '';
-  return crypto.createHash('sha256').update(secret).digest('hex');
+  return empreinteCle();
 }
 
 /** Enregistre la clé courante si elle n'est pas encore connue. */
@@ -340,6 +348,34 @@ export async function enregistrerCleCourante(ministere_id = null) {
     [ministere_id, empreinte, process.env.CLE_EMPLACEMENT || 'variable_environnement']
   );
   return rows[0];
+}
+
+// Identifiant de la clé en vigueur, mis en cache : le secret est résolu
+// au chargement du module et ne change pas sans redémarrage. Sans ce
+// cache, une certification de masse ferait une requête par diplôme.
+let _cleCouranteId = null;
+
+/**
+ * Identifiant de la clé en vigueur, en l'inscrivant au registre si elle
+ * n'y est pas encore.
+ *
+ * L'inscription est automatique, et c'est délibéré : si elle dépendait
+ * d'un clic d'administrateur, le registre serait vide le jour où l'on en
+ * a besoin — c'est-à-dire le jour d'une compromission.
+ */
+export async function idCleCourante() {
+  if (_cleCouranteId) return _cleCouranteId;
+  try {
+    const cle = await enregistrerCleCourante();
+    _cleCouranteId = cle.id;
+    return _cleCouranteId;
+  } catch (err) {
+    // Ne JAMAIS faire échouer une certification parce que le registre
+    // des clés est indisponible : le diplôme prime, la traçabilité de la
+    // clé se rattrape (`enregistrerCleCourante` est idempotent).
+    logger.error(`[cles] Clé courante non enregistrée : ${err.message}`);
+    return null;
+  }
 }
 
 export async function etatCles() {

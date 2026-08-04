@@ -75,6 +75,12 @@ export async function corrigerDiplome(id, donnees) {
 }
 
 /** Chaîne des versions d'un diplôme (corrections successives). */
+/** Contrôle la signature d'un diplôme et l'état de la clé signataire. */
+export async function controlerSignature(id) {
+  const { data } = await api.get(`/ministere/diplomes/${id}/signature`);
+  return data.data;
+}
+
 export async function versionsDiplome(id) {
   const { data } = await api.get(`/ministere/diplomes/${id}/versions`);
   return data.data;
