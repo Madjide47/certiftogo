@@ -356,11 +356,11 @@ export async function enregistrerResultat(promotion_id, inscription_id, etabliss
     );
   }
 
-  const mention = nettoyerTexte(donnees.mention);
-  if (mention && !(await nomenclature.estMentionValide(mention))) {
+  const mentionSaisie = nettoyerTexte(donnees.mention);
+  if (mentionSaisie && !(await nomenclature.estMentionValide(mentionSaisie))) {
     throw new ErreurApp(400, 'MENTION_INVALIDE', 'Mention inconnue.');
   }
-  if (mention && statut !== 'admis') {
+  if (mentionSaisie && statut !== 'admis') {
     throw new ErreurApp(
       400,
       'MENTION_NON_AUTORISEE',
@@ -378,6 +378,29 @@ export async function enregistrerResultat(promotion_id, inscription_id, etabliss
         'La moyenne doit être un nombre compris entre 0 et 20.'
       );
     }
+  }
+
+  // ── La mention découle de la moyenne ──────────────────────────
+  //
+  // Elle n'est plus saisie mais CALCULÉE : à barème national, deux
+  // étudiants de 14,0 doivent avoir la même mention, quel que soit
+  // l'agent qui les note ou l'établissement qui les présente. La saisie
+  // libre laissait passer un 10,2 « excellent » sans que rien ne
+  // l'arrête.
+  let mention = mentionSaisie;
+  if (statut === 'admis' && moyenne !== null) {
+    const calculee = await nomenclature.mentionPourMoyenne(moyenne);
+
+    // Une mention contredisant le barème n'est pas écrasée en silence :
+    // l'agent doit savoir que ce qu'il a saisi n'a pas été retenu.
+    if (mentionSaisie && mentionSaisie !== calculee) {
+      throw new ErreurApp(
+        409,
+        'MENTION_INCOHERENTE',
+        `Avec une moyenne de ${moyenne}/20, la mention est « ${calculee || 'aucune'} » et non « ${mentionSaisie} ». La mention découle du barème : corrigez la moyenne si c'est elle qui est fausse.`
+      );
+    }
+    mention = calculee;
   }
 
   return avecErreursSql(

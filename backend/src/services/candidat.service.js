@@ -15,6 +15,7 @@ import {
   estTelephoneValide,
   canoniserDate,
   FORMATS_DATE_ACCEPTES,
+  motifDateNaissanceInvraisemblable,
   SEXES,
 } from '../utils/validators.js';
 
@@ -64,6 +65,19 @@ function validerDonnees(donnees) {
       400,
       'DATE_INVALIDE',
       `Date de naissance illisible. Formats acceptés : ${FORMATS_DATE_ACCEPTES}.`
+    );
+  }
+
+  // Une date bien formée peut rester absurde. Un étudiant né aujourd'hui
+  // passe tous les contrôles de syntaxe — et la faute ne se découvre
+  // qu'une fois le diplôme certifié, quand son hash est ancré et que la
+  // seule correction possible est une réémission.
+  const invraisemblance = motifDateNaissanceInvraisemblable(date_naissance);
+  if (invraisemblance) {
+    throw new ErreurApp(
+      400,
+      'DATE_NAISSANCE_INVRAISEMBLABLE',
+      `Date de naissance invraisemblable : ${invraisemblance}.`
     );
   }
 

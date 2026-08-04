@@ -54,9 +54,29 @@ export function useNomenclatures() {
     };
   }, []);
 
+  /**
+   * Mention correspondant à une moyenne, d'après le barème national.
+   *
+   * Le serveur applique la même règle et reste seul juge : ceci ne sert
+   * qu'à montrer à l'agent, pendant qu'il tape, ce qui sera enregistré.
+   */
+  function mentionPourMoyenne(moyenne) {
+    if (moyenne === '' || moyenne === null || moyenne === undefined) return null;
+    const note = Number(moyenne);
+    if (!Number.isFinite(note)) return null;
+
+    return (
+      donnees.mentions
+        .filter((m) => m.seuil_min !== null && m.seuil_min !== undefined)
+        .sort((a, b) => Number(b.seuil_min) - Number(a.seuil_min))
+        .find((m) => note >= Number(m.seuil_min)) || null
+    );
+  }
+
   return {
     typesDiplome: donnees.types_diplome,
     mentions: donnees.mentions,
+    mentionPourMoyenne,
     optionsTypeDiplome: donnees.types_diplome.map((t) => ({
       value: t.code,
       label: t.libelle,

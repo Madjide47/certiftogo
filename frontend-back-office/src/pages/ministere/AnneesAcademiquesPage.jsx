@@ -12,7 +12,7 @@
 // une année suppose de clôturer la précédente — au lieu de laisser
 // découvrir le refus après coup.
 // ─────────────────────────────────────────────────────────────
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   listerAnnees,
   creerAnnee,
@@ -111,6 +111,44 @@ export default function AnneesAcademiquesPage() {
   useEffect(() => {
     charger();
   }, []);
+
+  /**
+   * Années proposables : de l'an dernier à trois ans devant.
+   *
+   * Créer une année six ans à l'avance n'a aucun sens administratif, et
+   * revenir dix ans en arrière non plus. Celles qui existent déjà sont
+   * retirées : la contrainte d'unicité les refuserait de toute façon,
+   * autant ne pas les montrer.
+   */
+  const anneesProposees = useMemo(() => {
+    const debut = new Date().getFullYear() - 1;
+    const dejaCreees = new Set(annees.map((a) => a.libelle));
+    return Array.from({ length: 5 }, (_, i) => debut + i)
+      .map((an) => `${an}-${an + 1}`)
+      .filter((libelle) => !dejaCreees.has(libelle))
+      .map((libelle) => ({ value: libelle, label: libelle }));
+  }, [annees]);
+
+  /**
+   * Choisir l'année pré-remplit ses dates.
+   *
+   * Le calendrier universitaire togolais va de la rentrée d'octobre à la
+   * fin des délibérations de juillet. Les deviner évite à l'agent de
+   * saisir deux dates qu'il connaît sans les avoir sous la main — tout en
+   * les laissant modifiables, parce que l'arrêté prime.
+   */
+  function choisirAnnee(libelle) {
+    if (!libelle) {
+      setFormAnnee(ANNEE_VIDE);
+      return;
+    }
+    const premiere = Number(libelle.slice(0, 4));
+    setFormAnnee({
+      libelle,
+      date_debut: `${premiere}-10-01`,
+      date_fin: `${premiere + 1}-07-31`,
+    });
+  }
 
   async function soumettreAnnee(e) {
     e.preventDefault();
@@ -340,23 +378,33 @@ export default function AnneesAcademiquesPage() {
         <form onSubmit={soumettreAnnee} className="space-y-4">
           {erreurForm && <Encart ton="erreur">{erreurForm}</Encart>}
 
+          {/* Une année académique n'est pas une chaîne libre : elle
+              couvre deux années consécutives. Le champ de saisie laissait
+              écrire « 2025 » ou « 2025-2027 », que le serveur refusait
+              ensuite — autant ne proposer que des valeurs justes. */}
           <Champ
-            label="Libellé"
+            label="Année académique"
             htmlFor="an-libelle"
             requis
-            aide="Format usuel : 2024-2025."
+            aide="Deux années consécutives. Les années déjà créées ne sont pas proposées."
           >
-            <Saisie
+            <Liste
               id="an-libelle"
               required
-              placeholder="2025-2026"
+              vide="— Choisir —"
               value={formAnnee.libelle}
-              onChange={(e) => setFormAnnee({ ...formAnnee, libelle: e.target.value })}
+              onChange={(e) => choisirAnnee(e.target.value)}
+              options={anneesProposees}
             />
           </Champ>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Champ label="Date de début" htmlFor="an-debut" requis>
+            <Champ
+              label="Date de début"
+              htmlFor="an-debut"
+              requis
+              aide="Rentrée universitaire."
+            >
               <Saisie
                 id="an-debut"
                 type="date"
@@ -365,7 +413,12 @@ export default function AnneesAcademiquesPage() {
                 onChange={(e) => setFormAnnee({ ...formAnnee, date_debut: e.target.value })}
               />
             </Champ>
-            <Champ label="Date de fin" htmlFor="an-fin" requis>
+            <Champ
+              label="Date de fin"
+              htmlFor="an-fin"
+              requis
+              aide="Fin des délibérations."
+            >
               <Saisie
                 id="an-fin"
                 type="date"
@@ -375,6 +428,15 @@ export default function AnneesAcademiquesPage() {
               />
             </Champ>
           </div>
+
+          {formAnnee.libelle && (
+            <p className="flex items-start gap-1.5 text-sm text-gris-500">
+              <Icone nom="event" taille={16} className="mt-0.5 shrink-0" />
+              Dates pré-remplies sur le calendrier universitaire usuel — 1<sup>er</sup> octobre à
+              fin juillet. Ajustez-les si l’arrêté en retient d’autres : elles bornent la période
+              pendant laquelle les promotions de cette année peuvent être créées.
+            </p>
+          )}
 
           <Encart ton="info">
             L'année est créée en préparation : les établissements ne la voient pas encore.

@@ -74,7 +74,7 @@ const STATUTS_FIGES = ['transmise', 'certifiee', 'cloturee'];
 const aujourdhui = () => new Date().toISOString().slice(0, 10);
 
 export default function PromotionsPage() {
-  const { optionsMention } = useNomenclatures();
+  const { mentionPourMoyenne } = useNomenclatures();
   const [promotions, setPromotions] = useState([]);
   const [annees, setAnnees] = useState([]);
   const [filieres, setFilieres] = useState([]);
@@ -265,7 +265,12 @@ export default function PromotionsPage() {
       await enregistrerResultat(promotionOuverte.id, resultatEnCours.id, {
         statut: resultatEnCours.statut,
         moyenne: resultatEnCours.moyenne === '' ? undefined : resultatEnCours.moyenne,
-        mention: resultatEnCours.mention || undefined,
+        // La mention n'est PAS envoyée quand une moyenne l'est : le
+        // serveur l'établit d'après le barème. L'envoyer quand même
+        // exposerait à un refus pour incohérence si l'agent a modifié la
+        // moyenne après coup.
+        mention:
+          resultatEnCours.moyenne === '' ? resultatEnCours.mention || undefined : undefined,
       });
       setResultatEnCours(null);
       await rafraichirInscriptions();
@@ -356,6 +361,10 @@ export default function PromotionsPage() {
   const candidatsDisponibles = candidats.filter((c) => !dejaInscrits.has(c.id));
   const admisATransmettre = (transmission?.inscriptions || []).filter((i) => i.statut === 'admis');
   const nonAdmis = (transmission?.inscriptions || []).length - admisATransmettre.length;
+  // Mention affichée pendant la saisie : le serveur la recalcule et fait foi.
+  const mentionCalculee = resultatEnCours
+    ? mentionPourMoyenne(resultatEnCours.moyenne)
+    : null;
   // A-17 : un admis sans numéro bloque la transmission côté serveur.
   const sansNumero = admisATransmettre.filter((i) => !i.telephone);
 
@@ -856,22 +865,31 @@ export default function PromotionsPage() {
                   onChange={(e) => setResultatEnCours((r) => ({ ...r, moyenne: e.target.value }))}
                 />
               </Champ>
+              {/* La mention n'est plus saisie : elle DÉCOULE de la
+                  moyenne, d'après le barème national. Deux étudiants de
+                  14,0 doivent avoir la même mention, quel que soit
+                  l'agent qui les note. */}
               <Champ
                 label="Mention"
-                htmlFor="r-mention"
-                aide={
-                  resultatEnCours.statut !== 'admis'
-                    ? 'Réservée aux étudiants admis.'
-                    : undefined
-                }
+                aide="Calculée d’après la moyenne — elle ne se saisit pas."
               >
-                <Liste
-                  id="r-mention"
-                  disabled={resultatEnCours.statut !== 'admis'}
-                  value={resultatEnCours.mention}
-                  onChange={(e) => setResultatEnCours((r) => ({ ...r, mention: e.target.value }))}
-                  options={optionsMention}
-                />
+                <p className="mt-1 flex min-h-[2.6rem] items-center gap-2 border border-gris-300 bg-gris-100 px-3 py-2 text-base">
+                  {resultatEnCours.statut !== 'admis' ? (
+                    <span className="text-gris-500">Réservée aux étudiants admis</span>
+                  ) : mentionCalculee ? (
+                    <>
+                      <Icone nom="workspace_premium" taille={18} className="text-vert" />
+                      <span className="font-medium text-gris-900">{mentionCalculee.libelle}</span>
+                      <span className="text-sm text-gris-500">
+                        à partir de {mentionCalculee.seuil_min}/20
+                      </span>
+                    </>
+                  ) : resultatEnCours.moyenne === '' ? (
+                    <span className="text-gris-500">Saisissez la moyenne</span>
+                  ) : (
+                    <span className="text-gris-500">Aucune mention à cette moyenne</span>
+                  )}
+                </p>
               </Champ>
             </div>
 

@@ -189,6 +189,58 @@ export function estDateValide(valeur) {
   return canoniserDate(valeur) !== null;
 }
 
+/**
+ * Bornes de plausibilité d'une date de naissance d'étudiant.
+ *
+ * 14 ans : personne n'entre dans l'enseignement supérieur plus jeune, et
+ * le contrôle ministériel refuse déjà un diplôme obtenu avant 15 ans —
+ * accepter 13 ici ne ferait que reporter le rejet après la transmission,
+ * quand la correction coûte beaucoup plus cher.
+ *
+ * 120 ans : une date de 1850 est une faute de frappe, pas une biographie.
+ */
+export const AGE_MINIMUM_ETUDIANT = 14;
+export const AGE_MAXIMUM_ETUDIANT = 120;
+
+/**
+ * Contrôle la vraisemblance d'une date de naissance déjà canonisée.
+ *
+ * Une date syntaxiquement correcte peut être absurde : un étudiant né
+ * aujourd'hui, ou l'an prochain, passe tous les contrôles de format. Ce
+ * genre de valeur vient d'un doigt qui a glissé ou d'un tableur qui a
+ * mis la date du jour par défaut — et elle finirait imprimée sur un
+ * diplôme certifié, dont le hash est ancré et ne se corrige qu'en
+ * réémettant.
+ *
+ * @param {string|null|undefined} dateIso date au format AAAA-MM-JJ
+ * @returns {string|null} le motif du refus, ou null si la date tient
+ */
+export function motifDateNaissanceInvraisemblable(dateIso) {
+  if (!dateIso) return null;
+
+  const naissance = new Date(`${dateIso}T00:00:00Z`);
+  if (Number.isNaN(naissance.getTime())) return null; // déjà traité en amont
+
+  const aujourdhui = new Date();
+  const jourUTC = new Date(
+    Date.UTC(aujourdhui.getUTCFullYear(), aujourdhui.getUTCMonth(), aujourdhui.getUTCDate())
+  );
+
+  if (naissance > jourUTC) return 'date de naissance dans le futur';
+  if (naissance.getTime() === jourUTC.getTime()) {
+    return 'date de naissance fixée à aujourd\'hui';
+  }
+
+  const ans = (jourUTC - naissance) / (365.25 * 24 * 3600 * 1000);
+  if (ans < AGE_MINIMUM_ETUDIANT) {
+    return `âge invraisemblable pour un étudiant (${Math.floor(ans)} ans, minimum ${AGE_MINIMUM_ETUDIANT})`;
+  }
+  if (ans > AGE_MAXIMUM_ETUDIANT) {
+    return `date de naissance trop ancienne (${Math.floor(ans)} ans)`;
+  }
+  return null;
+}
+
 /** Valeurs autorisées par les contraintes CHECK du schéma. */
 export const SEXES = ['M', 'F'];
 // MENTIONS et TYPES_DIPLOME ne sont plus ici : ce sont des

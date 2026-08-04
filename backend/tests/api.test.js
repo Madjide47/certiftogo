@@ -1348,7 +1348,7 @@ describe('Import Excel — promotion entière', () => {
     assert.equal(res.body.data.rapport.importes, 3);
     assert.equal(await compterInscrits(), avant + 3);
 
-    // Une mention vaut délibération : l'inscription est « admis ».
+    // Une moyenne vaut délibération : l'inscription est « admis ».
     const { rows: admis } = await pool.query(
       `SELECT i.statut, i.mention, i.moyenne
          FROM inscriptions i JOIN candidats c ON c.id = i.candidat_id
@@ -1358,12 +1358,22 @@ describe('Import Excel — promotion entière', () => {
     assert.equal(admis[0].mention, 'tres_bien');
     assert.equal(Number(admis[0].moyenne), 16.5);
 
-    // Sans mention, l'étudiant reste simplement inscrit.
-    const { rows: inscrit } = await pool.query(
-      `SELECT i.statut FROM inscriptions i JOIN candidats c ON c.id = i.candidat_id
+    // La mention est CALCULÉE quand la colonne est vide : 13/20 donne
+    // « assez bien » d'après le barème national, sans que l'établissement
+    // ait à l'écrire — ni à choisir son propre barème.
+    const { rows: calculee } = await pool.query(
+      `SELECT i.statut, i.mention FROM inscriptions i JOIN candidats c ON c.id = i.candidat_id
         WHERE c.numero_etudiant = 'IMP-202'`
     );
-    assert.equal(inscrit[0].statut, 'inscrit');
+    assert.equal(calculee[0].statut, 'admis');
+    assert.equal(calculee[0].mention, 'assez_bien');
+
+    // 11/20 : passable, seuil le plus bas atteint.
+    const { rows: passable } = await pool.query(
+      `SELECT i.mention FROM inscriptions i JOIN candidats c ON c.id = i.candidat_id
+        WHERE c.numero_etudiant = 'IMP-203'`
+    );
+    assert.equal(passable[0].mention, 'passable');
 
     // Compte de connexion créé mais fermé.
     const { rows: compte } = await pool.query(
@@ -3768,6 +3778,149 @@ describe('Administration — création de comptes', () => {
 // migration. Encore faut-il que la contrainte suive — sinon on a
 // remplacé un garde-fou par rien.
 // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// La mention découle de la moyenne.
+//
+// À barème national, deux étudiants de 14,0 doivent avoir la même
+// mention, quel que soit l'agent qui les note. La saisie libre laissait
+// passer un 10,2 « excellent ».
+// ═══════════════════════════════════════════════════════════════════
+describe('Notation — mention calculée depuis la moyenne', () => {
+  let promotionId;
+  let inscriptionId;
+  let jeton;
+
+  before(async () => {
+    jeton = await login('+22890000002');
+    const promotions = await api().get('/api/promotions').set(auth(jeton));
+    const cible = promotions.body.data.promotions.find((p) =>
+      ['brouillon', 'ouverte'].includes(p.statut)
+    );
+    promotionId = cible.id;
+
+    const candidat = await api().post('/api/candidats').set(auth(jeton)).send({
+      numero_etudiant: 'BAREME-001', nom: 'BAREME', prenom: 'Test',
+      telephone: '+22890000893', date_naissance: '2000-05-10',
+    });
+    const inscription = await api()
+      .post(`/api/promotions/${promotionId}/inscriptions`)
+      .set(auth(jeton))
+      .send({ candidat_id: candidat.body.data.candidat.id });
+    inscriptionId = inscription.body.data.inscription.id;
+  });
+
+  const noter = (donnees) =>
+    api()
+      .put(`/api/promotions/${promotionId}/inscriptions/${inscriptionId}`)
+      .set(auth(jeton))
+      .send(donnees);
+
+  test('applique le barème sans que l’agent saisisse la mention', async () => {
+    for (const [moyenne, attendue] of [
+      [19, 'excellent'],
+      [16, 'tres_bien'],
+      [14.5, 'bien'],
+      [12, 'assez_bien'],
+      [10, 'passable'],
+    ]) {
+      const res = await noter({ statut: 'admis', moyenne });
+      assert.equal(res.status, 200, JSON.stringify(res.body.error || {}));
+      assert.equal(res.body.data.inscription.mention, attendue, `${moyenne}/20`);
+    }
+  });
+
+  test('les bornes du barème sont inclusives', async () => {
+    // 13,99 n'est pas « bien » : le seuil est à 14, pas « autour de 14 ».
+    const res = await noter({ statut: 'admis', moyenne: 13.99 });
+    assert.equal(res.body.data.inscription.mention, 'assez_bien');
+  });
+
+  test('sous le premier seuil, admis sans mention', async () => {
+    const res = await noter({ statut: 'admis', moyenne: 9.5 });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.inscription.mention, null);
+  });
+
+  test('une mention contredisant le barème est refusée, pas écrasée', async () => {
+    // Écraser en silence laisserait l'agent croire que sa saisie a été
+    // retenue — et la divergence vient souvent d'une moyenne fausse.
+    const res = await noter({ statut: 'admis', moyenne: 10.2, mention: 'excellent' });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'MENTION_INCOHERENTE');
+    assert.match(res.body.error.message, /passable/);
+  });
+
+  test('un ajourné n’a pas de mention, quelle que soit sa moyenne', async () => {
+    const res = await noter({ statut: 'ajourne', moyenne: 15 });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.inscription.mention, null);
+  });
+
+  test('sans moyenne, la mention saisie est conservée', async () => {
+    // Certains établissements délibèrent sans transmettre les notes.
+    const res = await noter({ statut: 'admis', mention: 'bien' });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.inscription.mention, 'bien');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Vraisemblance des dates de naissance.
+// ═══════════════════════════════════════════════════════════════════
+describe('Dates de naissance — vraisemblance', () => {
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+  const dans5ans = new Date(Date.now() + 5 * 365 * 86400000).toISOString().slice(0, 10);
+
+  test('un étudiant ne peut pas être né aujourd’hui', async () => {
+    const t = await login('+22890000002');
+    const res = await api().post('/api/candidats').set(auth(t)).send({
+      numero_etudiant: 'NE-AUJ-001', nom: 'NOUVEAU', prenom: 'Ne',
+      date_naissance: aujourdhui,
+    });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'DATE_NAISSANCE_INVRAISEMBLABLE');
+  });
+
+  test('ni dans le futur', async () => {
+    const t = await login('+22890000002');
+    const res = await api().post('/api/candidats').set(auth(t)).send({
+      numero_etudiant: 'NE-FUT-001', nom: 'FUTUR', prenom: 'Ne',
+      date_naissance: dans5ans,
+    });
+    assert.equal(res.status, 400);
+    assert.match(res.body.error.message, /futur/);
+  });
+
+  test('ni à un âge impossible pour un étudiant', async () => {
+    const t = await login('+22890000002');
+    const res = await api().post('/api/candidats').set(auth(t)).send({
+      numero_etudiant: 'NE-BEBE-001', nom: 'ENFANT', prenom: 'Trop jeune',
+      date_naissance: new Date(Date.now() - 8 * 365 * 86400000).toISOString().slice(0, 10),
+    });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'DATE_NAISSANCE_INVRAISEMBLABLE');
+  });
+
+  test('ni en 1850', async () => {
+    const t = await login('+22890000002');
+    const res = await api().post('/api/candidats').set(auth(t)).send({
+      numero_etudiant: 'NE-VIEUX-001', nom: 'ANCIEN', prenom: 'Trop',
+      date_naissance: '1850-01-01',
+    });
+    assert.equal(res.status, 400);
+    assert.match(res.body.error.message, /trop ancienne/);
+  });
+
+  test('une date plausible passe', async () => {
+    const t = await login('+22890000002');
+    const res = await api().post('/api/candidats').set(auth(t)).send({
+      numero_etudiant: 'NE-OK-001', nom: 'PLAUSIBLE', prenom: 'Date',
+      date_naissance: '1999-06-15',
+    });
+    assert.equal(res.status, 201, JSON.stringify(res.body.error || {}));
+  });
+});
+
 describe('Nomenclatures — types de diplôme et mentions', () => {
   test('la lecture est ouverte à tout compte authentifié', async () => {
     const t = await login('+22890000002');

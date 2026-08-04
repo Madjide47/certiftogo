@@ -21,6 +21,7 @@ import {
   estEmailValide,
   canoniserDate,
   FORMATS_DATE_ACCEPTES,
+  motifDateNaissanceInvraisemblable,
   SEXES,
 } from '../utils/validators.js';
 import * as nomenclature from './nomenclature.service.js';
@@ -160,7 +161,7 @@ async function lireFichier(buffer, nomFichier = '') {
  * 12 000 lignes ferait autant de lectures pour la même liste de cinq
  * mentions.
  */
-function validerLigne(brut, mentionsConnues) {
+function validerLigne(brut, { mentionsConnues, bareme }) {
   const erreurs = [];
   const d = {};
 
@@ -197,7 +198,16 @@ function validerLigne(brut, mentionsConnues) {
     );
     d.date_naissance = null;
   } else {
-    d.date_naissance = naissance ?? null;
+    // Un tableur met volontiers la date du jour dans une colonne date
+    // laissée vide. Sans ce contrôle, la promotion entière naîtrait
+    // aujourd'hui et le ministère ne s'en apercevrait qu'à l'instruction.
+    const invraisemblance = motifDateNaissanceInvraisemblable(naissance);
+    if (invraisemblance) {
+      erreurs.push(`${invraisemblance} (${naissanceBrute})`);
+      d.date_naissance = null;
+    } else {
+      d.date_naissance = naissance ?? null;
+    }
   }
 
   d.lieu_naissance = nettoyerTexte(brut.lieu_naissance);
@@ -223,6 +233,14 @@ function validerLigne(brut, mentionsConnues) {
     d.moyenne = null;
   }
 
+  // La mention DÉCOULE de la moyenne : c'est le barème national qui
+  // tranche, pas la colonne du classeur. Une école qui note « bien » à
+  // 11 et une autre à 14 produiraient sinon des diplômes incomparables.
+  const attendue =
+    d.moyenne === null || d.moyenne === undefined
+      ? null
+      : bareme.find((m) => d.moyenne >= m.seuil_min)?.code || null;
+
   const mention = nettoyerTexte(brut.mention);
   if (mention) {
     const normalisee = normaliserEntete(mention).replace(/ /g, '_');
@@ -230,15 +248,39 @@ function validerLigne(brut, mentionsConnues) {
       erreurs.push(
         `mention inconnue (${mention}), valeurs : ${[...mentionsConnues].join(', ')}`
       );
+      d.mention = null;
+    } else if (d.moyenne !== null && d.moyenne !== undefined && normalisee !== attendue) {
+      // Signalée plutôt que corrigée en douce : la divergence vient
+      // souvent d'une moyenne fausse, et c'est elle qu'il faut reprendre.
+      erreurs.push(
+        `mention « ${mention} » incohérente avec la moyenne ${d.moyenne}/20 (attendue : ${attendue || 'aucune'})`
+      );
+      d.mention = null;
     } else {
       d.mention = normalisee;
     }
   } else {
-    d.mention = null;
+    // Colonne absente ou vide : le barème la remplit.
+    d.mention = attendue;
   }
 
-  // Une mention traduit une délibération : l'étudiant est admis.
-  d.statut_inscription = d.mention ? 'admis' : 'inscrit';
+  // ── Du résultat au statut ─────────────────────────────────────
+  //
+  // Une moyenne dans le fichier signifie que le jury a délibéré : on ne
+  // laisse donc pas l'étudiant « inscrit », état qui veut dire « en
+  // attente de résultat ». Au-dessus du seuil de passable il est admis,
+  // en dessous il est ajourné — et un ajourné ne part pas au ministère.
+  //
+  // Sans moyenne, on s'en remet à la mention écrite : certains
+  // établissements transmettent la délibération sans les notes.
+  if (d.moyenne !== null && d.moyenne !== undefined) {
+    d.statut_inscription = d.mention ? 'admis' : 'ajourne';
+    // La contrainte de base réserve la mention aux admis, et elle a
+    // raison : une mention sur un ajourné n'a aucun sens.
+    if (d.statut_inscription !== 'admis') d.mention = null;
+  } else {
+    d.statut_inscription = d.mention ? 'admis' : 'inscrit';
+  }
 
   return { donnees: d, erreurs };
 }
@@ -251,6 +293,9 @@ export async function analyser({ buffer, nomFichier, etablissement_id, promotion
   const { lignes } = await lireFichier(buffer, nomFichier);
 
   const mentionsConnues = new Set(await nomenclature.codesMentions());
+  // Barème trié du seuil le plus haut au plus bas : la première entrée
+  // atteinte est la bonne mention.
+  const bareme = (await nomenclature.baremeMentions()).sort((a, b) => b.seuil_min - a.seuil_min);
   const rapport = { total: lignes.length, valides: 0, erreurs: [], apercu: [] };
   const validees = [];
 
@@ -259,7 +304,7 @@ export async function analyser({ buffer, nomFichier, etablissement_id, promotion
   const telephonesVus = new Map();
 
   for (const ligne of lignes) {
-    const { donnees, erreurs } = validerLigne(ligne.brut, mentionsConnues);
+    const { donnees, erreurs } = validerLigne(ligne.brut, { mentionsConnues, bareme });
 
     if (donnees.numero_etudiant) {
       const cle = donnees.numero_etudiant.toLowerCase();
@@ -445,7 +490,11 @@ export async function genererModele() {
     ['lieu_naissance', 'Facultatif.'],
     ['sexe', 'Facultatif. M ou F.'],
     ['moyenne', 'Facultatif. Nombre entre 0 et 20.'],
-    ['mention', `Facultatif. ${(await nomenclature.codesMentions()).join(', ')}. Une mention vaut admission.`],
+    [
+      'mention',
+      "Laissez vide : elle est calculée depuis la moyenne, d'après le barème national. " +
+        'Si vous la renseignez, elle doit concorder.',
+    ],
     ['', ''],
     ['Import strict', 'Si une seule ligne est en erreur, aucun étudiant n\'est importé. Corrigez puis relancez.'],
     ['Simulation', 'Lancez d\'abord une simulation : elle signale chaque erreur avec son numéro de ligne.'],

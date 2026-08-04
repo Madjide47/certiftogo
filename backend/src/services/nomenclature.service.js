@@ -98,6 +98,42 @@ export async function estMentionValide(code) {
   return (await codesMentions()).includes(code);
 }
 
+/**
+ * Mention correspondant à une moyenne, d'après le barème national.
+ *
+ * La règle est ici et nulle part ailleurs. Recopiée dans le service des
+ * promotions, dans l'import et dans le formulaire, elle finirait par
+ * diverger : trois barèmes pour un pays, et deux étudiants de 14,0 avec
+ * des mentions différentes selon l'écran qui les a saisis.
+ *
+ * On retient la mention la PLUS ÉLEVÉE dont le seuil est atteint. Les
+ * seuils étant des données, le ministère peut les revoir sans toucher au
+ * code — c'est tout l'intérêt de les avoir sortis du JavaScript.
+ *
+ * @returns {Promise<string|null>} code de mention, ou null si aucun
+ *   seuil n'est atteint (sous 10 : admission sans mention).
+ */
+export async function mentionPourMoyenne(moyenne) {
+  if (moyenne === null || moyenne === undefined || moyenne === '') return null;
+
+  const note = Number(moyenne);
+  if (!Number.isFinite(note)) return null;
+
+  const barème = (await mentions())
+    .filter((m) => m.seuil_min !== null && m.seuil_min !== undefined)
+    .sort((a, b) => Number(b.seuil_min) - Number(a.seuil_min));
+
+  return barème.find((m) => note >= Number(m.seuil_min))?.code || null;
+}
+
+/** Le barème lui-même, pour l'afficher ou l'appliquer côté écran. */
+export async function baremeMentions() {
+  return (await mentions({ actifsSeuls: true }))
+    .filter((m) => m.seuil_min !== null && m.seuil_min !== undefined)
+    .map((m) => ({ code: m.code, libelle: m.libelle, seuil_min: Number(m.seuil_min) }))
+    .sort((a, b) => a.seuil_min - b.seuil_min);
+}
+
 // ── Écriture, réservée au ministère ────────────────────────────────
 
 /**

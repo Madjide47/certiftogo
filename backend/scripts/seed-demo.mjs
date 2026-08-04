@@ -209,10 +209,13 @@ async function creerChaineAcademique(etab, annee, session, candidats) {
           `releve-${candidat.numero_etudiant || candidat.id.slice(0, 8)}.pdf`
         );
         const admis = Math.random() > 0.25;
+        // La mention n'est plus tirée au hasard : elle découle de la
+        // moyenne. Un jeu de démonstration qui montrerait un 10,2
+        // « excellent » ferait douter de tout le reste — et le serveur
+        // le refuserait d'ailleurs.
         await promotionService.enregistrerResultat(promotion.id, inscription.id, etab.id, {
           statut: admis ? 'admis' : 'ajourne',
           moyenne: (admis ? 10 + Math.random() * 8 : 6 + Math.random() * 3).toFixed(2),
-          mention: admis ? rand(MENTIONS) : undefined,
         });
       } catch (e) {
         console.warn(`    ! inscription ${etab.prefix}: ${e.message}`);

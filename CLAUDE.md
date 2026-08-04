@@ -107,6 +107,15 @@ délibération, arrêté de jury). Cycle : `deposee → vue → validee | rejete
 > Un lot dont une pièce obligatoire manque, a été rejetée ou n'a pas été
 > ouverte ne peut pas être validé (409).
 
+> **La mention découle de la moyenne.** Elle n'est pas saisie : le service
+> `nomenclature.mentionPourMoyenne()` applique les `seuil_min` de la table
+> `mentions` (10 / 12 / 14 / 16 / 18). À barème national, deux étudiants de 14,0
+> ont la même mention quel que soit l'agent qui les note. Une mention fournie
+> qui contredit le barème est **refusée** (409 `MENTION_INCOHERENTE`) plutôt
+> qu'écrasée en silence — la divergence vient le plus souvent d'une moyenne
+> fausse. À l'import, la colonne `mention` peut rester vide ; une moyenne
+> présente vaut délibération (admis au-dessus de 10, ajourné en dessous).
+
 **`016_nomenclatures.sql`** — tables `types_diplome` et `mentions`. Les listes
 vivaient dans cinq contraintes `CHECK` répétées à l'identique : créer un « DUT »
 demandait une migration et un redéploiement. Elles sont désormais des **données**,
@@ -189,7 +198,7 @@ npm run db:demo    # reset + seed + démo (données riches pour présentation)
 cd backend
 npm install
 npm run dev       # http://localhost:4000  (nodemon)
-npm test          # 256 tests — exécution SÉQUENTIELLE (--test-concurrency=1) :
+npm test          # 267 tests — exécution SÉQUENTIELLE (--test-concurrency=1) :
                   # les fichiers partagent la base certiftogo_test, et les écrire
                   # en parallèle corrompt le canal du test runner.
 ```
