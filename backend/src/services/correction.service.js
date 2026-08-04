@@ -33,7 +33,8 @@ import { journaliser, ACTIONS } from './audit.service.js';
 import * as notifications from './notification.service.js';
 import { contexteCourant } from '../config/contexte.js';
 import { ErreurApp } from '../utils/errors.js';
-import { nettoyerTexte, estUuidValide, estDansEnum, MENTIONS } from '../utils/validators.js';
+import * as nomenclature from './nomenclature.service.js';
+import { nettoyerTexte, estUuidValide } from '../utils/validators.js';
 
 const TYPES_CORRECTION = ['changement_nom', 'erreur_donnees', 'autre'];
 
@@ -41,7 +42,7 @@ const TYPES_CORRECTION = ['changement_nom', 'erreur_donnees', 'autre'];
 const CHAMPS_IDENTITE = ['nom', 'prenom', 'date_naissance', 'lieu_naissance'];
 const CHAMPS_DIPLOME = ['mention', 'filiere', 'parcours', 'type_diplome', 'date_obtention'];
 
-function validerCorrections(corrections = {}) {
+async function validerCorrections(corrections = {}) {
   const identite = {};
   const diplome = {};
 
@@ -60,7 +61,7 @@ function validerCorrections(corrections = {}) {
     }
   }
 
-  if (diplome.mention && !estDansEnum(diplome.mention, MENTIONS)) {
+  if (diplome.mention && !(await nomenclature.estMentionValide(diplome.mention))) {
     throw new ErreurApp(400, 'MENTION_INVALIDE', 'Mention inconnue.');
   }
   if (Object.keys(identite).length + Object.keys(diplome).length === 0) {
@@ -121,7 +122,7 @@ export async function corriger(diplome_id, ministere_id, donnees = {}) {
     );
   }
 
-  const { identite, diplome: champsDiplome } = validerCorrections(donnees.corrections);
+  const { identite, diplome: champsDiplome } = await validerCorrections(donnees.corrections);
 
   // ── 1. Appliquer les corrections au dossier et à l'identité ──
   // L'identité change sur la PERSONNE : un mariage ne concerne pas une

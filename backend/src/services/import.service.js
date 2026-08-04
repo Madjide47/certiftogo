@@ -22,8 +22,8 @@ import {
   canoniserDate,
   FORMATS_DATE_ACCEPTES,
   SEXES,
-  MENTIONS,
 } from '../utils/validators.js';
+import * as nomenclature from './nomenclature.service.js';
 
 /**
  * En-têtes acceptés pour chaque champ. La comparaison se fait sur une
@@ -153,8 +153,14 @@ async function lireFichier(buffer, nomFichier = '') {
   return { colonnes: Object.keys(correspondance), lignes };
 }
 
-/** Valide une ligne isolément. Renvoie { donnees, erreurs[] }. */
-function validerLigne(brut) {
+/**
+ * Valide une ligne isolément. Renvoie { donnees, erreurs[] }.
+ *
+ * La nomenclature est PASSÉE en argument, pas relue ici : un classeur de
+ * 12 000 lignes ferait autant de lectures pour la même liste de cinq
+ * mentions.
+ */
+function validerLigne(brut, mentionsConnues) {
   const erreurs = [];
   const d = {};
 
@@ -220,8 +226,10 @@ function validerLigne(brut) {
   const mention = nettoyerTexte(brut.mention);
   if (mention) {
     const normalisee = normaliserEntete(mention).replace(/ /g, '_');
-    if (!MENTIONS.includes(normalisee)) {
-      erreurs.push(`mention inconnue (${mention}), valeurs : ${MENTIONS.join(', ')}`);
+    if (!mentionsConnues.has(normalisee)) {
+      erreurs.push(
+        `mention inconnue (${mention}), valeurs : ${[...mentionsConnues].join(', ')}`
+      );
     } else {
       d.mention = normalisee;
     }
@@ -242,6 +250,7 @@ function validerLigne(brut) {
 export async function analyser({ buffer, nomFichier, etablissement_id, promotion_id }) {
   const { lignes } = await lireFichier(buffer, nomFichier);
 
+  const mentionsConnues = new Set(await nomenclature.codesMentions());
   const rapport = { total: lignes.length, valides: 0, erreurs: [], apercu: [] };
   const validees = [];
 
@@ -250,7 +259,7 @@ export async function analyser({ buffer, nomFichier, etablissement_id, promotion
   const telephonesVus = new Map();
 
   for (const ligne of lignes) {
-    const { donnees, erreurs } = validerLigne(ligne.brut);
+    const { donnees, erreurs } = validerLigne(ligne.brut, mentionsConnues);
 
     if (donnees.numero_etudiant) {
       const cle = donnees.numero_etudiant.toLowerCase();
@@ -436,7 +445,7 @@ export async function genererModele() {
     ['lieu_naissance', 'Facultatif.'],
     ['sexe', 'Facultatif. M ou F.'],
     ['moyenne', 'Facultatif. Nombre entre 0 et 20.'],
-    ['mention', `Facultatif. ${MENTIONS.join(', ')}. Une mention vaut admission.`],
+    ['mention', `Facultatif. ${(await nomenclature.codesMentions()).join(', ')}. Une mention vaut admission.`],
     ['', ''],
     ['Import strict', 'Si une seule ligne est en erreur, aucun étudiant n\'est importé. Corrigez puis relancez.'],
     ['Simulation', 'Lancez d\'abord une simulation : elle signale chaque erreur avec son numéro de ligne.'],

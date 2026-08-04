@@ -75,7 +75,7 @@ Dernière mise à jour : 2 août 2026.
 | D-01 | **Table `lots_transmission`** : horodatage, agent émetteur, établissement, promotion | ✅ |
 | D-02 | **Transmission d'une promotion entière en un clic** | ✅ |
 | D-03 | **Génération automatique des dossiers** à la transmission | ✅ |
-| D-04 | **Écran de confirmation** « transmettre 250 étudiants ? » | ⬜ |
+| D-04 | **Écran de confirmation** « transmettre 250 étudiants ? » | ✅ *effectif, exclus, prérequis manquants et effet du gel, avant un bouton qui porte le nombre* |
 | D-09 | **Pièces justificatives** : dépôt par étudiant (relevé de notes, rapport de stage…) et par promotion (procès-verbal) | ✅ |
 | D-10 | **Consultation et décision du ministère** sur chaque pièce (ouverte → vue → validée / rejetée) | ✅ |
 | D-11 | **Blocage de la validation** d'un lot dont une pièce obligatoire manque ou n'a pas été examinée | ✅ |
@@ -277,7 +277,7 @@ ci-dessus : voici ce que seul le CDC mentionne.
 | P-08 | Cycle de vie de chaque acteur | 6.3 | ✅ |
 | P-09 | Critères d'acceptation du MVP | 3.4 | ✅ |
 | P-10 | Environnements : dev, test, démo, production | 5.5 | ✅ |
-| P-11 | **Nomenclatures en base** : `types_diplome`, `mentions` (aujourd'hui des `CHECK` figés) | 24.3.4 | ⬜ *nomenclatures toujours en CHECK figés* |
+| P-11 | **Nomenclatures en base** : `types_diplome`, `mentions` (aujourd'hui des `CHECK` figés) | 24.3.4 | ✅ *tables + clés étrangères ; le ministère ajoute un type sans migration* |
 | P-12 | **Table `historique_statuts_dossier`** | 24.3.6 | ✅ |
 | P-13 | **Table `cles_publiques_ministere`** | ✅ | ✅ |
 | P-14 | **Table `sessions`** (jetons, révocation) | ✅ | ✅ |

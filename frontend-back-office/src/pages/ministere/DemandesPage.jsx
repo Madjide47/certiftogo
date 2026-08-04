@@ -11,6 +11,7 @@
 // vise l'arrêté. Les valeurs déclarées par le demandeur ne sont que des
 // propositions.
 // ─────────────────────────────────────────────────────────────
+import { useNomenclatures } from '../../hooks/useNomenclatures.js';
 import { useEffect, useState } from 'react';
 import {
   listerDemandes,
@@ -18,7 +19,7 @@ import {
   accepterDemande,
   refuserDemande,
 } from '../../services/gouvernance.service.js';
-import { LIBELLES_TYPE_DIPLOME, OPTIONS_TYPE_DIPLOME, messageErreur } from '../../utils/libelles.js';
+import { LIBELLES_TYPE_DIPLOME, messageErreur } from '../../utils/libelles.js';
 import {
   EnTetePage,
   Tableau,
@@ -59,6 +60,7 @@ const TYPES_ETABLISSEMENT = [
 const date = (v) => (v ? new Date(v).toLocaleDateString('fr-FR') : '—');
 
 export default function DemandesPage() {
+  const { optionsTypeDiplome } = useNomenclatures();
   const [demandes, setDemandes] = useState([]);
   const [repartition, setRepartition] = useState({});
   const [onglet, setOnglet] = useState('soumise');
@@ -412,7 +414,7 @@ export default function DemandesPage() {
                 a proposé une liste, vous restez libre de la restreindre.
               </p>
               <div className="mt-2 flex flex-wrap gap-3">
-                {OPTIONS_TYPE_DIPLOME.map((o) => (
+                {optionsTypeDiplome.map((o) => (
                   <label key={o.value} className="flex items-center gap-1.5 text-base">
                     <input
                       type="checkbox"

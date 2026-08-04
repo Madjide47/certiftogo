@@ -107,6 +107,15 @@ délibération, arrêté de jury). Cycle : `deposee → vue → validee | rejete
 > Un lot dont une pièce obligatoire manque, a été rejetée ou n'a pas été
 > ouverte ne peut pas être validé (409).
 
+**`016_nomenclatures.sql`** — tables `types_diplome` et `mentions`. Les listes
+vivaient dans cinq contraintes `CHECK` répétées à l'identique : créer un « DUT »
+demandait une migration et un redéploiement. Elles sont désormais des **données**,
+et les `CHECK` ont laissé la place à des **clés étrangères** — le contrôle n'est
+pas assoupli, il est déplacé. Une entrée ne se supprime jamais (des diplômes
+ancrés y font référence) : elle se désactive, ce qui la retire des formulaires
+sans toucher au passé. Lecture par `nomenclature.service.js` (cache 5 min) côté
+serveur, `useNomenclatures` côté front.
+
 **`003_coherence_promotion_session.sql`** — clé étrangère composite
 `(session_id, annee_id)` : la session d'une promotion doit appartenir à l'année
 de cette promotion, ce que 002 laissait passer.
@@ -180,7 +189,7 @@ npm run db:demo    # reset + seed + démo (données riches pour présentation)
 cd backend
 npm install
 npm run dev       # http://localhost:4000  (nodemon)
-npm test          # 228 tests — exécution SÉQUENTIELLE (--test-concurrency=1) :
+npm test          # 256 tests — exécution SÉQUENTIELLE (--test-concurrency=1) :
                   # les fichiers partagent la base certiftogo_test, et les écrire
                   # en parallèle corrompt le canal du test runner.
 ```

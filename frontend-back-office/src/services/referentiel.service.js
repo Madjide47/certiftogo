@@ -4,6 +4,29 @@
 // ─────────────────────────────────────────────────────────────
 import api from './api.js';
 
+/**
+ * Nomenclatures nationales (P-11) — types de diplôme et mentions.
+ *
+ * Les libellés viennent de la base : les recopier dans le front les
+ * ferait diverger au premier arrêté qui ajoute un type.
+ */
+export async function nomenclatures({ actifsSeuls = true } = {}) {
+  const { data } = await api.get('/referentiel/nomenclatures', {
+    params: actifsSeuls ? { actifs: 'true' } : {},
+  });
+  return data.data;
+}
+
+export async function ajouterTypeDiplome(donnees) {
+  const { data } = await api.post('/referentiel/types-diplome', donnees);
+  return data.data;
+}
+
+export async function definirActifTypeDiplome(code, actif) {
+  const { data } = await api.patch(`/referentiel/types-diplome/${code}/actif`, { actif });
+  return data.data;
+}
+
 /** Liste les années académiques (filtre de statut optionnel). */
 export async function listerAnnees({ statut = '' } = {}) {
   const { data } = await api.get('/referentiel/annees', { params: statut ? { statut } : {} });

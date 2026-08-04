@@ -191,8 +191,11 @@ export function estDateValide(valeur) {
 
 /** Valeurs autorisées par les contraintes CHECK du schéma. */
 export const SEXES = ['M', 'F'];
-export const MENTIONS = ['passable', 'assez_bien', 'bien', 'tres_bien', 'excellent'];
-export const TYPES_DIPLOME = ['licence', 'master', 'doctorat', 'certificat', 'bts'];
+// MENTIONS et TYPES_DIPLOME ne sont plus ici : ce sont des
+// NOMENCLATURES, pas des règles de validation. Elles vivent en base
+// (migration 016) et se lisent par `nomenclature.service.js`. Les garder
+// en dur ici recréerait la situation qu'on vient de défaire : deux
+// sources de vérité, dont l'une refuse ce que l'autre accepte.
 export const TYPES_ETABLISSEMENT = ['institut', 'universite', 'ecole', 'lycee'];
 export const STATUTS_ETABLISSEMENT = ['actif', 'suspendu', 'archive'];
 export const ROLES = ['etablissement', 'ministere', 'candidat', 'admin_systeme'];

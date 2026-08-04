@@ -6,6 +6,7 @@
 // d'abord, la filière ensuite, et le bouton « nouvelle filière » reste
 // désactivé tant qu'aucune faculté n'existe.
 // ─────────────────────────────────────────────────────────────
+import { useNomenclatures } from '../../hooks/useNomenclatures.js';
 import { useEffect, useState } from 'react';
 import {
   listerFacultes,
@@ -19,7 +20,6 @@ import {
 } from '../../services/structure.service.js';
 import {
   LIBELLES_TYPE_DIPLOME,
-  OPTIONS_TYPE_DIPLOME,
   LIBELLES_STATUT_STRUCTURE,
   messageErreur,
 } from '../../utils/libelles.js';
@@ -55,6 +55,7 @@ const OPTIONS_STATUT = [
 const tonStatut = (s) => (s === 'active' ? 'succes' : 'neutre');
 
 export default function StructurePage() {
+  const { optionsTypeDiplome } = useNomenclatures();
   const [facultes, setFacultes] = useState([]);
   const [filieres, setFilieres] = useState([]);
   const [filtreFaculte, setFiltreFaculte] = useState('');
@@ -453,7 +454,7 @@ export default function StructurePage() {
                 vide={null}
                 value={formFiliere.type_diplome}
                 onChange={(e) => setFormFiliere((f) => ({ ...f, type_diplome: e.target.value }))}
-                options={OPTIONS_TYPE_DIPLOME}
+                options={optionsTypeDiplome}
               />
             </Champ>
             <Champ

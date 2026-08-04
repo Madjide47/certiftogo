@@ -12,13 +12,13 @@ import * as sessionModel from '../models/session-academique.model.js';
 import { recupererFiliere } from './structure.service.js';
 import * as importService from './import.service.js';
 import * as permissions from './permissions.service.js';
+import * as nomenclature from './nomenclature.service.js';
 import { ErreurApp, avecErreursSql } from '../utils/errors.js';
 import {
   nettoyerTexte,
   estUuidValide,
   estDansEnum,
   versEntier,
-  MENTIONS,
   STATUTS_PROMOTION,
   STATUTS_INSCRIPTION,
   TRANSITIONS_PROMOTION,
@@ -357,7 +357,7 @@ export async function enregistrerResultat(promotion_id, inscription_id, etabliss
   }
 
   const mention = nettoyerTexte(donnees.mention);
-  if (mention && !MENTIONS.includes(mention)) {
+  if (mention && !(await nomenclature.estMentionValide(mention))) {
     throw new ErreurApp(400, 'MENTION_INVALIDE', 'Mention inconnue.');
   }
   if (mention && statut !== 'admis') {

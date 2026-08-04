@@ -19,6 +19,7 @@ import { genererReferenceDemande, initialesEtablissement } from '../utils/refere
 import { journaliser, ACTIONS } from './audit.service.js';
 import * as notifications from './notification.service.js';
 import * as permissions from './permissions.service.js';
+import * as nomenclature from './nomenclature.service.js';
 import {
   nettoyerTexte,
   estUuidValide,
@@ -28,7 +29,6 @@ import {
   estTelephoneValide,
   canoniserDate,
   FORMATS_DATE_ACCEPTES,
-  TYPES_DIPLOME,
   TYPES_ETABLISSEMENT,
 } from '../utils/validators.js';
 
@@ -104,7 +104,7 @@ function validerAgent(donnees, champ = 'agent') {
   return { nom, prenom, telephone };
 }
 
-function validerTypesDiplomes(valeur) {
+async function validerTypesDiplomes(valeur) {
   const liste = Array.isArray(valeur)
     ? valeur
     : String(valeur || '')
@@ -113,11 +113,11 @@ function validerTypesDiplomes(valeur) {
         .filter(Boolean);
 
   for (const type of liste) {
-    if (!TYPES_DIPLOME.includes(type)) {
+    if (!(await nomenclature.estTypeDiplomeValide(type))) {
       throw new ErreurApp(
         400,
         'TYPE_DIPLOME_INVALIDE',
-        `Type de diplôme inconnu : ${type}. Valeurs : ${TYPES_DIPLOME.join(', ')}.`
+        `Type de diplôme inconnu : ${type}. Valeurs : ${(await nomenclature.codesTypesDiplome()).join(', ')}.`
       );
     }
   }
@@ -134,7 +134,7 @@ function validerTypesDiplomes(valeur) {
 export async function creerEtablissement(donnees, agent_ministere_id = null) {
   const etab = validerEtablissement(donnees);
   const agent = validerAgent(donnees.agent_principal, 'agent principal');
-  const habilitations = validerTypesDiplomes(donnees.types_diplomes);
+  const habilitations = await validerTypesDiplomes(donnees.types_diplomes);
 
   if (habilitations.length === 0) {
     throw new ErreurApp(
@@ -234,11 +234,11 @@ export async function accorderHabilitation(etablissement_id, donnees) {
   await listerHabilitations(etablissement_id); // valide l'existence
 
   const type_diplome = nettoyerTexte(donnees.type_diplome);
-  if (!type_diplome || !TYPES_DIPLOME.includes(type_diplome)) {
+  if (!type_diplome || !(await nomenclature.estTypeDiplomeValide(type_diplome))) {
     throw new ErreurApp(
       400,
       'TYPE_DIPLOME_INVALIDE',
-      `Type de diplôme inconnu. Valeurs : ${TYPES_DIPLOME.join(', ')}.`
+      `Type de diplôme inconnu. Valeurs : ${(await nomenclature.codesTypesDiplome()).join(', ')}.`
     );
   }
 
@@ -323,7 +323,7 @@ export async function deposerDemande(donnees) {
     throw new ErreurApp(400, 'TELEPHONE_INVALIDE', "Numéro de l'établissement invalide.");
   }
 
-  const types = validerTypesDiplomes(donnees.types_diplomes_demandes);
+  const types = await validerTypesDiplomes(donnees.types_diplomes_demandes);
 
   const demande = await avecErreursSql(
     () =>

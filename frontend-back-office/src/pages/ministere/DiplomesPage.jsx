@@ -24,11 +24,10 @@ import {
 import {
   LIBELLES_STATUT_DIPLOME,
   LIBELLES_TYPE_DIPLOME,
-  OPTIONS_TYPE_DIPLOME,
-  OPTIONS_MENTION,
   LIBELLES_MENTION,
   messageErreur,
 } from '../../utils/libelles.js';
+import { useNomenclatures } from '../../hooks/useNomenclatures.js';
 import {
   EnTetePage,
   Tableau,
@@ -73,15 +72,17 @@ const TYPES_CORRECTION = [
   { value: 'autre', label: 'Autre', aide: 'Précisez la raison dans le motif.' },
 ];
 
-const CHAMPS = [
+// Les listes de mention et de type viennent de la nomenclature
+// nationale : les figer ici les ferait diverger au premier arrêté.
+const champsCorrection = (optionsMention, optionsTypeDiplome) => [
   { cle: 'nom', label: 'Nom' },
   { cle: 'prenom', label: 'Prénom' },
   { cle: 'date_naissance', label: 'Date de naissance', type: 'date' },
   { cle: 'lieu_naissance', label: 'Lieu de naissance' },
   { cle: 'filiere', label: 'Filière' },
   { cle: 'parcours', label: 'Parcours' },
-  { cle: 'mention', label: 'Mention', options: OPTIONS_MENTION },
-  { cle: 'type_diplome', label: 'Type de diplôme', options: OPTIONS_TYPE_DIPLOME },
+  { cle: 'mention', label: 'Mention', options: optionsMention },
+  { cle: 'type_diplome', label: 'Type de diplôme', options: optionsTypeDiplome },
   { cle: 'date_obtention', label: "Date d'obtention", type: 'date' },
 ];
 
@@ -89,6 +90,8 @@ const horodatage = (v) =>
   v ? new Date(v).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
 
 export default function DiplomesPage() {
+  const { optionsMention, optionsTypeDiplome } = useNomenclatures();
+  const CHAMPS = champsCorrection(optionsMention, optionsTypeDiplome);
   const [diplomes, setDiplomes] = useState([]);
   const [onglet, setOnglet] = useState('');
   const [chargement, setChargement] = useState(true);

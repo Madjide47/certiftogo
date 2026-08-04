@@ -61,15 +61,14 @@ export const LIBELLES_TYPE_DIPLOME = {
   bts: 'BTS',
 };
 
-export const OPTIONS_MENTION = Object.entries(LIBELLES_MENTION).map(([value, label]) => ({
-  value,
-  label,
-}));
-
-export const OPTIONS_TYPE_DIPLOME = Object.entries(LIBELLES_TYPE_DIPLOME).map(([value, label]) => ({
-  value,
-  label,
-}));
+// Les listes de choix de mention et de type de diplôme ne sont plus ici :
+// ce sont des NOMENCLATURES nationales, servies par l'API et lues via
+// `useNomenclatures`. Les figer dans le front ferait proposer à l'agent
+// une liste que le serveur refuserait, dès le premier arrêté qui ajoute
+// un type.
+//
+// LIBELLES_MENTION et LIBELLES_TYPE_DIPLOME restent, comme traduction
+// de secours pour un code affiché hors formulaire.
 
 export const LIBELLES_ROLE = {
   etablissement: 'Établissement',

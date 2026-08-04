@@ -7,13 +7,13 @@
 // ─────────────────────────────────────────────────────────────
 import * as faculteModel from '../models/faculte.model.js';
 import * as filiereModel from '../models/filiere.model.js';
+import * as nomenclature from './nomenclature.service.js';
 import { ErreurApp, avecErreursSql } from '../utils/errors.js';
 import {
   nettoyerTexte,
   estUuidValide,
   estDansEnum,
   versEntier,
-  TYPES_DIPLOME,
   STATUTS_STRUCTURE,
 } from '../utils/validators.js';
 
@@ -128,7 +128,7 @@ export async function recupererFiliere(id, etablissement_id) {
   return filiere;
 }
 
-function validerFiliere(donnees) {
+async function validerFiliere(donnees) {
   const nom = nettoyerTexte(donnees.nom);
   const code = nettoyerTexte(donnees.code);
   const type_diplome = nettoyerTexte(donnees.type_diplome);
@@ -139,11 +139,11 @@ function validerFiliere(donnees) {
     throw new ErreurApp(400, 'CODE_INVALIDE', 'Le code ne peut pas dépasser 20 caractères.');
   }
   if (!type_diplome) throw new ErreurApp(400, 'CHAMP_REQUIS', 'Le type de diplôme est requis.');
-  if (!TYPES_DIPLOME.includes(type_diplome)) {
+  if (!(await nomenclature.estTypeDiplomeValide(type_diplome))) {
     throw new ErreurApp(
       400,
       'TYPE_DIPLOME_INVALIDE',
-      `Type de diplôme inconnu. Valeurs acceptées : ${TYPES_DIPLOME.join(', ')}.`
+      `Type de diplôme inconnu. Valeurs acceptées : ${(await nomenclature.codesTypesDiplome()).join(', ')}.`
     );
   }
 
@@ -171,13 +171,13 @@ export async function creerFiliere(etablissement_id, donnees) {
   // Garantit que la faculté visée appartient bien à l'établissement appelant.
   await recupererFaculte(faculte_id, etablissement_id);
 
-  const data = validerFiliere(donnees);
+  const data = await validerFiliere(donnees);
   return avecErreursSql(() => filiereModel.creer({ ...data, faculte_id }), CONTRAINTES_FILIERE);
 }
 
 export async function modifierFiliere(id, etablissement_id, donnees) {
   await recupererFiliere(id, etablissement_id);
-  const data = validerFiliere(donnees);
+  const data = await validerFiliere(donnees);
   return avecErreursSql(() => filiereModel.modifier(id, data), CONTRAINTES_FILIERE);
 }
 

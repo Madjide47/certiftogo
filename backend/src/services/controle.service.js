@@ -17,7 +17,8 @@
 import * as lotModel from '../models/lot.model.js';
 import * as habilitationModel from '../models/habilitation.model.js';
 import * as pieces from './piece-jointe.service.js';
-import { estTelephoneValide, MENTIONS } from '../utils/validators.js';
+import * as nomenclature from './nomenclature.service.js';
+import { estTelephoneValide } from '../utils/validators.js';
 
 const AGE_MINIMUM = 15;
 const AGE_MAXIMUM = 75;
@@ -57,6 +58,10 @@ export async function controlerLot(lot) {
   // pas instruisable : il n'y a rien à vérifier, seulement une
   // déclaration à croire sur parole.
   const dossierPieces = await pieces.controlerLot(lot, dossiers);
+
+  // Chargée une fois pour le lot entier : à 12 000 dossiers, une lecture
+  // de nomenclature par ligne coûterait plus cher que tous les contrôles.
+  const mentionsConnues = new Set(await nomenclature.codesMentions());
 
   const aujourdhui = jour(new Date());
   const bloquants = [];
@@ -122,7 +127,7 @@ export async function controlerLot(lot) {
         `type de diplôme (${d.type_diplome}) incohérent avec la filière de la promotion (${lot.type_diplome})`
       );
     }
-    if (d.mention && !MENTIONS.includes(d.mention)) {
+    if (d.mention && !mentionsConnues.has(d.mention)) {
       erreurs.push(`mention inconnue (${d.mention})`);
     }
 

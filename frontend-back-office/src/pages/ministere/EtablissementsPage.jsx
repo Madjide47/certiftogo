@@ -9,6 +9,7 @@
 // Elle existait en base et dans les contrôles depuis le début, sans
 // aucune interface : personne ne pouvait ni la consulter ni l'accorder.
 // ─────────────────────────────────────────────────────────────
+import { useNomenclatures } from '../../hooks/useNomenclatures.js';
 import { useEffect, useState } from 'react';
 import { listerEtablissementsMinistere } from '../../services/ministere.service.js';
 import {
@@ -20,7 +21,6 @@ import {
   LIBELLES_TYPE_ETABLISSEMENT,
   LIBELLES_STATUT_ETABLISSEMENT,
   LIBELLES_TYPE_DIPLOME,
-  OPTIONS_TYPE_DIPLOME,
   messageErreur,
 } from '../../utils/libelles.js';
 import {
@@ -69,6 +69,7 @@ const HABILITATION_VIDE = {
 };
 
 export default function EtablissementsPage() {
+  const { optionsTypeDiplome } = useNomenclatures();
   const [etablissements, setEtablissements] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState('');
@@ -340,7 +341,7 @@ export default function EtablissementsPage() {
                       vide={null}
                       value={form.type_diplome}
                       onChange={(e) => setForm({ ...form, type_diplome: e.target.value })}
-                      options={OPTIONS_TYPE_DIPLOME}
+                      options={optionsTypeDiplome}
                     />
                   </Champ>
                   <Champ

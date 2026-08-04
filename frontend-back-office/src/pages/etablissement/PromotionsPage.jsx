@@ -10,6 +10,7 @@
 // un lot et un dossier par étudiant ADMIS. Elle a donc sa propre modale,
 // qui annonce le décompte avant de partir.
 // ─────────────────────────────────────────────────────────────
+import { useNomenclatures } from '../../hooks/useNomenclatures.js';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -43,7 +44,6 @@ import {
   OPTIONS_STATUT_INSCRIPTION,
   LIBELLES_TYPE_SESSION,
   LIBELLES_MENTION,
-  OPTIONS_MENTION,
   messageErreur,
 } from '../../utils/libelles.js';
 import {
@@ -74,6 +74,7 @@ const STATUTS_FIGES = ['transmise', 'certifiee', 'cloturee'];
 const aujourdhui = () => new Date().toISOString().slice(0, 10);
 
 export default function PromotionsPage() {
+  const { optionsMention } = useNomenclatures();
   const [promotions, setPromotions] = useState([]);
   const [annees, setAnnees] = useState([]);
   const [filieres, setFilieres] = useState([]);
@@ -869,7 +870,7 @@ export default function PromotionsPage() {
                   disabled={resultatEnCours.statut !== 'admis'}
                   value={resultatEnCours.mention}
                   onChange={(e) => setResultatEnCours((r) => ({ ...r, mention: e.target.value }))}
-                  options={OPTIONS_MENTION}
+                  options={optionsMention}
                 />
               </Champ>
             </div>
@@ -1103,7 +1104,10 @@ export default function PromotionsPage() {
                 sansNumero.length > 0
               }
             >
-              Transmettre au ministère
+              {/* Le bouton porte le nombre : « Transmettre » seul laisse
+                  cliquer sans avoir lu ce qu'on envoie, et l'acte est
+                  irréversible — la promotion est figée ensuite. */}
+              Transmettre {admisATransmettre.length} étudiant(s) au ministère
             </Bouton>
           </div>
         </form>

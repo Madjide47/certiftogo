@@ -3761,6 +3761,97 @@ describe('Administration — création de comptes', () => {
 // on ignore ce qu'elle a signé rend la procédure de compromission
 // inapplicable : il faudrait re-signer tout le stock.
 // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// Nomenclatures en base (P-11).
+//
+// La promesse : ajouter un type de diplôme est un INSERT, plus une
+// migration. Encore faut-il que la contrainte suive — sinon on a
+// remplacé un garde-fou par rien.
+// ═══════════════════════════════════════════════════════════════════
+describe('Nomenclatures — types de diplôme et mentions', () => {
+  test('la lecture est ouverte à tout compte authentifié', async () => {
+    const t = await login('+22890000002');
+    const res = await api().get('/api/referentiel/nomenclatures').set(auth(t));
+
+    assert.equal(res.status, 200);
+    assert.ok(res.body.data.types_diplome.some((x) => x.code === 'licence'));
+    assert.ok(res.body.data.mentions.some((x) => x.code === 'tres_bien'));
+    // Les libellés viennent de la base : le front n'a plus à les inventer.
+    assert.equal(
+      res.body.data.mentions.find((m) => m.code === 'tres_bien').libelle,
+      'Très bien'
+    );
+  });
+
+  test('un établissement ne modifie pas la nomenclature nationale', async () => {
+    const t = await login('+22890000002');
+    const res = await api()
+      .post('/api/referentiel/types-diplome')
+      .set(auth(t))
+      .send({ code: 'auto_proclame', libelle: 'Auto-proclamé' });
+
+    assert.equal(res.status, 403);
+  });
+
+  test('le ministère ajoute un type, utilisable aussitôt', async () => {
+    const tMin = await login('+22890000001');
+    const ajout = await api()
+      .post('/api/referentiel/types-diplome')
+      .set(auth(tMin))
+      .send({ code: 'DUT', libelle: 'Diplôme universitaire de technologie', niveau: 2 });
+
+    assert.equal(ajout.status, 201, JSON.stringify(ajout.body.error || {}));
+    assert.equal(ajout.body.data.code, 'dut', 'le code est normalisé');
+
+    // Utilisable immédiatement : c'est tout l'objet de P-11.
+    const tEtab = await login('+22890000002');
+    const facultes = await api().get('/api/structure/facultes').set(auth(tEtab));
+    const filiere = await api().post('/api/structure/filieres').set(auth(tEtab)).send({
+      faculte_id: facultes.body.data.facultes[0].id,
+      nom: 'Réseaux et télécoms', code: 'RT-DUT',
+      type_diplome: 'dut', duree_annees: 2,
+    });
+    assert.equal(filiere.status, 201, JSON.stringify(filiere.body.error || {}));
+  });
+
+  test('un type inconnu reste refusé — la contrainte a suivi', async () => {
+    // Sortir la liste du CHECK ne devait pas revenir à ne plus rien
+    // contrôler : la clé étrangère a pris le relais.
+    const t = await login('+22890000002');
+    const facultes = await api().get('/api/structure/facultes').set(auth(t));
+    const res = await api().post('/api/structure/filieres').set(auth(t)).send({
+      faculte_id: facultes.body.data.facultes[0].id,
+      nom: 'Filière fantaisiste', code: 'FF-01',
+      type_diplome: 'diplome_imaginaire', duree_annees: 3,
+    });
+
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'TYPE_DIPLOME_INVALIDE');
+  });
+
+  test('retirer un type ne touche pas aux diplômes qui le portent', async () => {
+    const tMin = await login('+22890000001');
+    const retrait = await api()
+      .patch('/api/referentiel/types-diplome/dut/actif')
+      .set(auth(tMin))
+      .send({ actif: false });
+
+    assert.equal(retrait.status, 200);
+    assert.equal(retrait.body.data.actif, false);
+
+    // Retiré des formulaires…
+    const actifs = await api()
+      .get('/api/referentiel/nomenclatures?actifs=true')
+      .set(auth(tMin));
+    assert.equal(actifs.body.data.types_diplome.some((x) => x.code === 'dut'), false);
+
+    // …mais toujours connu : un diplôme déjà certifié le porte, et son
+    // hash est ancré sur la blockchain.
+    const tout = await api().get('/api/referentiel/nomenclatures').set(auth(tMin));
+    assert.ok(tout.body.data.types_diplome.some((x) => x.code === 'dut'));
+  });
+});
+
 describe('Signatures — traçabilité de la clé', () => {
   let diplome;
 

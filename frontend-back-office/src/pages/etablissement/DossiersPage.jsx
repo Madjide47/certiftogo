@@ -9,6 +9,7 @@
 // isolé, régularisation — mais elle est présentée comme l'exception
 // qu'elle est, pas comme le point d'entrée.
 // ─────────────────────────────────────────────────────────────
+import { useNomenclatures } from '../../hooks/useNomenclatures.js';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -23,8 +24,6 @@ import {
   LIBELLES_STATUT_DOSSIER,
   LIBELLES_MENTION,
   LIBELLES_TYPE_DIPLOME,
-  OPTIONS_MENTION,
-  OPTIONS_TYPE_DIPLOME,
   messageErreur,
 } from '../../utils/libelles.js';
 import {
@@ -74,6 +73,7 @@ const ONGLETS = [
 ];
 
 export default function DossiersPage() {
+  const { optionsTypeDiplome, optionsMention } = useNomenclatures();
   const [dossiers, setDossiers] = useState([]);
   const [candidats, setCandidats] = useState([]);
   const [filtreStatut, setFiltreStatut] = useState('');
@@ -344,7 +344,7 @@ export default function DossiersPage() {
                 id="d-type"
                 value={form.type_diplome}
                 onChange={(e) => majChamp('type_diplome', e.target.value)}
-                options={OPTIONS_TYPE_DIPLOME}
+                options={optionsTypeDiplome}
               />
             </Champ>
             <Champ label="Mention" htmlFor="d-mention">
@@ -352,7 +352,7 @@ export default function DossiersPage() {
                 id="d-mention"
                 value={form.mention}
                 onChange={(e) => majChamp('mention', e.target.value)}
-                options={OPTIONS_MENTION}
+                options={optionsMention}
               />
             </Champ>
             <Champ label="Filière" htmlFor="d-filiere">
