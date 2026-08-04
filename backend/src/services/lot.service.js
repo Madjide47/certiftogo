@@ -120,6 +120,24 @@ export async function transmettre(promotion_id, etablissement_id, agent, donnees
     );
   }
 
+  // A-17 — un diplômé sans numéro ne recevra jamais son diplôme et ne
+  // pourra jamais ouvrir son portefeuille : la certification produirait
+  // un acte que son titulaire ignore. Le manque se corrige en amont, à
+  // l'établissement, pas après l'ancrage sur la blockchain.
+  const sansNumero = admis.filter((i) => !i.telephone);
+  if (sansNumero.length > 0) {
+    const exemples = sansNumero
+      .slice(0, 5)
+      .map((i) => `${i.nom} ${i.prenom} (${i.numero_etudiant})`)
+      .join(', ');
+    throw new ErreurApp(
+      409,
+      'NUMERO_MANQUANT',
+      `${sansNumero.length} étudiant(s) admis n'ont pas de numéro de téléphone : ${exemples}${sansNumero.length > 5 ? '…' : ''}. ` +
+        'Sans numéro, le diplômé ne peut ni être averti de sa certification ni accéder à son portefeuille. Complétez leurs fiches avant de transmettre.'
+    );
+  }
+
   return avecErreursSql(() =>
     withTransaction(async (client) => {
       const lot_id = await lotModel.creer(

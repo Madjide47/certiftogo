@@ -3480,6 +3480,151 @@ describe('Pièces justificatives — instruction et intégrité', () => {
 // ces cas répondent 500, l'exploitant cherche une panne serveur là où il
 // n'y a qu'une requête invalide.
 // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// Changement volontaire de numéro (A-14) — double confirmation.
+//
+// C'est une procédure de sécurité : elle décide qui garde l'accès à un
+// compte. Chaque garde-fou est donc vérifié, pas seulement le chemin
+// nominal.
+// ═══════════════════════════════════════════════════════════════════
+describe('Changement de numéro — double confirmation', () => {
+  const TITULAIRE = '+22890000012'; // Ama, candidate du seed
+  const CIBLE = '+22890000891';
+
+  /** Dernier code émis pour une demande, lu en base comme le ferait le SMS. */
+  async function codeDe(id, colonne) {
+    const { rows } = await pool.query(
+      `SELECT ${colonne} AS code FROM changements_numero WHERE id = $1`,
+      [id]
+    );
+    return rows[0].code;
+  }
+
+  test('refuse un numéro déjà rattaché à un compte', async () => {
+    const t = await login(TITULAIRE);
+    const res = await api()
+      .post('/api/auth/changement-numero')
+      .set(auth(t))
+      .send({ nouveau_telephone: '+22890000011' }); // Koffi
+
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'TELEPHONE_EXISTANT');
+  });
+
+  test('refuse le numéro déjà en place', async () => {
+    const t = await login(TITULAIRE);
+    const res = await api()
+      .post('/api/auth/changement-numero')
+      .set(auth(t))
+      .send({ nouveau_telephone: TITULAIRE });
+
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'NUMERO_IDENTIQUE');
+  });
+
+  test('refuse de sauter la confirmation de l’ancien numéro', async () => {
+    // Sans cet ordre, une session volée suffirait à emporter le compte.
+    const t = await login(TITULAIRE);
+    const demande = await api()
+      .post('/api/auth/changement-numero')
+      .set(auth(t))
+      .send({ nouveau_telephone: CIBLE });
+    assert.equal(demande.status, 201);
+
+    const saut = await api()
+      .post(`/api/auth/changement-numero/${demande.body.data.demande.id}/confirmer-nouveau`)
+      .set(auth(t))
+      .send({ code: await codeDe(demande.body.data.demande.id, 'code_ancien') });
+
+    assert.equal(saut.status, 409);
+    assert.equal(saut.body.error.code, 'ETAPE_INVALIDE');
+
+    await api()
+      .delete(`/api/auth/changement-numero/${demande.body.data.demande.id}`)
+      .set(auth(t));
+  });
+
+  test('brûle la demande après cinq codes erronés', async () => {
+    const t = await login(TITULAIRE);
+    const demande = await api()
+      .post('/api/auth/changement-numero')
+      .set(auth(t))
+      .send({ nouveau_telephone: CIBLE });
+    const id = demande.body.data.demande.id;
+
+    let dernier;
+    for (let i = 0; i < 5; i += 1) {
+      dernier = await api()
+        .post(`/api/auth/changement-numero/${id}/confirmer-ancien`)
+        .set(auth(t))
+        .send({ code: '000000' });
+    }
+
+    assert.equal(dernier.status, 429);
+    assert.equal(dernier.body.error.code, 'TROP_DE_TENTATIVES');
+
+    const { rows } = await pool.query(`SELECT statut FROM changements_numero WHERE id = $1`, [id]);
+    assert.equal(rows[0].statut, 'abandonne');
+  });
+
+  test('applique le changement après les deux confirmations', async () => {
+    const t = await login(TITULAIRE);
+    const demande = await api()
+      .post('/api/auth/changement-numero')
+      .set(auth(t))
+      .send({ nouveau_telephone: CIBLE });
+    const id = demande.body.data.demande.id;
+
+    const etape1 = await api()
+      .post(`/api/auth/changement-numero/${id}/confirmer-ancien`)
+      .set(auth(t))
+      .send({ code: await codeDe(id, 'code_ancien') });
+    assert.equal(etape1.status, 200);
+    assert.equal(etape1.body.data.demande.statut, 'nouveau_a_confirmer');
+
+    const etape2 = await api()
+      .post(`/api/auth/changement-numero/${id}/confirmer-nouveau`)
+      .set(auth(t))
+      .send({ code: await codeDe(id, 'code_nouveau') });
+    assert.equal(etape2.status, 200, JSON.stringify(etape2.body.error || {}));
+    assert.equal(etape2.body.data.nouveau_telephone, CIBLE);
+
+    // Le compte ET l'identité nationale suivent : les laisser diverger
+    // referait naître une seconde personne au prochain rapprochement.
+    const { rows } = await pool.query(
+      `SELECT u.telephone AS compte, p.telephone AS personne
+         FROM utilisateurs u LEFT JOIN personnes p ON p.id = u.personne_id
+        WHERE u.id = (SELECT utilisateur_id FROM changements_numero WHERE id = $1)`,
+      [id]
+    );
+    assert.equal(rows[0].compte, CIBLE);
+    assert.equal(rows[0].personne, CIBLE);
+
+    // Les codes ne survivent pas à l'application.
+    const { rows: codes } = await pool.query(
+      `SELECT code_ancien, code_nouveau, statut FROM changements_numero WHERE id = $1`,
+      [id]
+    );
+    assert.equal(codes[0].code_ancien, null);
+    assert.equal(codes[0].code_nouveau, null);
+    assert.equal(codes[0].statut, 'applique');
+
+    // La connexion se fait désormais sur le nouveau numéro.
+    const jeton = await login(CIBLE);
+    assert.ok(jeton);
+
+    // Remise en état pour les autres suites.
+    await pool.query(`UPDATE utilisateurs SET telephone = $2 WHERE telephone = $1`, [
+      CIBLE,
+      TITULAIRE,
+    ]);
+    await pool.query(`UPDATE personnes SET telephone = $2 WHERE telephone = $1`, [
+      CIBLE,
+      TITULAIRE,
+    ]);
+  });
+});
+
 describe('Notifications — bienvenue et consultation', () => {
   test('un compte agent créé reçoit un message de bienvenue', async () => {
     const t = await login('+22890000003');
@@ -3606,6 +3751,102 @@ describe('Administration — création de comptes', () => {
     // le mode : un écran de configuration qui décrit autre chose que la
     // configuration en vigueur est pire qu'un écran vide.
     assert.equal(res.body.data.configuration.otp.mode, process.env.WHATSAPP_MODE || 'mock');
+  });
+});
+
+describe('Corbeille — résistance à la dérive du schéma', () => {
+  test('restaure en ignorant les champs qui ne sont plus des colonnes', async () => {
+    // Le JSON déposé est un instantané : il survit aux migrations, et
+    // peut contenir un champ calculé à la lecture. Une suppression qu'on
+    // ne peut plus annuler n'est pas une corbeille, c'est une destruction.
+    const t = await login('+22890000002');
+    const candidat = await api().post('/api/candidats').set(auth(t)).send({
+      numero_etudiant: 'CORB-900', nom: 'DERIVE', prenom: 'Champ', telephone: '+22890000892',
+    });
+    await api().delete(`/api/candidats/${candidat.body.data.candidat.id}`).set(auth(t));
+
+    const { rows } = await pool.query(
+      `SELECT id FROM corbeille WHERE enregistrement_id = $1`,
+      [candidat.body.data.candidat.id]
+    );
+    // On simule une colonne disparue et un champ dérivé.
+    await pool.query(
+      `UPDATE corbeille
+          SET donnees = donnees || '{"statut_contact":"joignable","colonne_supprimee":42}'::jsonb
+        WHERE id = $1`,
+      [rows[0].id]
+    );
+
+    const tAdmin = await login('+22890000003');
+    const res = await api().post(`/api/corbeille/${rows[0].id}/restaurer`).set(auth(tAdmin));
+    assert.equal(res.status, 200, JSON.stringify(res.body.error || {}));
+
+    const { rows: restaure } = await pool.query(
+      `SELECT numero_etudiant FROM candidats WHERE id = $1`,
+      [candidat.body.data.candidat.id]
+    );
+    assert.equal(restaure.length, 1);
+  });
+});
+
+describe('Transmission — téléphone obligatoire (A-17)', () => {
+  test('la fiche sans numéro est acceptée mais signalée « en attente »', async () => {
+    // L'établissement n'a pas toujours le numéro le jour de la saisie :
+    // refuser la fiche l'empêcherait de travailler. C'est la TRANSMISSION
+    // qui est bloquée, pas la saisie.
+    const t = await login('+22890000002');
+    const res = await api().post('/api/candidats').set(auth(t)).send({
+      numero_etudiant: 'A17-001', nom: 'SANS', prenom: 'Numero',
+    });
+    assert.equal(res.status, 201);
+
+    const liste = await api().get('/api/candidats?recherche=A17-001').set(auth(t));
+    const fiche = liste.body.data.candidats.find((c) => c.numero_etudiant === 'A17-001');
+    assert.equal(fiche.statut_contact, 'en_attente_numero');
+  });
+
+  test('refuse de transmettre une promotion dont un admis n’a pas de numéro', async () => {
+    const t = await login('+22890000002');
+
+    // On part d'une promotion encore modifiable, quelle que soit la
+    // filière : ce test porte sur le numéro, pas sur le référentiel.
+    const promotions = await api().get('/api/promotions').set(auth(t));
+    const cible = promotions.body.data.promotions.find((p) =>
+      ['brouillon', 'ouverte'].includes(p.statut)
+    );
+    assert.ok(cible, 'une promotion modifiable est nécessaire');
+
+    const candidat = await api().post('/api/candidats').set(auth(t)).send({
+      numero_etudiant: 'A17-002', nom: 'MUET', prenom: 'Etudiant',
+    });
+    const inscription = await api()
+      .post(`/api/promotions/${cible.id}/inscriptions`)
+      .set(auth(t))
+      .send({ candidat_id: candidat.body.data.candidat.id });
+    await api()
+      .put(`/api/promotions/${cible.id}/inscriptions/${inscription.body.data.inscription.id}`)
+      .set(auth(t))
+      .send({ statut: 'admis', mention: 'bien', moyenne: 14 });
+
+    if (cible.statut === 'brouillon') {
+      await api().patch(`/api/promotions/${cible.id}/statut`).set(auth(t)).send({ statut: 'ouverte' });
+    }
+
+    const res = await api()
+      .post(`/api/promotions/${cible.id}/transmettre`)
+      .set(auth(t))
+      .send({ date_deliberation: '2025-07-15' });
+
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'NUMERO_MANQUANT');
+    // Le message NOMME les étudiants concernés : « il en manque trois »
+    // sur une promotion de 250 n'est pas actionnable.
+    assert.match(res.body.error.message, /MUET Etudiant/);
+
+    // On retire l'intrus pour ne pas gêner les suites suivantes.
+    await api()
+      .delete(`/api/promotions/${cible.id}/inscriptions/${inscription.body.data.inscription.id}`)
+      .set(auth(t));
   });
 });
 

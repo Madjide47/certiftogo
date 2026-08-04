@@ -217,7 +217,13 @@ export default function CandidatsPage() {
             cle: 'telephone',
             libelle: 'Téléphone',
             tabulaire: true,
-            rendu: (c) => c.telephone || '—',
+            // Une fiche sans numéro n'est pas une fiche incomplète parmi
+            // d'autres : elle bloquera la transmission de toute sa
+            // promotion. Autant la signaler ici, où elle se corrige.
+            rendu: (c) =>
+              c.telephone || (
+                <Etiquette ton="alerte">En attente de numéro</Etiquette>
+              ),
           },
           {
             cle: 'actions',

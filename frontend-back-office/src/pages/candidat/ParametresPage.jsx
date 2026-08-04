@@ -19,6 +19,7 @@ import {
   fermerAutresSessions,
 } from '../../services/auth.service.js';
 import { LIBELLES_ROLE, messageErreur } from '../../utils/libelles.js';
+import ChangementNumero from '../../components/ChangementNumero.jsx';
 import {
   EnTetePage,
   Section,
@@ -148,11 +149,21 @@ export default function ParametresPage() {
             </dl>
             <p className="mt-3 flex items-start gap-1.5 text-sm text-gris-500">
               <Icone nom="lock" taille={16} className="mt-0.5 shrink-0" />
-              Ces informations proviennent de l’état civil transmis par votre établissement. Elles
-              figurent sur vos diplômes : elles ne se modifient pas ici. Une erreur se corrige par
-              l’établissement, qui fait réémettre le diplôme.
+              Nom, prénom et date de naissance proviennent de l’état civil transmis par votre
+              établissement. Ils figurent sur vos diplômes : ils ne se modifient pas ici. Une
+              erreur se corrige par l’établissement, qui fait réémettre le diplôme.
             </p>
           </div>
+        </Section>
+
+        <Section
+          titre="Changer de numéro"
+          description="Votre numéro sert à vous connecter et à vous prévenir. Il vous appartient de le tenir à jour."
+        >
+          <ChangementNumero
+            telephoneActuel={utilisateur?.telephone}
+            onApplique={() => charger()}
+          />
         </Section>
 
         <Section titre="Notifications">

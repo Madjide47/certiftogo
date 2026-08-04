@@ -26,10 +26,10 @@ Dernière mise à jour : 2 août 2026.
 | A-11 | Message de bienvenue à la création d'un compte (WhatsApp/SMS) | ✅ *hors comptes candidat, qui naissent fermés* |
 | A-12 | Compte candidat créé à la saisie, activé à la certification | ✅ |
 | A-13 | Identité nationale : une personne, plusieurs fiches établissement | ✅ |
-| A-14 | **Changement de numéro volontaire** : OTP ancien numéro puis nouveau | 🔨 *changement volontaire à double OTP non implémenté ; la récupération médiée l est* |
+| A-14 | **Changement de numéro volontaire** : OTP ancien numéro puis nouveau | ✅ *mené par le titulaire, sans agent ; plafond de 5 tentatives* |
 | A-15 | **Récupération après perte du téléphone** : procédure médiée par un agent | ✅ |
 | A-16 | **Normalisation du téléphone à la saisie** (sinon le regroupement d'identité fuit) | ✅ |
-| A-17 | **Téléphone obligatoire** pour un candidat (option A) avec statut « en attente de numéro » | ⬜ |
+| A-17 | **Téléphone obligatoire** pour un candidat (option A) avec statut « en attente de numéro » | ✅ *saisie tolérée, transmission bloquée et étudiants nommés* |
 | A-18 | **Désactivation immédiate** d'un agent qui quitte son établissement | ✅ |
 | A-19 | **Révocation des sessions actives** à la désactivation | ✅ |
 | A-20 | **Transfert des dossiers en cours** d'un agent partant vers un autre | ✅ |

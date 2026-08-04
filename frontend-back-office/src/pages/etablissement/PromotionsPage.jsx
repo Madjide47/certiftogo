@@ -355,6 +355,8 @@ export default function PromotionsPage() {
   const candidatsDisponibles = candidats.filter((c) => !dejaInscrits.has(c.id));
   const admisATransmettre = (transmission?.inscriptions || []).filter((i) => i.statut === 'admis');
   const nonAdmis = (transmission?.inscriptions || []).length - admisATransmettre.length;
+  // A-17 : un admis sans numéro bloque la transmission côté serveur.
+  const sansNumero = admisATransmettre.filter((i) => !i.telephone);
 
   return (
     <div>
@@ -1041,6 +1043,29 @@ export default function PromotionsPage() {
                 )}
               </Encart>
 
+              {/* Le serveur refuse la transmission ; autant le dire ici,
+                  où la correction est à portée de clic. */}
+              {sansNumero.length > 0 && (
+                <Encart
+                  ton="erreur"
+                  titre={`${sansNumero.length} étudiant(s) admis sans numéro de téléphone`}
+                >
+                  <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                    {sansNumero.slice(0, 6).map((i) => (
+                      <li key={i.id}>
+                        {i.nom} {i.prenom} — {i.numero_etudiant}
+                      </li>
+                    ))}
+                    {sansNumero.length > 6 && <li>… et {sansNumero.length - 6} autres.</li>}
+                  </ul>
+                  <p className="mt-2">
+                    Sans numéro, le diplômé ne sera pas averti de sa certification et ne pourra
+                    pas ouvrir son portefeuille. Complétez leurs fiches depuis « Étudiants »
+                    avant de transmettre.
+                  </p>
+                </Encart>
+              )}
+
               <Champ
                 label="Date de délibération"
                 htmlFor="t-deliberation"
@@ -1072,7 +1097,11 @@ export default function PromotionsPage() {
             <Bouton
               type="submit"
               enCours={envoiEnCours}
-              disabled={!transmission?.inscriptions || admisATransmettre.length === 0}
+              disabled={
+                !transmission?.inscriptions ||
+                admisATransmettre.length === 0 ||
+                sansNumero.length > 0
+              }
             >
               Transmettre au ministère
             </Bouton>

@@ -33,6 +33,8 @@ export const ACTIONS = {
   COMPTE_DESACTIVE: 'compte_desactive',
   AGENT_CREE: 'agent_cree',
   AGENT_DEPART: 'agent_depart',
+  CHANGEMENT_NUMERO_DEMANDE: 'changement_numero_demande',
+  CHANGEMENT_NUMERO_APPLIQUE: 'changement_numero_applique',
   RECUPERATION_DEMANDEE: 'recuperation_demandee',
   RECUPERATION_VALIDEE: 'recuperation_validee',
   RECUPERATION_REFUSEE: 'recuperation_refusee',
@@ -325,11 +327,33 @@ export async function restaurer(utilisateur, id) {
     throw new ErreurApp(404, 'ELEMENT_INTROUVABLE', 'Élément introuvable dans la corbeille.');
   }
 
-  const colonnes = Object.keys(element.donnees);
+  const { withTransaction, query } = await import('../config/database.js');
+
+  // On ne réinsère que ce que la table accepte AUJOURD'HUI.
+  //
+  // Le JSON déposé en corbeille est un instantané : il peut contenir un
+  // champ calculé au moment de la lecture, ou une colonne qu'une
+  // migration a depuis supprimée. Rejouer les clés telles quelles faisait
+  // échouer la restauration en 500 — et une suppression qu'on ne peut
+  // plus annuler n'est plus une corbeille, c'est une destruction.
+  const { rows: schema } = await query(
+    `SELECT column_name FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = $1`,
+    [element.table_source]
+  );
+  const reelles = new Set(schema.map((c) => c.column_name));
+
+  const colonnes = Object.keys(element.donnees).filter((c) => reelles.has(c));
+  if (colonnes.length === 0) {
+    throw new ErreurApp(
+      409,
+      'RESTAURATION_IMPOSSIBLE',
+      `Aucune donnée de cet élément ne correspond encore à la structure de « ${element.table_source} ».`
+    );
+  }
   const valeurs = colonnes.map((c) => element.donnees[c]);
   const placeholders = colonnes.map((_, i) => `$${i + 1}`);
 
-  const { withTransaction } = await import('../config/database.js');
   await withTransaction(async (client) => {
     await client.query(
       `INSERT INTO ${element.table_source} (${colonnes.join(', ')})

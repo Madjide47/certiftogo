@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────
 import * as authService from '../services/auth.service.js';
 import * as sessionService from '../services/session.service.js';
+import * as changementNumero from '../services/changement-numero.service.js';
 import * as utilisateurModel from '../models/utilisateur.model.js';
 import { normaliserTelephone, estTelephoneValide, estCodeOtpValide } from '../utils/validators.js';
 
@@ -128,6 +129,67 @@ export async function fermerAutresSessions(req, res, next) {
   try {
     const fermees = await sessionService.fermerLesAutres(req.utilisateur);
     return res.json({ success: true, data: { fermees } });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// ── Changement volontaire de numéro (A-14) ─────────────────────────
+
+/** GET /api/auth/changement-numero — reprendre une demande en cours */
+export async function etatChangementNumero(req, res, next) {
+  try {
+    return res.json({ success: true, data: await changementNumero.etat(req.utilisateur) });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** POST /api/auth/changement-numero — envoie un code à l'ANCIEN numéro */
+export async function demanderChangementNumero(req, res, next) {
+  try {
+    const data = await changementNumero.demander(req.utilisateur, req.body || {});
+    return res.status(201).json({ success: true, data });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** POST /api/auth/changement-numero/:id/confirmer-ancien */
+export async function confirmerAncienNumero(req, res, next) {
+  try {
+    const data = await changementNumero.confirmerAncien(
+      req.utilisateur,
+      req.params.id,
+      (req.body || {}).code
+    );
+    return res.json({ success: true, data });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** POST /api/auth/changement-numero/:id/confirmer-nouveau — applique */
+export async function confirmerNouveauNumero(req, res, next) {
+  try {
+    const data = await changementNumero.confirmerNouveau(
+      req.utilisateur,
+      req.params.id,
+      (req.body || {}).code
+    );
+    return res.json({ success: true, data });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** DELETE /api/auth/changement-numero/:id */
+export async function annulerChangementNumero(req, res, next) {
+  try {
+    return res.json({
+      success: true,
+      data: await changementNumero.annuler(req.utilisateur, req.params.id),
+    });
   } catch (err) {
     return next(err);
   }

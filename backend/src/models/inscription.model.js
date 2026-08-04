@@ -10,7 +10,7 @@ const COLONNES = `i.id, i.candidat_id, i.promotion_id, i.statut, i.moyenne,
 export async function listerParPromotion(promotion_id) {
   const { rows } = await query(
     `SELECT ${COLONNES},
-            c.numero_etudiant, c.nom, c.prenom, c.sexe
+            c.numero_etudiant, c.nom, c.prenom, c.sexe, c.telephone
        FROM inscriptions i
        JOIN candidats c ON c.id = i.candidat_id
       WHERE i.promotion_id = $1
