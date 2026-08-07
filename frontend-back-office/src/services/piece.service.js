@@ -81,6 +81,11 @@ export async function piecesDuLot(lotId) {
   return data.data;
 }
 
+export async function piecesDuDossier(dossierId) {
+  const { data } = await api.get(`/ministere/dossiers/${dossierId}/pieces`);
+  return data.data;
+}
+
 export async function deciderPiece(id, { statut, motif } = {}) {
   const { data } = await api.post(`/ministere/pieces/${id}/decision`, { statut, motif });
   return data.data.piece;

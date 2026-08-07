@@ -124,3 +124,16 @@ export const limiteDemandeIntegration = limiter({
   fenetreMs: 60 * 60 * 1000,
   message: 'Trop de demandes déposées depuis cette adresse.',
 });
+
+/**
+ * Pièces d'une demande : plus généreux, car un seul dossier en compte
+ * huit obligatoires — et un envoi raté se recommence. Trois par heure,
+ * comme pour le dépôt, bloquerait le déposant légitime dès la troisième
+ * pièce. La borne reste basse en volume : le jeton limite déjà la portée.
+ */
+export const limitePiecesDemande = limiter({
+  nom: 'piece-demande',
+  max: 60,
+  fenetreMs: 60 * 60 * 1000,
+  message: 'Trop de fichiers envoyés depuis cette adresse. Réessayez plus tard.',
+});

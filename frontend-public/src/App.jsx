@@ -3,6 +3,7 @@
 //
 //   /                : saisie (empreinte, référence, QR)
 //   /verifier/:code  : résultat — cible des QR codes imprimés
+//   /integration     : demande d'agrément d'un établissement, et son suivi
 //
 // L'ossature est celle d'un site d'État : bandeau République Togolaise,
 // identité du service, pied de page institutionnel. Ce n'est pas de la
@@ -12,6 +13,7 @@
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import HomePage from './pages/HomePage.jsx';
 import VerificationPage from './pages/VerificationPage.jsx';
+import IntegrationPage from './pages/IntegrationPage.jsx';
 import { Icone } from './components/ui.jsx';
 
 /** Bandeau d'État : filet tricolore et rattachement institutionnel. */
@@ -47,12 +49,22 @@ function Entete() {
           </span>
         </Link>
 
-        <a
-          href="#aide"
-          className="text-base text-vert underline underline-offset-2 hover:text-vert-fonce"
-        >
-          Comment ça marche ?
-        </a>
+        <nav className="flex items-center gap-5">
+          <a
+            href="/#aide"
+            className="text-base text-vert underline underline-offset-2 hover:text-vert-fonce"
+          >
+            Comment ça marche ?
+          </a>
+          {/* Seule porte d'entrée de la plateforme : un établissement non
+              agréé n'a pas de compte pour demander à l'être. */}
+          <Link
+            to="/integration"
+            className="text-base text-vert underline underline-offset-2 hover:text-vert-fonce"
+          >
+            Espace établissements
+          </Link>
+        </nav>
       </div>
     </header>
   );
@@ -88,6 +100,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/verifier/:code" element={<VerificationPage />} />
+          <Route path="/integration" element={<IntegrationPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

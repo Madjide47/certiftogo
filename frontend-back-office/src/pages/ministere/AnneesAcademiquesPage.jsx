@@ -43,7 +43,9 @@ import {
   Icone,
 } from '../../components/ui/index.jsx';
 
-const ANNEE_VIDE = { libelle: '', date_debut: '', date_fin: '' };
+// Le libellé suffit : les dates de l'année ne bornaient rien et se
+// déduisent du calendrier universitaire, côté serveur.
+const ANNEE_VIDE = { libelle: '' };
 const SESSION_VIDE = { type: 'normale', libelle: '', date_debut: '', date_fin: '' };
 
 const TONS_ANNEE = {
@@ -113,41 +115,43 @@ export default function AnneesAcademiquesPage() {
   }, []);
 
   /**
-   * Années proposables : de l'an dernier à trois ans devant.
-   *
-   * Créer une année six ans à l'avance n'a aucun sens administratif, et
-   * revenir dix ans en arrière non plus. Celles qui existent déjà sont
-   * retirées : la contrainte d'unicité les refuserait de toute façon,
-   * autant ne pas les montrer.
+   * Années déjà créées — pour le dire AVANT l'envoi plutôt que de laisser
+   * le serveur refuser un doublon.
    */
-  const anneesProposees = useMemo(() => {
-    const debut = new Date().getFullYear() - 1;
-    const dejaCreees = new Set(annees.map((a) => a.libelle));
-    return Array.from({ length: 5 }, (_, i) => debut + i)
-      .map((an) => `${an}-${an + 1}`)
-      .filter((libelle) => !dejaCreees.has(libelle))
-      .map((libelle) => ({ value: libelle, label: libelle }));
-  }, [annees]);
+  const dejaCreees = useMemo(() => new Set(annees.map((a) => a.libelle)), [annees]);
 
   /**
-   * Choisir l'année pré-remplit ses dates.
+   * L'agent saisit l'ANNÉE DE RENTRÉE, pas le libellé.
+   *
+   * Une liste déroulante bornée (l'an dernier à trois ans devant) paraissait
+   * plus sûre, mais elle finit toujours par manquer : un rattrapage ouvert
+   * cinq ans après, une année ancienne à régulariser, et l'écran devient un
+   * mur qu'aucun agent ne peut contourner — il faudrait livrer du code.
+   *
+   * Un nombre n'a pas ce défaut et ne rouvre pas la porte au libellé
+   * fantaisiste (« 2025 », « 2025-2027 ») : le libellé reste DÉRIVÉ, jamais
+   * tapé. Le contrôle n'est pas perdu, il est déplacé au bon endroit.
+   */
+  const [rentree, setRentree] = useState('');
+  const ANNEE_MIN = 1960; // indépendance : rien d'antérieur n'a de sens ici
+  const ANNEE_MAX = new Date().getFullYear() + 20;
+
+  /**
+   * Saisir la rentrée dérive le libellé et pré-remplit les dates.
    *
    * Le calendrier universitaire togolais va de la rentrée d'octobre à la
    * fin des délibérations de juillet. Les deviner évite à l'agent de
    * saisir deux dates qu'il connaît sans les avoir sous la main — tout en
    * les laissant modifiables, parce que l'arrêté prime.
    */
-  function choisirAnnee(libelle) {
-    if (!libelle) {
+  function choisirRentree(valeur) {
+    setRentree(valeur);
+    const premiere = Number(valeur);
+    if (!/^\d{4}$/.test(valeur) || premiere < ANNEE_MIN || premiere > ANNEE_MAX) {
       setFormAnnee(ANNEE_VIDE);
       return;
     }
-    const premiere = Number(libelle.slice(0, 4));
-    setFormAnnee({
-      libelle,
-      date_debut: `${premiere}-10-01`,
-      date_fin: `${premiere + 1}-07-31`,
-    });
+    setFormAnnee({ libelle: `${premiere}-${premiere + 1}` });
   }
 
   async function soumettreAnnee(e) {
@@ -158,6 +162,7 @@ export default function AnneesAcademiquesPage() {
       await creerAnnee(formAnnee);
       setModaleAnnee(false);
       setFormAnnee(ANNEE_VIDE);
+      setRentree('');
       setSucces("Année créée en préparation. Ouvrez-la pour que les établissements puissent s'en servir.");
       await charger();
     } catch (err) {
@@ -290,7 +295,6 @@ export default function AnneesAcademiquesPage() {
       {anneeOuverte && (
         <div className="mb-5">
           <Encart ton="succes" titre={`Année en cours : ${anneeOuverte.libelle}`}>
-            Du {dateCourte(anneeOuverte.date_debut)} au {dateCourte(anneeOuverte.date_fin)}.
             Une seule année peut être ouverte à la fois : en ouvrir une autre suppose de
             clôturer celle-ci.
           </Encart>
@@ -306,12 +310,6 @@ export default function AnneesAcademiquesPage() {
             cle: 'libelle',
             libelle: 'Année',
             rendu: (a) => <span className="font-medium">{a.libelle}</span>,
-          },
-          {
-            cle: 'periode',
-            libelle: 'Période',
-            tabulaire: true,
-            rendu: (a) => `${dateCourte(a.date_debut)} — ${dateCourte(a.date_fin)}`,
           },
           {
             cle: 'statut',
@@ -378,63 +376,37 @@ export default function AnneesAcademiquesPage() {
         <form onSubmit={soumettreAnnee} className="space-y-4">
           {erreurForm && <Encart ton="erreur">{erreurForm}</Encart>}
 
-          {/* Une année académique n'est pas une chaîne libre : elle
-              couvre deux années consécutives. Le champ de saisie laissait
-              écrire « 2025 » ou « 2025-2027 », que le serveur refusait
-              ensuite — autant ne proposer que des valeurs justes. */}
+          {/* Une année académique n'est pas une chaîne libre : elle couvre
+              deux années consécutives. On saisit donc la rentrée, et le
+              libellé s'en déduit — impossible d'écrire « 2025-2027 », et
+              aucune année n'est hors d'atteinte. */}
           <Champ
-            label="Année académique"
-            htmlFor="an-libelle"
+            label="Année de rentrée"
+            htmlFor="an-rentree"
             requis
-            aide="Deux années consécutives. Les années déjà créées ne sont pas proposées."
+            aide={`Le libellé se déduit : 2031 donne « 2031-2032 ». De ${ANNEE_MIN} à ${ANNEE_MAX}.`}
+            erreur={
+              formAnnee.libelle && dejaCreees.has(formAnnee.libelle)
+                ? `L'année « ${formAnnee.libelle} » existe déjà.`
+                : ''
+            }
           >
-            <Liste
-              id="an-libelle"
+            <Saisie
+              id="an-rentree"
+              type="number"
               required
-              vide="— Choisir —"
-              value={formAnnee.libelle}
-              onChange={(e) => choisirAnnee(e.target.value)}
-              options={anneesProposees}
+              min={ANNEE_MIN}
+              max={ANNEE_MAX}
+              step="1"
+              placeholder={String(new Date().getFullYear())}
+              value={rentree}
+              onChange={(e) => choisirRentree(e.target.value)}
             />
           </Champ>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Champ
-              label="Date de début"
-              htmlFor="an-debut"
-              requis
-              aide="Rentrée universitaire."
-            >
-              <Saisie
-                id="an-debut"
-                type="date"
-                required
-                value={formAnnee.date_debut}
-                onChange={(e) => setFormAnnee({ ...formAnnee, date_debut: e.target.value })}
-              />
-            </Champ>
-            <Champ
-              label="Date de fin"
-              htmlFor="an-fin"
-              requis
-              aide="Fin des délibérations."
-            >
-              <Saisie
-                id="an-fin"
-                type="date"
-                required
-                value={formAnnee.date_fin}
-                onChange={(e) => setFormAnnee({ ...formAnnee, date_fin: e.target.value })}
-              />
-            </Champ>
-          </div>
-
           {formAnnee.libelle && (
-            <p className="flex items-start gap-1.5 text-sm text-gris-500">
-              <Icone nom="event" taille={16} className="mt-0.5 shrink-0" />
-              Dates pré-remplies sur le calendrier universitaire usuel — 1<sup>er</sup> octobre à
-              fin juillet. Ajustez-les si l’arrêté en retient d’autres : elles bornent la période
-              pendant laquelle les promotions de cette année peuvent être créées.
+            <p className="text-base font-medium text-gris-900">
+              Année académique <span className="tabulaire">{formAnnee.libelle}</span>
             </p>
           )}
 
@@ -447,7 +419,11 @@ export default function AnneesAcademiquesPage() {
             <Bouton variante="neutre" onClick={() => setModaleAnnee(false)}>
               Annuler
             </Bouton>
-            <Bouton type="submit" enCours={enregistrement}>
+            <Bouton
+              type="submit"
+              enCours={enregistrement}
+              disabled={!formAnnee.libelle || dejaCreees.has(formAnnee.libelle)}
+            >
               Créer
             </Bouton>
           </div>

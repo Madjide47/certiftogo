@@ -39,6 +39,14 @@ import { nettoyerTexte, estUuidValide } from '../utils/validators.js';
 export const TYPES_PIECE = {
   releve_notes: { libelle: 'Relevé de notes', portee: 'candidat', requise: true },
   rapport_stage: { libelle: 'Rapport de stage', portee: 'candidat', requise: false },
+  // La page de garde porte le titre du mémoire, le directeur et la date de
+  // soutenance, signés par le jury : c'est elle qu'on relit, pas les 80 pages.
+  page_garde_memoire: {
+    libelle: 'Page de garde du mémoire',
+    portee: 'candidat',
+    requise: false,
+  },
+  memoire: { libelle: 'Mémoire de fin de cycle', portee: 'candidat', requise: false },
   acte_naissance: { libelle: 'Acte de naissance', portee: 'candidat', requise: false },
   piece_identite: { libelle: "Pièce d'identité", portee: 'candidat', requise: false },
   attestation: { libelle: 'Attestation', portee: 'candidat', requise: false },
@@ -320,6 +328,30 @@ export async function listerPourLot(lot_id) {
   return {
     collectives: pieces.filter((p) => !p.candidat_id).map(formater),
     individuelles: pieces.filter((p) => p.candidat_id).map(formater),
+    compteurs: {
+      deposee: compteurs.deposee || 0,
+      vue: compteurs.vue || 0,
+      validee: compteurs.validee || 0,
+      rejetee: compteurs.rejetee || 0,
+    },
+  };
+}
+
+/**
+ * Dossier de pièces d'UN dossier, même forme que pour un lot.
+ *
+ * La voie normale reste le lot ; celle-ci sert quand l'agent part d'un
+ * dossier isolé — une régularisation, une contestation — et doit tout de
+ * même voir sur quels actes il s'apprête à statuer.
+ */
+export async function listerPourDossier(dossier_id) {
+  exigerUuid(dossier_id, 'Dossier introuvable.');
+  const pieces = (await pieceModel.listerParDossier(dossier_id)).map(formater);
+  const compteurs = pieces.reduce((acc, p) => ({ ...acc, [p.statut]: (acc[p.statut] || 0) + 1 }), {});
+
+  return {
+    collectives: pieces.filter((p) => !p.candidat_id),
+    individuelles: pieces.filter((p) => p.candidat_id),
     compteurs: {
       deposee: compteurs.deposee || 0,
       vue: compteurs.vue || 0,

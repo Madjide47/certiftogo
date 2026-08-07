@@ -65,8 +65,33 @@ export async function deposerDemande(req, res, next) {
       data: {
         reference: demande.reference,
         statut: demande.statut,
+        // Rendu UNE seule fois : il n'est stocké nulle part ailleurs et
+        // aucune lecture ultérieure ne le renvoie.
+        jeton_depot: demande.jeton_depot,
         message:
-          'Demande enregistrée. Conservez la référence : elle permet d\'en suivre l\'instruction.',
+          demande.statut === 'brouillon'
+            ? 'Dossier ouvert. Joignez les pièces obligatoires, puis transmettez-le au ministère.'
+            : "Demande enregistrée. Conservez la référence : elle permet d'en suivre l'instruction.",
+      },
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** POST /api/demandes-integration/:reference/transmettre — public (jeton) */
+export async function transmettreDemande(req, res, next) {
+  try {
+    const demande = await gouvernanceService.transmettreDemande(
+      req.params.reference,
+      (req.body || {}).jeton_depot || req.get('X-Jeton-Depot')
+    );
+    return res.json({
+      success: true,
+      data: {
+        reference: demande.reference,
+        statut: demande.statut,
+        message: 'Dossier transmis au ministère. Suivez son instruction avec votre référence.',
       },
     });
   } catch (err) {

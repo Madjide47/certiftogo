@@ -25,6 +25,7 @@ import {
   LIBELLES_TYPE_DIPLOME,
   messageErreur,
 } from '../../utils/libelles.js';
+import PiecesInstruction from '../../components/PiecesInstruction.jsx';
 import {
   EnTetePage,
   Tableau,
@@ -68,6 +69,7 @@ export default function DossiersRecusPage() {
 
   const [rejetCible, setRejetCible] = useState(null);
   const [motif, setMotif] = useState('');
+  const [detail, setDetail] = useState(null);
 
   async function charger() {
     setChargement(true);
@@ -86,13 +88,18 @@ export default function DossiersRecusPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onglet]);
 
-  async function agir(dossier, action, message) {
+  async function agir(dossier, action, message, statutApres) {
     setEnCours(dossier.id);
     setErreur('');
     setSucces('');
     try {
       await action(dossier.id);
       setSucces(message);
+      // Le détail reste ouvert : après la prise en charge, l'agent enchaîne
+      // sur les pièces sans avoir à retrouver son dossier dans la liste.
+      if (statutApres) {
+        setDetail((d) => (d && d.id === dossier.id ? { ...d, statut: statutApres } : d));
+      }
       await charger();
     } catch (err) {
       setErreur(messageErreur(err));
@@ -110,6 +117,7 @@ export default function DossiersRecusPage() {
       setSucces(
         `Dossier ${rejetCible.reference} renvoyé à l'établissement, qui pourra le corriger et le retransmettre.`
       );
+      setDetail((d) => (d && d.id === rejetCible.id ? { ...d, statut: 'rejete' } : d));
       setRejetCible(null);
       setMotif('');
       await charger();
@@ -118,6 +126,69 @@ export default function DossiersRecusPage() {
     } finally {
       setEnCours(null);
     }
+  }
+
+  // Les mêmes transitions servent dans le tableau et dans le détail : les
+  // dupliquer ferait diverger les deux écrans à la première évolution.
+  function actions(d) {
+    const occupe = enCours === d.id;
+    if (d.statut === 'soumis') {
+      return (
+        <Bouton
+          variante="discret"
+          disabled={occupe}
+          onClick={() =>
+            agir(d, examinerDossier, `Dossier ${d.reference} pris en examen.`, 'en_examen')
+          }
+        >
+          Prendre en examen
+        </Bouton>
+      );
+    }
+    if (d.statut === 'en_examen') {
+      return (
+        <span className="whitespace-nowrap">
+          <Bouton
+            variante="discret"
+            disabled={occupe}
+            onClick={() =>
+              agir(d, validerDossier, `Dossier ${d.reference} validé, prêt à certifier.`, 'valide')
+            }
+          >
+            Valider
+          </Bouton>
+          <Bouton
+            variante="discret"
+            className="ml-3 text-erreur hover:text-erreur"
+            onClick={() => {
+              setRejetCible(d);
+              setMotif('');
+            }}
+          >
+            Rejeter
+          </Bouton>
+        </span>
+      );
+    }
+    if (d.statut === 'valide') {
+      return (
+        <Bouton
+          variante="discret"
+          disabled={occupe}
+          onClick={() =>
+            agir(
+              d,
+              certifierDossier,
+              `Diplôme émis pour ${d.candidat_nom} ${d.candidat_prenom}.`,
+              'certifie'
+            )
+          }
+        >
+          Certifier
+        </Bouton>
+      );
+    }
+    return <span className="text-gris-500">—</span>;
   }
 
   return (
@@ -219,65 +290,16 @@ export default function DossiersRecusPage() {
             cle: 'actions',
             libelle: 'Actions',
             alignement: 'droite',
-            rendu: (d) => {
-              const occupe = enCours === d.id;
-              if (d.statut === 'soumis') {
-                return (
-                  <Bouton
-                    variante="discret"
-                    disabled={occupe}
-                    onClick={() =>
-                      agir(d, examinerDossier, `Dossier ${d.reference} pris en examen.`)
-                    }
-                  >
-                    Prendre en examen
-                  </Bouton>
-                );
-              }
-              if (d.statut === 'en_examen') {
-                return (
-                  <span className="whitespace-nowrap">
-                    <Bouton
-                      variante="discret"
-                      disabled={occupe}
-                      onClick={() =>
-                        agir(d, validerDossier, `Dossier ${d.reference} validé, prêt à certifier.`)
-                      }
-                    >
-                      Valider
-                    </Bouton>
-                    <Bouton
-                      variante="discret"
-                      className="ml-3 text-erreur hover:text-erreur"
-                      onClick={() => {
-                        setRejetCible(d);
-                        setMotif('');
-                      }}
-                    >
-                      Rejeter
-                    </Bouton>
-                  </span>
-                );
-              }
-              if (d.statut === 'valide') {
-                return (
-                  <Bouton
-                    variante="discret"
-                    disabled={occupe}
-                    onClick={() =>
-                      agir(
-                        d,
-                        certifierDossier,
-                        `Diplôme émis pour ${d.candidat_nom} ${d.candidat_prenom}.`
-                      )
-                    }
-                  >
-                    Certifier
-                  </Bouton>
-                );
-              }
-              return <span className="text-gris-500">—</span>;
-            },
+            rendu: (d) => (
+              <span className="whitespace-nowrap">
+                {/* Toujours proposé : consulter un dossier n'est pas en
+                    décider, et l'agent doit pouvoir regarder avant d'agir. */}
+                <Bouton variante="discret" onClick={() => setDetail(d)}>
+                  Détail
+                </Bouton>
+                <span className="ml-3">{actions(d)}</span>
+              </span>
+            ),
           },
         ]}
         vide={
@@ -288,6 +310,85 @@ export default function DossiersRecusPage() {
           </EtatVide>
         }
       />
+
+      {/* ── Détail d'un dossier ── */}
+      <Modale
+        ouvert={Boolean(detail)}
+        titre={`Dossier ${detail?.reference || ''}`}
+        onFermer={() => setDetail(null)}
+        largeur="max-w-4xl"
+      >
+        {detail && (
+          <>
+            <dl className="mb-4 grid gap-3 sm:grid-cols-4">
+              <div>
+                <dt className="text-sm text-gris-500">Étudiant</dt>
+                <dd className="text-base font-medium">
+                  {detail.candidat_nom} {detail.candidat_prenom}
+                  <span className="block text-xs font-normal text-gris-500">
+                    {detail.candidat_numero_etudiant}
+                  </span>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm text-gris-500">Établissement</dt>
+                <dd className="text-base font-medium">{detail.etablissement_nom}</dd>
+              </div>
+              <div>
+                <dt className="text-sm text-gris-500">Diplôme</dt>
+                <dd className="text-base font-medium">
+                  {LIBELLES_TYPE_DIPLOME[detail.type_diplome] || '—'}
+                  {detail.mention && (
+                    <span className="block text-xs font-normal text-gris-500">
+                      mention {LIBELLES_MENTION[detail.mention]}
+                    </span>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm text-gris-500">Statut</dt>
+                <dd>
+                  <Etiquette ton={TONS[detail.statut] || 'neutre'}>
+                    {LIBELLES_STATUT_DOSSIER[detail.statut] || detail.statut}
+                  </Etiquette>
+                  {detail.lot_reference && (
+                    <span className="block text-xs text-gris-500">
+                      lot {detail.lot_reference}
+                    </span>
+                  )}
+                </dd>
+              </div>
+            </dl>
+
+            {detail.motif_rejet && (
+              <div className="mb-4">
+                <Encart ton="erreur" titre="Motif du rejet">
+                  {detail.motif_rejet}
+                </Encart>
+              </div>
+            )}
+
+            <div className="mb-5 border-t border-gris-200 pt-4">
+              <h3 className="mb-3 text-lg">Pièces justificatives</h3>
+              {detail.statut === 'soumis' ? (
+                <Encart ton="info" titre="Instruction des pièces après prise en charge">
+                  Prenez le dossier en examen pour ouvrir les justificatifs : ouvrir un
+                  document le marque « consulté » et vous en désigne comme instructeur.
+                </Encart>
+              ) : (
+                <PiecesInstruction dossierId={detail.id} />
+              )}
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2 border-t border-gris-200 pt-4">
+              <Bouton variante="neutre" onClick={() => setDetail(null)}>
+                Fermer
+              </Bouton>
+              {actions(detail)}
+            </div>
+          </>
+        )}
+      </Modale>
 
       <Modale
         ouvert={Boolean(rejetCible)}

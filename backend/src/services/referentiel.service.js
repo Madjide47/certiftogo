@@ -88,8 +88,21 @@ function validerAnnee(donnees) {
     );
   }
 
-  const date_debut = canoniserDate(donnees.date_debut);
-  const date_fin = canoniserDate(donnees.date_fin);
+  // Les dates SE DÉDUISENT du libellé quand elles ne sont pas fournies.
+  //
+  // On les faisait saisir ; personne ne s'en servait. Rien dans le système
+  // ne les lit — ni les sessions, ni les promotions — et deux champs qui
+  // n'ont pas d'effet coûtent plus qu'ils ne rapportent : ils donnent à
+  // croire qu'ils bornent quelque chose. Le calendrier universitaire
+  // togolais court d'octobre à fin juillet ; c'est ce qu'on inscrit.
+  // Une API qui les fournit explicitement reste servie à l'identique.
+  const premiere = Number(libelle.slice(0, 4));
+  const date_debut = donnees.date_debut === undefined
+    ? `${premiere}-10-01`
+    : canoniserDate(donnees.date_debut);
+  const date_fin = donnees.date_fin === undefined
+    ? `${premiere + 1}-07-31`
+    : canoniserDate(donnees.date_fin);
   if (!date_debut || !date_fin) {
     if (date_debut === null || date_fin === null) {
       throw new ErreurApp(

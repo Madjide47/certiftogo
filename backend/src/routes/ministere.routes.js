@@ -8,6 +8,7 @@ import * as gouvernanceController from '../controllers/gouvernance.controller.js
 import * as lotController from '../controllers/lot.controller.js';
 import * as ancrageController from '../controllers/ancrage.controller.js';
 import * as pieceController from '../controllers/piece.controller.js';
+import * as pieceDemandeController from '../controllers/piece-demande.controller.js';
 import * as correctionService from '../services/correction.service.js';
 import * as quatreYeux from '../services/validation-critique.service.js';
 import * as diplomeService from '../services/diplome.service.js';
@@ -23,6 +24,9 @@ router.use(authJWT, requireRole('ministere'));
 router.get('/dossiers/statistiques', ministereController.statistiques);
 router.get('/dossiers', ministereController.listerDossiers);
 router.get('/dossiers/:id', ministereController.recupererDossier);
+// Les actes du dossier : ce que l'agent doit pouvoir ouvrir avant de
+// valider un dossier pris hors de son lot.
+router.get('/dossiers/:id/pieces', pieceController.listerPourDossier);
 router.post('/dossiers/:id/examiner', ministereController.examiner);
 router.post('/dossiers/:id/valider', ministereController.valider);
 router.post('/dossiers/:id/rejeter', ministereController.rejeter);
@@ -99,6 +103,9 @@ router.post('/validations/:id/refuser', async (req, res, next) => {
 });
 
 router.get('/demandes', gouvernanceController.listerDemandes);
+// Les actes du dossier d'agrément : chemin fixe avant les paramétrés.
+router.get('/demandes/pieces/:id/contenu', pieceDemandeController.contenu);
+router.get('/demandes/:id/pieces', pieceDemandeController.listerPourMinistere);
 router.post('/demandes/:id/examiner', gouvernanceController.examinerDemande);
 router.post('/demandes/:id/accepter', gouvernanceController.accepterDemande);
 router.post('/demandes/:id/refuser', gouvernanceController.refuserDemande);

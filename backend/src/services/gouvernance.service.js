@@ -9,6 +9,7 @@
 // l'administrateur système EXPLOITE la plateforme. L'administrateur ne
 // certifie jamais ; le ministère n'administre pas la plateforme.
 // ─────────────────────────────────────────────────────────────
+import crypto from 'node:crypto';
 import { withTransaction } from '../config/database.js';
 import * as etablissementModel from '../models/etablissement.model.js';
 import * as habilitationModel from '../models/habilitation.model.js';
@@ -20,6 +21,7 @@ import { journaliser, ACTIONS } from './audit.service.js';
 import * as notifications from './notification.service.js';
 import * as permissions from './permissions.service.js';
 import * as nomenclature from './nomenclature.service.js';
+import * as piecesDemande from './piece-demande.service.js';
 import {
   nettoyerTexte,
   estUuidValide,
@@ -102,6 +104,57 @@ function validerAgent(donnees, champ = 'agent') {
     throw new ErreurApp(400, 'TELEPHONE_INVALIDE', `Numéro de l'${champ} invalide.`);
   }
   return { nom, prenom, telephone };
+}
+
+/**
+ * Identité étendue du demandeur (migration 018).
+ *
+ * Trois rôles distincts, et c'est délibéré : le **représentant légal**
+ * engage l'établissement et signe la demande ; le **responsable des
+ * certifications** l'exploitera au quotidien — c'est lui qui recevra le
+ * compte ; le **contact technique** répond quand l'intégration casse.
+ * Souvent trois personnes. Les confondre, c'est écrire au mauvais.
+ *
+ * Tous ces champs sont facultatifs au dépôt : le blocage est mis sur les
+ * PIÈCES, qui font foi. Un formulaire trop exigeant se remplit de
+ * n'importe quoi.
+ */
+function validerIdentiteDemande(donnees) {
+  const juridique = nettoyerTexte(donnees.statut_juridique);
+  if (juridique && !['public', 'prive'].includes(juridique)) {
+    throw new ErreurApp(400, 'STATUT_JURIDIQUE_INVALIDE', 'Statut juridique : public ou prive.');
+  }
+
+  const email = nettoyerTexte(donnees.representant_email);
+  if (email && !estEmailValide(email)) {
+    throw new ErreurApp(400, 'EMAIL_INVALIDE', 'Email du représentant légal invalide.');
+  }
+  const emailTech = nettoyerTexte(donnees.contact_technique_email);
+  if (emailTech && !estEmailValide(emailTech)) {
+    throw new ErreurApp(400, 'EMAIL_INVALIDE', 'Email du contact informatique invalide.');
+  }
+
+  const telephone = canoniserTelephone(donnees.representant_telephone || '');
+  if (telephone && !estTelephoneValide(telephone)) {
+    throw new ErreurApp(400, 'TELEPHONE_INVALIDE', 'Numéro du représentant légal invalide.');
+  }
+  const telTech = canoniserTelephone(donnees.contact_technique_telephone || '');
+  if (telTech && !estTelephoneValide(telTech)) {
+    throw new ErreurApp(400, 'TELEPHONE_INVALIDE', 'Numéro du contact informatique invalide.');
+  }
+
+  return {
+    statut_juridique: juridique || null,
+    site_web: nettoyerTexte(donnees.site_web),
+    representant_nom: nettoyerTexte(donnees.representant_nom),
+    representant_prenom: nettoyerTexte(donnees.representant_prenom),
+    representant_fonction: nettoyerTexte(donnees.representant_fonction),
+    representant_telephone: telephone || null,
+    representant_email: email || null,
+    contact_technique_nom: nettoyerTexte(donnees.contact_technique_nom),
+    contact_technique_telephone: telTech || null,
+    contact_technique_email: emailTech || null,
+  };
 }
 
 async function validerTypesDiplomes(valeur) {
@@ -304,7 +357,18 @@ export async function changerStatutHabilitation(id, statut) {
 
 // ── Demandes d'intégration ─────────────────────────────────────────
 
-/** Dépôt public : l'établissement n'a pas encore de compte. */
+/**
+ * Dépôt public : l'établissement n'a pas encore de compte.
+ *
+ * La demande naît en **brouillon** quand elle doit encore recevoir ses
+ * pièces (`avec_pieces`), et n'entre dans la file du ministère qu'une
+ * fois transmise. On ne peut pas joindre huit actes dans la requête qui
+ * porte le formulaire, et une demande arrivée sans ses justificatifs
+ * ferait perdre son tour à l'établissement.
+ *
+ * Sans `avec_pieces`, le comportement historique est conservé : dépôt
+ * immédiat, statut « soumise ».
+ */
 export async function deposerDemande(donnees) {
   const etab = validerEtablissement(donnees);
   const responsable = validerAgent(
@@ -324,38 +388,103 @@ export async function deposerDemande(donnees) {
   }
 
   const types = await validerTypesDiplomes(donnees.types_diplomes_demandes);
+  const identite = validerIdentiteDemande(donnees);
+  const brouillon = donnees.avec_pieces === true || donnees.avec_pieces === 'true';
+  // 32 octets : ce jeton tient lieu de mot de passe au dossier.
+  const jeton = brouillon ? crypto.randomBytes(32).toString('hex') : null;
 
   const demande = await avecErreursSql(
     () =>
       demandeModel.creer({
         reference: genererReferenceDemande(),
         ...etab,
+        ...identite,
         responsable_nom: responsable.nom,
         responsable_prenom: responsable.prenom,
         responsable_telephone: responsable.telephone,
         types_diplomes_demandes: types.join(','),
         message: nettoyerTexte(donnees.message),
+        statut: brouillon ? 'brouillon' : 'soumise',
+        jeton_depot: jeton,
       }),
     CONTRAINTES
   );
+  if (jeton) demande.jeton_depot = jeton;
 
-  // Dépôt anonyme : l'auteur est l'établissement candidat lui-même.
+  // Un brouillon n'est pas un dépôt : on ne le journalise qu'à la
+  // transmission, sinon le journal annoncerait une demande que le
+  // ministère n'a jamais reçue.
+  if (!brouillon) await journaliserDepot(demande, types.join(','));
+
+  return demande;
+}
+
+/** Dépôt anonyme : l'auteur est l'établissement candidat lui-même. */
+async function journaliserDepot(demande, types) {
   await journaliser({
     action: ACTIONS.DEMANDE_DEPOSEE,
     entite: 'demandes_integration',
     entite_id: demande.id,
     auteur_libelle: `${demande.nom} (demande ${demande.reference})`,
-    apres: { reference: demande.reference, nom: demande.nom, types: types.join(',') },
+    apres: { reference: demande.reference, nom: demande.nom, types },
     message: `Demande d'intégration de « ${demande.nom} ».`,
   });
+}
 
+/**
+ * Retrouve un brouillon à partir de son couple référence + jeton.
+ * Utilisé par toutes les opérations du déposant, qui n'a pas de compte.
+ */
+export async function recupererParJeton(reference, jeton) {
+  const demande = await demandeModel.trouverParJeton(
+    nettoyerTexte(reference) || '',
+    nettoyerTexte(jeton) || ''
+  );
+  if (!demande) {
+    // 404 et non 403 : dire « jeton faux » confirmerait l'existence de la
+    // demande à qui a deviné la référence.
+    throw new ErreurApp(404, 'DEMANDE_INTROUVABLE', 'Demande introuvable ou lien expiré.');
+  }
   return demande;
+}
+
+/**
+ * Transmet le dossier au ministère : brouillon → soumise.
+ *
+ * Contrôle des pièces obligatoires ICI et pas seulement dans le
+ * navigateur : un formulaire se contourne, et une demande incomplète
+ * ferait perdre son temps à l'instructeur comme au demandeur.
+ */
+export async function transmettreDemande(reference, jeton) {
+  const demande = await recupererParJeton(reference, jeton);
+  if (demande.statut !== 'brouillon') {
+    throw new ErreurApp(
+      409,
+      'DEMANDE_DEJA_DEPOSEE',
+      'Cette demande a déjà été transmise au ministère.'
+    );
+  }
+
+  const manquants = await piecesDemande.manquants(demande);
+  if (manquants.length > 0) {
+    throw new ErreurApp(
+      409,
+      'PIECES_MANQUANTES',
+      `Pièces obligatoires manquantes : ${manquants.map((m) => m.libelle).join(', ')}.`
+    );
+  }
+
+  const transmise = await demandeModel.transmettre(demande.id);
+  await journaliserDepot(transmise, transmise.types_diplomes_demandes || '');
+  return transmise;
 }
 
 /** Suivi public par référence — vue volontairement restreinte. */
 export async function suivreDemande(reference) {
   const demande = await demandeModel.trouverParReference(nettoyerTexte(reference) || '');
-  if (!demande) {
+  // Un brouillon reste invisible au suivi public : sa référence se
+  // devine, et son état ne regarde que celui qui détient le jeton.
+  if (!demande || demande.statut === 'brouillon') {
     throw new ErreurApp(404, 'DEMANDE_INTROUVABLE', 'Aucune demande ne porte cette référence.');
   }
   return {
@@ -378,7 +507,7 @@ export async function listerDemandes({ statut } = {}) {
   return { demandes, repartition };
 }
 
-async function recupererDemande(id) {
+export async function recupererDemande(id) {
   if (!estUuidValide(id)) {
     throw new ErreurApp(404, 'DEMANDE_INTROUVABLE', 'Demande introuvable.');
   }

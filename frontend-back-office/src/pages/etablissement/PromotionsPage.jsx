@@ -1141,7 +1141,7 @@ export default function PromotionsPage() {
         <PiecesJointes
           portee="candidat"
           cibleId={piecesEtudiant?.candidat_id}
-          aide="Ces documents sont ceux que le ministère ouvrira pour instruire le dossier. Le relevé de notes est obligatoire ; le rapport de stage et les autres pièces le complètent."
+          aide="Ces documents sont ceux que le ministère ouvrira pour instruire le dossier. Le relevé de notes est obligatoire ; mémoire, page de garde et autres pièces le complètent. Le procès-verbal de délibération ne se dépose pas ici : il vaut pour la promotion entière, sous « Actes de la promotion »."
         />
       </Modale>
 

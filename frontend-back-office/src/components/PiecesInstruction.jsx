@@ -11,7 +11,12 @@
 // pouvoir les distinguer après coup.
 // ─────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react';
-import { piecesDuLot, ouvrirPiece, deciderPiece } from '../services/piece.service.js';
+import {
+  piecesDuLot,
+  piecesDuDossier,
+  ouvrirPiece,
+  deciderPiece,
+} from '../services/piece.service.js';
 import { messageErreur } from '../utils/libelles.js';
 import { Bouton, Etiquette, Encart, Chiffre, Chargement, Icone, Champ, Zone, Modale } from './ui/index.jsx';
 
@@ -26,7 +31,11 @@ const LIBELLES = {
 const horodatage = (v) =>
   v ? new Date(v).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
 
-export default function PiecesInstruction({ lotId, onChangement }) {
+// Le lot est la voie normale ; le dossier isolé la voie d'exception. Les
+// deux se lisent pareil — c'est le même dossier d'instruction, cadré plus
+// ou moins large.
+export default function PiecesInstruction({ lotId, dossierId, onChangement }) {
+  const cible = lotId || dossierId;
   const [dossier, setDossier] = useState(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState('');
@@ -35,11 +44,11 @@ export default function PiecesInstruction({ lotId, onChangement }) {
   const [enCours, setEnCours] = useState(false);
 
   async function charger() {
-    if (!lotId) return;
+    if (!cible) return;
     setChargement(true);
     setErreur('');
     try {
-      setDossier(await piecesDuLot(lotId));
+      setDossier(lotId ? await piecesDuLot(lotId) : await piecesDuDossier(dossierId));
     } catch (err) {
       setErreur(messageErreur(err));
     } finally {
@@ -50,7 +59,7 @@ export default function PiecesInstruction({ lotId, onChangement }) {
   useEffect(() => {
     charger();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lotId]);
+  }, [cible]);
 
   async function ouvrir(piece) {
     setErreur('');
@@ -148,9 +157,10 @@ export default function PiecesInstruction({ lotId, onChangement }) {
       ))}
 
       {collectives.length === 0 && individuelles.length === 0 && (
-        <Encart ton="alerte" titre="Aucune pièce jointe à ce lot">
-          L'établissement n'a transmis aucun justificatif. Les dossiers seront bloqués à
-          l'instruction pour pièce obligatoire manquante.
+        <Encart ton="alerte" titre={`Aucune pièce jointe à ce ${lotId ? 'lot' : 'dossier'}`}>
+          L'établissement n'a transmis aucun justificatif.{' '}
+          {lotId ? 'Les dossiers seront bloqués' : 'Le dossier sera bloqué'} à l'instruction
+          pour pièce obligatoire manquante.
         </Encart>
       )}
 

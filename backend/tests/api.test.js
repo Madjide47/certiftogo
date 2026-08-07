@@ -1106,6 +1106,167 @@ describe('Gouvernance — demandes d\'intégration et habilitations', () => {
     assert.equal(inconnue.status, 404);
   });
 
+  test('le formulaire public lit les types de diplôme sans compte', async () => {
+    const res = await api().get('/api/demandes-integration/types-diplome');
+    assert.equal(res.status, 200);
+    assert.ok(res.body.data.types_diplome.length > 0);
+    assert.ok(res.body.data.types_diplome.every((t) => t.actif !== false), 'actifs seulement');
+    // Le chemin fixe ne doit pas être avalé par /:reference.
+    assert.equal(res.body.data.types_diplome[0].code !== undefined, true);
+  });
+
+  // ── Dossier d'agrément : formulaire + pièces (migration 018) ──
+  describe('Demande avec pièces justificatives', () => {
+    let ref;
+    let jeton;
+
+    const formulaire = {
+      nom: 'Institut Privé de Kara',
+      type: 'institut',
+      statut_juridique: 'prive',
+      ville: 'Kara',
+      email: 'contact@ipk.tg',
+      telephone: '+22890444555',
+      site_web: 'https://ipk.tg',
+      representant_nom: 'ABALO',
+      representant_prenom: 'Kodjo',
+      representant_fonction: 'Directeur général',
+      representant_telephone: '+22890444556',
+      representant_email: 'dg@ipk.tg',
+      responsable_nom: 'SANTOS',
+      responsable_prenom: 'Afi',
+      responsable_telephone: '+22890444557',
+      contact_technique_nom: 'DOE',
+      contact_technique_email: 'it@ipk.tg',
+      avec_pieces: true,
+    };
+
+    const joindre = (type, nom = 'doc.pdf', contenu = PDF) =>
+      api()
+        .post(`/api/demandes-integration/${ref}/pieces`)
+        .set('X-Jeton-Depot', jeton)
+        .field('type_piece', type)
+        .attach('fichier', contenu, nom);
+
+    test('le dossier s\'ouvre en brouillon et rend un jeton', async () => {
+      const res = await api().post('/api/demandes-integration').send(formulaire);
+      assert.equal(res.status, 201);
+      assert.equal(res.body.data.statut, 'brouillon');
+      assert.equal(res.body.data.jeton_depot.length, 64, 'jeton rendu une seule fois');
+      ref = res.body.data.reference;
+      jeton = res.body.data.jeton_depot;
+    });
+
+    test('un brouillon reste invisible du suivi public et du ministère', async () => {
+      const suivi = await api().get(`/api/demandes-integration/${ref}`);
+      assert.equal(suivi.status, 404, 'sa référence se devine : il ne doit rien révéler');
+
+      const t = await login('+22890000001');
+      const file = await api().get('/api/ministere/demandes').set(auth(t));
+      assert.ok(
+        !file.body.data.demandes.some((d) => d.reference === ref),
+        'un dossier en cours de constitution n\'est pas une demande reçue'
+      );
+    });
+
+    test('le jeton est exigé pour joindre une pièce', async () => {
+      const res = await api()
+        .post(`/api/demandes-integration/${ref}/pieces`)
+        .set('X-Jeton-Depot', 'f'.repeat(64))
+        .field('type_piece', 'lettre_demande')
+        .attach('fichier', PDF, 'lettre.pdf');
+      assert.equal(res.status, 404, '404 et non 403 : ne pas confirmer l\'existence');
+    });
+
+    test('un établissement privé doit aussi ses pièces fiscales', async () => {
+      const res = await api()
+        .get(`/api/demandes-integration/${ref}/pieces`)
+        .set('X-Jeton-Depot', jeton);
+      const codes = res.body.data.manquants.map((m) => m.code);
+      assert.ok(codes.includes('registre_commerce'), 'exigé pour le privé');
+      assert.ok(codes.includes('attestation_fiscale'));
+    });
+
+    test('la transmission est refusée tant qu\'une pièce obligatoire manque', async () => {
+      const res = await api()
+        .post(`/api/demandes-integration/${ref}/transmettre`)
+        .set('X-Jeton-Depot', jeton);
+      assert.equal(res.status, 409);
+      assert.equal(res.body.error.code, 'PIECES_MANQUANTES');
+    });
+
+    test('le contenu du fichier prime sur son extension', async () => {
+      const res = await joindre('lettre_demande', 'lettre.pdf', Buffer.from('MZ programme'));
+      assert.equal(res.status, 415);
+      assert.equal(res.body.error.code, 'CONTENU_INCOHERENT');
+    });
+
+    test('chaque pièce n\'accepte que ses formats', async () => {
+      // Le logo est une image : un PDF n'y a pas sa place.
+      const res = await joindre('logo', 'logo.pdf');
+      assert.equal(res.status, 415);
+      assert.equal(res.body.error.code, 'FORMAT_NON_SUPPORTE');
+    });
+
+    test('redéposer un acte remplace le précédent', async () => {
+      assert.equal((await joindre('lettre_demande', 'v1.pdf')).status, 201);
+      assert.equal((await joindre('lettre_demande', 'v2.pdf')).status, 201);
+
+      const res = await api()
+        .get(`/api/demandes-integration/${ref}/pieces`)
+        .set('X-Jeton-Depot', jeton);
+      const lettres = res.body.data.pieces.filter((p) => p.type_piece === 'lettre_demande');
+      assert.equal(lettres.length, 1, 'il n\'existe pas deux versions valides d\'un acte');
+      assert.equal(lettres[0].nom_fichier, 'v2.pdf');
+    });
+
+    test('dossier complet : la transmission passe et le ministère le reçoit', async () => {
+      for (const type of [
+        'acte_creation',
+        'agrement',
+        'registre_commerce',
+        'attestation_fiscale',
+        'presentation',
+        'liste_formations',
+        'piece_identite_representant',
+      ]) {
+        assert.equal((await joindre(type, `${type}.pdf`)).status, 201, type);
+      }
+
+      const transmis = await api()
+        .post(`/api/demandes-integration/${ref}/transmettre`)
+        .set('X-Jeton-Depot', jeton);
+      assert.equal(transmis.status, 200);
+      assert.equal(transmis.body.data.statut, 'soumise');
+
+      const t = await login('+22890000001');
+      const file = await api().get('/api/ministere/demandes?statut=soumise').set(auth(t));
+      const recue = file.body.data.demandes.find((d) => d.reference === ref);
+      assert.ok(recue, 'le dossier entre dans la file une fois transmis');
+      assert.equal(recue.statut_juridique, 'prive');
+      assert.equal(recue.representant_fonction, 'Directeur général');
+
+      const pieces = await api()
+        .get(`/api/ministere/demandes/${recue.id}/pieces`)
+        .set(auth(t));
+      assert.equal(pieces.status, 200);
+      assert.equal(pieces.body.data.manquants.length, 0);
+      assert.equal(pieces.body.data.pieces.length, 8);
+
+      // Le ministère ouvre l'acte : l'empreinte est recontrôlée au passage.
+      const contenu = await api()
+        .get(`/api/ministere/demandes/pieces/${pieces.body.data.pieces[0].id}/contenu`)
+        .set(auth(t));
+      assert.equal(contenu.status, 200);
+    });
+
+    test('un dossier transmis n\'est plus modifiable par son déposant', async () => {
+      const res = await joindre('autre', 'tardif.pdf');
+      assert.equal(res.status, 409);
+      assert.equal(res.body.error.code, 'DEMANDE_DEJA_DEPOSEE');
+    });
+  });
+
   test('refuse une demande portant un type de diplôme inconnu', async () => {
     const res = await api().post('/api/demandes-integration').send({
       nom: 'École Fantaisie', type: 'ecole', ville: 'Lomé',

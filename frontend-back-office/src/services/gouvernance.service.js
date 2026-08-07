@@ -34,6 +34,39 @@ export async function refuserDemande(id, motif) {
   return data.data.demande;
 }
 
+/** Pièces du dossier d'agrément — renvoie { pieces, manquants }. */
+export async function piecesDemande(id) {
+  const { data } = await api.get(`/ministere/demandes/${id}/pieces`);
+  return data.data;
+}
+
+/**
+ * Ouvre une pièce dans un nouvel onglet. L'onglet est ouvert AVANT
+ * l'appel réseau : ouvert après, le navigateur le bloquerait comme popup.
+ */
+export async function ouvrirPieceDemande(id) {
+  const onglet = window.open('', '_blank');
+  try {
+    const { data } = await api.get(`/ministere/demandes/pieces/${id}/contenu`, {
+      responseType: 'blob',
+    });
+    const url = URL.createObjectURL(data);
+    if (onglet) onglet.location = url;
+    else window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (err) {
+    onglet?.close();
+    if (err.response?.data instanceof Blob) {
+      try {
+        err.response.data = JSON.parse(await err.response.data.text());
+      } catch {
+        /* réponse illisible : le message générique fera l'affaire */
+      }
+    }
+    throw err;
+  }
+}
+
 // ── Agrément et habilitations ──────────────────────────────────────
 
 export async function creerEtablissement(donnees) {

@@ -83,10 +83,18 @@ export default function PiecesJointes({ portee, cibleId, lectureSeule = false, a
 
   // « autre » s'attache aux deux portées ; les autres types ont la leur.
   const typesProposes = types.filter((t) => t.portee === portee || t.code === 'autre');
+  const estAutre = depot.type_piece === 'autre';
+
+  // Changer de nature efface la précision : garder « semestre 2 » saisi pour
+  // un « Autre document » sur un relevé de notes produirait un libellé faux.
+  function choisirType(code) {
+    setDepot({ ...depot, type_piece: code, libelle: code === 'autre' ? depot.libelle : '' });
+  }
 
   async function envoyer(evenement) {
     evenement.preventDefault();
     if (!depot.fichier || !depot.type_piece) return;
+    if (estAutre && !depot.libelle.trim()) return;
 
     setEnCours(true);
     setErreur('');
@@ -196,7 +204,7 @@ export default function PiecesJointes({ portee, cibleId, lectureSeule = false, a
                 id="piece-type"
                 required
                 value={depot.type_piece}
-                onChange={(e) => setDepot({ ...depot, type_piece: e.target.value })}
+                onChange={(e) => choisirType(e.target.value)}
                 options={typesProposes.map((t) => ({
                   value: t.code,
                   label: t.requise ? `${t.libelle} (obligatoire)` : t.libelle,
@@ -204,9 +212,23 @@ export default function PiecesJointes({ portee, cibleId, lectureSeule = false, a
               />
             </Champ>
 
-            <Champ label="Précision" htmlFor="piece-libelle" aide="Facultatif : semestre, session…">
+            {/* La précision n'a de sens que pour le fourre-tout : ailleurs, le
+                type dit déjà ce qu'est le document, et un libellé libre ne
+                ferait qu'ouvrir la porte aux variantes d'un même nom. */}
+            <Champ
+              label="Précision"
+              htmlFor="piece-libelle"
+              requis={estAutre}
+              aide={
+                estAutre
+                  ? 'Nommez le document : sans cela, personne ne saura ce qu’il contient.'
+                  : 'Réservé à « Autre document ».'
+              }
+            >
               <Saisie
                 id="piece-libelle"
+                disabled={!estAutre}
+                required={estAutre}
                 value={depot.libelle}
                 onChange={(e) => setDepot({ ...depot, libelle: e.target.value })}
               />
@@ -229,7 +251,7 @@ export default function PiecesJointes({ portee, cibleId, lectureSeule = false, a
               type="submit"
               icone="upload_file"
               enCours={enCours}
-              disabled={!depot.fichier || !depot.type_piece}
+              disabled={!depot.fichier || !depot.type_piece || (estAutre && !depot.libelle.trim())}
             >
               Déposer la pièce
             </Bouton>

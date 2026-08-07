@@ -342,11 +342,28 @@ export default function LotsRecusPage() {
             )}
 
             {/* Les pièces AVANT la liste des dossiers : on instruit sur
-                actes, la case à cocher vient après la lecture. */}
-            <div className="mb-5 border-t border-gris-200 pt-4">
-              <h3 className="mb-3 text-lg">Pièces justificatives</h3>
-              <PiecesInstruction lotId={lot.id} onChangement={() => ouvrir(lot)} />
-            </div>
+                actes, la case à cocher vient après la lecture.
+
+                Mais PAS avant la prise en charge : ouvrir un document le
+                marque « consulté » et engage l'agent. Instruire les pièces
+                sur un lot encore « transmis », puis le prendre en examen,
+                reviendrait à faire deux fois le même travail — et à laisser
+                une trace d'instruction sur un lot dont personne n'était
+                encore responsable. */}
+            {lot.statut === 'transmis' ? (
+              <div className="mb-5 border-t border-gris-200 pt-4">
+                <h3 className="mb-3 text-lg">Pièces justificatives</h3>
+                <Encart ton="info" titre="Instruction des pièces après prise en charge">
+                  Prenez le lot en examen pour ouvrir les justificatifs : c'est ce geste qui
+                  vous en désigne comme instructeur, et il ne se fait qu'une fois.
+                </Encart>
+              </div>
+            ) : (
+              <div className="mb-5 border-t border-gris-200 pt-4">
+                <h3 className="mb-3 text-lg">Pièces justificatives</h3>
+                <PiecesInstruction lotId={lot.id} onChangement={() => ouvrir(lot)} />
+              </div>
+            )}
 
             <p className="mb-2 text-sm text-gris-500">
               Cochez les dossiers à renvoyer et motivez chacun : les autres poursuivront

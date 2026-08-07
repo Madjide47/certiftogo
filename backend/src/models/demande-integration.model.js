@@ -4,15 +4,24 @@
 // ─────────────────────────────────────────────────────────────
 import { query } from '../config/database.js';
 
-const COLONNES = `id, reference, nom, type, ville, adresse, email, telephone,
+// `jeton_depot` reste HORS de cette liste : il n'est rendu qu'une fois, à
+// la création, et ne doit ressortir d'aucune lecture ordinaire.
+const COLONNES = `id, reference, nom, type, statut_juridique, ville, adresse,
+                  email, telephone, site_web,
+                  representant_nom, representant_prenom, representant_fonction,
+                  representant_telephone, representant_email,
                   responsable_nom, responsable_prenom, responsable_telephone,
+                  contact_technique_nom, contact_technique_telephone,
+                  contact_technique_email,
                   types_diplomes_demandes, message, statut, motif_refus,
                   etablissement_id, agent_ministere_id,
-                  date_soumission, date_traitement`;
+                  date_soumission, date_transmission, date_traitement`;
 
 export async function lister({ statut = null } = {}) {
   const params = [];
-  let filtre = '';
+  // Sans filtre, les BROUILLONS restent invisibles : un dossier en cours
+  // de constitution n'a pas été déposé, le ministère n'a rien à en faire.
+  let filtre = `WHERE statut <> 'brouillon'`;
   if (statut) {
     params.push(statut);
     filtre = `WHERE statut = $1`;
@@ -42,27 +51,75 @@ export async function trouverParReference(reference) {
 export async function creer(data) {
   const { rows } = await query(
     `INSERT INTO demandes_integration
-       (reference, nom, type, ville, adresse, email, telephone,
+       (reference, nom, type, statut_juridique, ville, adresse, email, telephone,
+        site_web, representant_nom, representant_prenom, representant_fonction,
+        representant_telephone, representant_email,
         responsable_nom, responsable_prenom, responsable_telephone,
-        types_diplomes_demandes, message)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        contact_technique_nom, contact_technique_telephone, contact_technique_email,
+        types_diplomes_demandes, message, statut, jeton_depot, date_transmission)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+             $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
      RETURNING ${COLONNES}`,
     [
       data.reference,
       data.nom,
       data.type,
+      data.statut_juridique || null,
       data.ville,
       data.adresse || null,
       data.email,
       data.telephone,
+      data.site_web || null,
+      data.representant_nom || null,
+      data.representant_prenom || null,
+      data.representant_fonction || null,
+      data.representant_telephone || null,
+      data.representant_email || null,
       data.responsable_nom,
       data.responsable_prenom,
       data.responsable_telephone,
+      data.contact_technique_nom || null,
+      data.contact_technique_telephone || null,
+      data.contact_technique_email || null,
       data.types_diplomes_demandes || null,
       data.message || null,
+      data.statut || 'soumise',
+      data.jeton_depot || null,
+      // Un brouillon n'a pas de date de transmission : il n'est pas parti.
+      // Calculée ici plutôt qu'en SQL — réutiliser le paramètre `statut`
+      // dans un CASE ferait déduire deux types pour le même placeholder.
+      (data.statut || 'soumise') === 'brouillon' ? null : new Date(),
     ]
   );
   return rows[0];
+}
+
+/**
+ * Retrouve une demande par sa référence ET son jeton.
+ *
+ * Les deux ensemble : la référence seule se devine, le jeton seul ne dit
+ * pas de quel dossier il s'agit. C'est ce qui autorise un déposant sans
+ * compte à compléter SON dossier, et lui seul.
+ */
+export async function trouverParJeton(reference, jeton) {
+  const { rows } = await query(
+    `SELECT ${COLONNES} FROM demandes_integration
+      WHERE reference = $1 AND jeton_depot = $2`,
+    [reference, jeton]
+  );
+  return rows[0] || null;
+}
+
+/** Dépôt effectif : brouillon → soumise. */
+export async function transmettre(id) {
+  const { rows } = await query(
+    `UPDATE demandes_integration
+        SET statut = 'soumise', date_transmission = now()
+      WHERE id = $1 AND statut = 'brouillon'
+      RETURNING ${COLONNES}`,
+    [id]
+  );
+  return rows[0] || null;
 }
 
 /** Enregistre la décision du ministère (examen, acceptation, refus). */

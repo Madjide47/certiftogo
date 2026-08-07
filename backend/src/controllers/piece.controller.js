@@ -113,6 +113,14 @@ export async function listerPourLot(req, res, next) {
   }
 }
 
+export async function listerPourDossier(req, res, next) {
+  try {
+    return res.json({ success: true, data: await pieces.listerPourDossier(req.params.id) });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 export async function decider(req, res, next) {
   try {
     const piece = await pieces.decider(req.params.id, req.utilisateur, req.body || {});

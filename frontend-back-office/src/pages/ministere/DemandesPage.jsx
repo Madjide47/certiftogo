@@ -20,6 +20,7 @@ import {
   refuserDemande,
 } from '../../services/gouvernance.service.js';
 import { LIBELLES_TYPE_DIPLOME, messageErreur } from '../../utils/libelles.js';
+import DossierIntegration from '../../components/DossierIntegration.jsx';
 import {
   EnTetePage,
   Tableau,
@@ -73,6 +74,7 @@ export default function DemandesPage() {
   const [form, setForm] = useState(null);
   const [refus, setRefus] = useState(null);
   const [motif, setMotif] = useState('');
+  const [dossier, setDossier] = useState(null);
 
   async function charger() {
     setChargement(true);
@@ -278,18 +280,21 @@ export default function DemandesPage() {
             cle: 'actions',
             libelle: 'Actions',
             alignement: 'droite',
-            rendu: (d) => {
-              if (d.statut === 'soumise') {
-                return (
-                  <Bouton variante="discret" onClick={() => examiner(d)}>
+            rendu: (d) => (
+              <span className="whitespace-nowrap">
+                {/* Le dossier d'agrément se lit toujours : c'est sur les
+                    actes qu'on agrée, pas sur la déclaration. */}
+                <Bouton variante="discret" onClick={() => setDossier(d)}>
+                  Dossier
+                </Bouton>
+                {d.statut === 'soumise' && (
+                  <Bouton variante="discret" className="ml-3" onClick={() => examiner(d)}>
                     Prendre en examen
                   </Bouton>
-                );
-              }
-              if (d.statut === 'en_examen') {
-                return (
-                  <span className="whitespace-nowrap">
-                    <Bouton variante="discret" onClick={() => ouvrirAgrement(d)}>
+                )}
+                {d.statut === 'en_examen' && (
+                  <>
+                    <Bouton variante="discret" className="ml-3" onClick={() => ouvrirAgrement(d)}>
                       Agréer
                     </Bouton>
                     <Bouton
@@ -302,11 +307,10 @@ export default function DemandesPage() {
                     >
                       Refuser
                     </Bouton>
-                  </span>
-                );
-              }
-              return <span className="text-gris-500">—</span>;
-            },
+                  </>
+                )}
+              </span>
+            ),
           },
         ]}
         vide={
@@ -315,6 +319,21 @@ export default function DemandesPage() {
           </EtatVide>
         }
       />
+
+      {/* ── Dossier d'agrément ── */}
+      <Modale
+        ouvert={Boolean(dossier)}
+        titre={`Dossier — ${dossier?.nom || ''}`}
+        onFermer={() => setDossier(null)}
+        largeur="max-w-4xl"
+      >
+        <DossierIntegration demande={dossier} />
+        <div className="mt-5 flex justify-end border-t border-gris-200 pt-4">
+          <Bouton variante="neutre" onClick={() => setDossier(null)}>
+            Fermer
+          </Bouton>
+        </div>
+      </Modale>
 
       {/* ── Agrément ── */}
       <Modale

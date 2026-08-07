@@ -79,6 +79,31 @@ export async function listerParLot(lot_id) {
   return rows;
 }
 
+/**
+ * Les pièces qui fondent UN dossier : celles de son titulaire, plus les
+ * actes collectifs de la promotion dont il relève. Un dossier ne se juge
+ * pas sur le seul relevé de notes — sans le procès-verbal, rien ne dit
+ * qu'un jury a délibéré.
+ */
+export async function listerParDossier(dossier_id) {
+  const { rows } = await query(
+    `SELECT p.id, p.candidat_id, p.promotion_id, p.etablissement_id, p.type_piece,
+            p.libelle, p.nom_fichier, p.type_mime, p.taille_octets, p.empreinte,
+            p.statut, p.motif_rejet, p.date_depot, p.date_consultation, p.date_decision,
+            c.nom AS candidat_nom, c.prenom AS candidat_prenom, c.numero_etudiant
+       FROM pieces_jointes p
+       LEFT JOIN candidats c ON c.id = p.candidat_id
+      WHERE p.candidat_id = (SELECT candidat_id FROM dossiers WHERE id = $1)
+         OR p.promotion_id = (SELECT l.promotion_id
+                                FROM dossiers d
+                                JOIN lots_transmission l ON l.id = d.lot_id
+                               WHERE d.id = $1)
+      ORDER BY p.candidat_id NULLS FIRST, p.type_piece, p.date_depot DESC`,
+    [dossier_id]
+  );
+  return rows;
+}
+
 /** Synthèse par statut, pour dire en un coup d'œil ce qui reste à examiner. */
 export async function compterParStatutPourLot(lot_id) {
   const { rows } = await query(

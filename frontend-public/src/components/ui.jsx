@@ -60,6 +60,55 @@ export function Bouton({ variante = 'primaire', icone, children, className = '',
   );
 }
 
+// ── Saisie ─────────────────────────────────────────────────────────
+// Le site n'avait qu'un champ, écrit à la main dans la page. Depuis qu'un
+// établissement peut y déposer une demande d'intégration, il en a vingt :
+// les répéter en ligne produirait vingt variantes du même bord gris.
+
+const CHAMP_BASE =
+  'w-full rounded border border-gris-500 bg-white px-3 py-2.5 text-base text-gris-900 ' +
+  'placeholder:text-gris-500 focus:border-vert disabled:bg-gris-100 disabled:text-gris-500';
+
+/** Étiquette + aide + champ. L'aide précède la saisie : elle sert à remplir. */
+export function ChampSaisie({ label, htmlFor, aide, requis, children }) {
+  return (
+    <div>
+      <label htmlFor={htmlFor} className="block text-base font-medium text-gris-900">
+        {label}
+        {requis && (
+          <span className="text-erreur" aria-hidden="true">
+            {' '}
+            *
+          </span>
+        )}
+      </label>
+      {aide && <p className="mt-0.5 text-sm text-gris-500">{aide}</p>}
+      <div className="mt-1">{children}</div>
+    </div>
+  );
+}
+
+export function Saisie({ className = '', ...props }) {
+  return <input className={`${CHAMP_BASE} ${className}`} {...props} />;
+}
+
+export function Zone({ className = '', rows = 4, ...props }) {
+  return <textarea rows={rows} className={`${CHAMP_BASE} ${className}`} {...props} />;
+}
+
+export function Liste({ options = [], vide = '—', className = '', ...props }) {
+  return (
+    <select className={`${CHAMP_BASE} ${className}`} {...props}>
+      {vide !== null && <option value="">{vide}</option>}
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 /** Couple libellé / valeur d'un acte administratif. */
 export function Champ({ label, valeur, large }) {
   if (!valeur) return null;
