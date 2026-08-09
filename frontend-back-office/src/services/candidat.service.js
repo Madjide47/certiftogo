@@ -31,3 +31,13 @@ export async function modifierCandidat(id, donnees) {
 export async function supprimerCandidat(id) {
   await api.delete(`/candidats/${id}`);
 }
+
+/**
+ * Fiche complète d'un étudiant : état civil, parcours, pièces, dossiers
+ * et diplômes en une lecture. C'est l'écran d'examen — l'agent n'a plus
+ * à ouvrir cinq modales pour se faire une idée d'un cas.
+ */
+export async function ficheEtudiant(id) {
+  const { data } = await api.get(`/candidats/${id}/fiche`);
+  return data.data;
+}

@@ -912,6 +912,16 @@ describe('API promotions — cycle de vie et inscriptions', () => {
   test('fige la composition dès que la promotion est transmise (409)', async () => {
     const t = await login('+22890000002');
 
+    // Les pièces obligatoires conditionnent désormais la transmission :
+    // le dossier complet de l'admis, et le procès-verbal du jury pour la
+    // promotion. Les déposer ici, c'est reproduire le parcours réel.
+    await deposerPiecesObligatoires(t, KOFFI, 'koffi-fige');
+    await api()
+      .post(`/api/promotions/${promotionId}/pieces`)
+      .set(auth(t))
+      .field('type_piece', 'proces_verbal')
+      .attach('fichier', PDF, 'pv-promotion-fige.pdf');
+
     const transmise = await api()
       .post(`/api/promotions/${promotionId}/transmettre`)
       .set(auth(t)).send({ date_deliberation: '2025-07-15' });
@@ -1854,15 +1864,15 @@ describe('Lot de transmission — émission, contrôles, rejet partiel', () => {
         .set(auth(token))
         .send({ statut: etudiant.statut, mention: etudiant.mention, moyenne: etudiant.moyenne });
 
-      // Le relevé de notes est obligatoire : sans lui, le dossier est
-      // bloqué à l'instruction. Le déposer ici, c'est reproduire le
-      // parcours réel plutôt que tester un cas qui n'arrive jamais.
+      // Toutes les pièces individuelles sont obligatoires : sans elles,
+      // la promotion ne peut pas être transmise. Les déposer ici, c'est
+      // reproduire le parcours réel plutôt qu'un cas qui n'arrive jamais.
       if (!sansPieces) {
-        await api()
-          .post(`/api/candidats/${candidat.body.data.candidat.id}/pieces`)
-          .set(auth(token))
-          .field('type_piece', 'releve_notes')
-          .attach('fichier', PDF, `releve-${etudiant.matricule}.pdf`);
+        await deposerPiecesObligatoires(
+          token,
+          candidat.body.data.candidat.id,
+          etudiant.matricule
+        );
       }
     }
 
@@ -3316,6 +3326,15 @@ describe('Sous-rôles d\'établissement et workflow interne', () => {
       .set(auth(directeur))
       .send({ statut: 'admis', mention: 'bien' });
 
+    // Pièces obligatoires : sans elles, la transmission est refusée
+    // avant même d'atteindre le contrôle du workflow interne.
+    await deposerPiecesObligatoires(directeur, candidat.body.data.candidat.id, 'hier-001');
+    await api()
+      .post(`/api/promotions/${promotionId}/pieces`)
+      .set(auth(directeur))
+      .field('type_piece', 'proces_verbal')
+      .attach('fichier', PDF, 'pv-workflow-interne.pdf');
+
     await api().patch(`/api/promotions/${promotionId}/statut`).set(auth(directeur))
       .send({ statut: 'ouverte' });
 
@@ -3392,6 +3411,37 @@ const PDF = Buffer.from(
   '%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n',
   'latin1'
 );
+
+/**
+ * Pièces individuelles obligatoires — miroir de `TYPES_PIECE` côté
+ * service. Un dossier de fin de cycle se juge sur l'ensemble de ses
+ * actes : sans elles, la promotion ne part pas.
+ */
+const PIECES_REQUISES_CANDIDAT = [
+  'releve_notes',
+  'rapport_stage',
+  'page_garde_memoire',
+  'memoire',
+  'acte_naissance',
+  'piece_identite',
+  'attestation',
+];
+
+/**
+ * Complète le dossier d'un étudiant. Reproduit le parcours réel : sans
+ * ce dépôt, aucune transmission n'est possible, et tester la
+ * transmission reviendrait à tester un cas qui n'arrive jamais.
+ */
+async function deposerPiecesObligatoires(token, candidatId, suffixe) {
+  for (const type of PIECES_REQUISES_CANDIDAT) {
+    const res = await api()
+      .post(`/api/candidats/${candidatId}/pieces`)
+      .set(auth(token))
+      .field('type_piece', type)
+      .attach('fichier', PDF, `${type}-${suffixe}.pdf`);
+    assert.equal(res.status, 201, `dépôt ${type} : ${JSON.stringify(res.body)}`);
+  }
+}
 
 describe('Pièces justificatives — dépôt', () => {
   let jetonEtab;
@@ -4398,5 +4448,459 @@ describe('Robustesse — erreurs techniques traduites', () => {
     // Le message métier est destiné à l'agent : il doit être explicite.
     assert.ok(res.body.error.message.length > 10);
     assert.notEqual(res.body.error.message, 'Une erreur interne est survenue.');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Grille de pièces, instruction par tranches et dossiers urgents.
+//
+// Trois affirmations à tenir :
+//   1. une promotion dont un admis n'a pas ses pièces obligatoires ne
+//      part pas — le contrôle se joue AVANT l'envoi, pas au rejet ;
+//   2. le ministère statue sur une tranche et revient plus tard : ce
+//      qu'il n'a pas jugé reste en attente ;
+//   3. un dossier urgent remonte en tête, et son urgence est motivée.
+// ═══════════════════════════════════════════════════════════════════
+describe('Grille de pièces, tranches d’instruction et urgences', () => {
+  const FACULTE_CII = '60000000-0000-0000-0000-000000000001';
+  const ANNEE = '50000000-0000-0000-0000-000000000001';
+  const DELIBERATION = '2025-07-15';
+
+  let filiereId;
+  let promotionId;
+  let lotId;
+  const etudiants = [];
+
+  /** Dépose une pièce individuelle et renvoie la réponse brute. */
+  const deposerCandidat = (token, candidatId, type, nom) =>
+    api()
+      .post(`/api/candidats/${candidatId}/pieces`)
+      .set(auth(token))
+      .field('type_piece', type)
+      .attach('fichier', PDF, nom);
+
+  test('crée une promotion de trois admis, sans aucune pièce', async () => {
+    const t = await login('+22890000002');
+
+    // Filière propre à cette suite : les couples (filière, niveau, année)
+    // des filières du seed sont déjà pris par les suites précédentes, et
+    // une promotion en double est refusée — à juste titre.
+    const filiere = await api().post('/api/structure/filieres').set(auth(t)).send({
+      faculte_id: FACULTE_CII,
+      nom: 'Génie Logiciel — instruction par tranches',
+      code: 'GLT',
+      type_diplome: 'licence',
+      duree_annees: 3,
+    });
+    assert.equal(filiere.status, 201, JSON.stringify(filiere.body));
+    filiereId = filiere.body.data.filiere.id;
+
+    const promo = await api().post('/api/promotions').set(auth(t)).send({
+      filiere_id: filiereId,
+      annee_id: ANNEE,
+      libelle: 'L3 GLT — tranches et urgences',
+      niveau: 3,
+    });
+    assert.equal(promo.status, 201, JSON.stringify(promo.body));
+    promotionId = promo.body.data.promotion.id;
+
+    for (const [i, nom] of ['ABALO', 'BOKO', 'CAPO'].entries()) {
+      const candidat = await api().post('/api/candidats').set(auth(t)).send({
+        numero_etudiant: `TRA-00${i + 1}`,
+        nom,
+        prenom: 'Kodjo',
+        telephone: `+2289310000${i + 1}`,
+        date_naissance: `2001-03-0${i + 1}`,
+      });
+      assert.equal(candidat.status, 201, JSON.stringify(candidat.body));
+      const candidat_id = candidat.body.data.candidat.id;
+
+      const inscription = await api()
+        .post(`/api/promotions/${promotionId}/inscriptions`)
+        .set(auth(t))
+        .send({ candidat_id });
+      assert.equal(inscription.status, 201);
+
+      await api()
+        .put(`/api/promotions/${promotionId}/inscriptions/${inscription.body.data.inscription.id}`)
+        .set(auth(t))
+        .send({ statut: 'admis', moyenne: 13 + i });
+
+      etudiants.push({ candidat_id, inscription_id: inscription.body.data.inscription.id, nom });
+    }
+
+    await api()
+      .patch(`/api/promotions/${promotionId}/statut`)
+      .set(auth(t))
+      .send({ statut: 'ouverte' });
+  });
+
+  // ── Grille de pièces ─────────────────────────────────────────────
+
+  test('la grille dit ce qui MANQUE, pas seulement ce qui est déposé', async () => {
+    const t = await login('+22890000002');
+
+    const vide = await api()
+      .get(`/api/candidats/${etudiants[0].candidat_id}/pieces/grille`)
+      .set(auth(t));
+    assert.equal(vide.status, 200, JSON.stringify(vide.body));
+    assert.equal(vide.body.data.complet, false);
+
+    // Une case par nature attendue, même vide : c'est tout l'objet.
+    const releve = vide.body.data.cases.find((c) => c.type_piece === 'releve_notes');
+    assert.ok(releve, 'le relevé de notes a sa case');
+    assert.equal(releve.requise, true);
+    assert.equal(releve.remplie, false);
+    assert.ok(releve.aide, 'chaque case porte son explication');
+
+    // Les obligatoires en tête : l'ordre de la grille est l'ordre du travail.
+    assert.equal(vide.body.data.cases[0].requise, true);
+    assert.deepEqual(
+      vide.body.data.manquantes.map((m) => m.type_piece).sort(),
+      [...PIECES_REQUISES_CANDIDAT].sort(),
+      'toutes les pièces individuelles sont attendues'
+    );
+
+    // Le fourre-tout n'a pas de case : il n'est jamais attendu.
+    assert.ok(!vide.body.data.cases.some((c) => c.type_piece === 'autre'));
+
+    // Une seule pièce ne suffit pas : le dossier est complet ou il ne l'est pas.
+    const depot = await deposerCandidat(
+      t,
+      etudiants[0].candidat_id,
+      'releve_notes',
+      'releve-tra-001.pdf'
+    );
+    assert.equal(depot.status, 201, JSON.stringify(depot.body));
+
+    const partielle = await api()
+      .get(`/api/candidats/${etudiants[0].candidat_id}/pieces/grille`)
+      .set(auth(t));
+    assert.equal(partielle.body.data.complet, false);
+    assert.equal(partielle.body.data.manquantes.length, PIECES_REQUISES_CANDIDAT.length - 1);
+    assert.equal(
+      partielle.body.data.cases.find((c) => c.type_piece === 'releve_notes').piece.nom_fichier,
+      'releve-tra-001.pdf'
+    );
+
+    await deposerPiecesObligatoires(t, etudiants[0].candidat_id, 'tra-001');
+    const remplie = await api()
+      .get(`/api/candidats/${etudiants[0].candidat_id}/pieces/grille`)
+      .set(auth(t));
+    assert.equal(remplie.body.data.complet, true);
+    assert.equal(remplie.body.data.manquantes.length, 0);
+  });
+
+  test('la grille d’une promotion porte les actes collectifs', async () => {
+    const t = await login('+22890000002');
+    const res = await api().get(`/api/promotions/${promotionId}/pieces/grille`).set(auth(t));
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.complet, false);
+    assert.deepEqual(
+      res.body.data.manquantes.map((m) => m.type_piece),
+      ['proces_verbal']
+    );
+    // Le relevé de notes n'a rien à faire dans une grille de promotion.
+    assert.ok(!res.body.data.cases.some((c) => c.type_piece === 'releve_notes'));
+  });
+
+  // ── Blocage à la transmission ────────────────────────────────────
+
+  test('l’aperçu de transmission nomme les étudiants incomplets', async () => {
+    const t = await login('+22890000002');
+    const res = await api().get(`/api/promotions/${promotionId}/transmission`).set(auth(t));
+
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.data.admis, 3);
+    assert.equal(res.body.data.transmissible, false);
+    assert.equal(res.body.data.pieces.incomplets.length, 2, 'deux dossiers incomplets');
+    assert.deepEqual(res.body.data.pieces.manquants_collectifs, [
+      'Procès-verbal de délibération',
+    ]);
+    assert.ok(
+      res.body.data.pieces.incomplets.every((e) => e.nom && e.numero_etudiant),
+      'chaque incomplet est nommé : sans cela, rien à corriger'
+    );
+  });
+
+  test('refuse la transmission tant qu’une pièce obligatoire manque', async () => {
+    const t = await login('+22890000002');
+
+    // L'acte collectif manque encore : il bloque avant tout le reste.
+    const sansPv = await api()
+      .post(`/api/promotions/${promotionId}/transmettre`)
+      .set(auth(t))
+      .send({ date_deliberation: DELIBERATION });
+    assert.equal(sansPv.status, 409, JSON.stringify(sansPv.body));
+    assert.equal(sansPv.body.error.code, 'PIECES_COLLECTIVES_MANQUANTES');
+
+    await api()
+      .post(`/api/promotions/${promotionId}/pieces`)
+      .set(auth(t))
+      .field('type_piece', 'proces_verbal')
+      .attach('fichier', PDF, 'pv-tranches.pdf');
+
+    const sansReleves = await api()
+      .post(`/api/promotions/${promotionId}/transmettre`)
+      .set(auth(t))
+      .send({ date_deliberation: DELIBERATION });
+    assert.equal(sansReleves.status, 409, JSON.stringify(sansReleves.body));
+    assert.equal(sansReleves.body.error.code, 'PIECES_MANQUANTES');
+    // Les détails permettent à l'écran d'agir, là où le message oblige à lire.
+    assert.equal(sansReleves.body.error.details.incomplets.length, 2);
+    assert.match(sansReleves.body.error.message, /BOKO|CAPO/);
+  });
+
+  // ── Priorité déclarée avant transmission ─────────────────────────
+
+  test('une urgence sans motif est refusée, avec motif elle est retenue', async () => {
+    const t = await login('+22890000002');
+
+    const sansMotif = await api()
+      .patch(`/api/promotions/${promotionId}/inscriptions/${etudiants[2].inscription_id}/priorite`)
+      .set(auth(t))
+      .send({ priorite: 'urgente' });
+    assert.equal(sansMotif.status, 400);
+    assert.equal(sansMotif.body.error.code, 'MOTIF_URGENCE_REQUIS');
+
+    const tropCourt = await api()
+      .patch(`/api/promotions/${promotionId}/inscriptions/${etudiants[2].inscription_id}/priorite`)
+      .set(auth(t))
+      .send({ priorite: 'urgente', motif_urgence: 'urgent' });
+    assert.equal(tropCourt.status, 400, '« urgent » n’est pas une raison');
+
+    const ok = await api()
+      .patch(`/api/promotions/${promotionId}/inscriptions/${etudiants[2].inscription_id}/priorite`)
+      .set(auth(t))
+      .send({
+        priorite: 'urgente',
+        motif_urgence: 'Inscription en master à l’étranger, dossier à déposer avant la rentrée.',
+        date_echeance: '15/09/2026',
+      });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.equal(ok.body.data.inscription.priorite, 'urgente');
+  });
+
+  test('transmet une fois les pièces complètes, et reporte l’urgence sur le dossier', async () => {
+    const t = await login('+22890000002');
+
+    await deposerPiecesObligatoires(t, etudiants[1].candidat_id, 'tra-002');
+    await deposerPiecesObligatoires(t, etudiants[2].candidat_id, 'tra-003');
+
+    const pret = await api().get(`/api/promotions/${promotionId}/transmission`).set(auth(t));
+    assert.equal(pret.body.data.transmissible, true);
+    assert.equal(pret.body.data.urgents, 1);
+
+    const res = await api()
+      .post(`/api/promotions/${promotionId}/transmettre`)
+      .set(auth(t))
+      .send({ date_deliberation: DELIBERATION });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    assert.equal(res.body.data.transmis, 3);
+    lotId = res.body.data.lot.id;
+
+    const tMin = await login('+22890000001');
+    const detail = await api().get(`/api/ministere/lots/${lotId}`).set(auth(tMin));
+    assert.equal(detail.status, 200);
+
+    // L'urgence déclarée à l'établissement a suivi le dossier engendré.
+    const urgent = detail.body.data.dossiers[0];
+    assert.equal(urgent.priorite, 'urgente', 'le dossier urgent est en TÊTE de liste');
+    assert.match(urgent.nom, /CAPO/);
+    assert.ok(urgent.motif_urgence, 'le motif voyage avec la priorité');
+    assert.equal(detail.body.data.progression.urgents_en_attente, 1);
+  });
+
+  // ── Instruction par tranches ─────────────────────────────────────
+
+  test('refuse de valider un dossier dont les actes collectifs ne sont pas ouverts', async () => {
+    const t = await login('+22890000001');
+
+    await api().post(`/api/ministere/lots/${lotId}/examiner`).set(auth(t));
+
+    const detail = await api().get(`/api/ministere/lots/${lotId}`).set(auth(t));
+    assert.ok(detail.body.data.obstacles_collectifs.length > 0);
+
+    const premier = detail.body.data.dossiers[0];
+    const refus = await api()
+      .post(`/api/ministere/lots/${lotId}/traiter`)
+      .set(auth(t))
+      .send({ dossiers_valides: [premier.id] });
+    assert.equal(refus.status, 409, JSON.stringify(refus.body));
+    assert.equal(refus.body.error.code, 'PIECES_COLLECTIVES_MANQUANTES');
+  });
+
+  test('statue sur une tranche et laisse le reste en attente', async () => {
+    const t = await login('+22890000001');
+
+    // Ouvrir puis valider toutes les pièces, comme le ferait un agent.
+    const dossierPieces = await api().get(`/api/ministere/lots/${lotId}/pieces`).set(auth(t));
+    for (const piece of [
+      ...dossierPieces.body.data.collectives,
+      ...dossierPieces.body.data.individuelles,
+    ]) {
+      await api().get(`/api/pieces/${piece.id}/contenu`).set(auth(t));
+      await api()
+        .post(`/api/ministere/pieces/${piece.id}/decision`)
+        .set(auth(t))
+        .send({ statut: 'validee' });
+    }
+
+    const avant = await api().get(`/api/ministere/lots/${lotId}`).set(auth(t));
+    assert.equal(avant.body.data.progression.validables, 3);
+
+    // Une tranche : un validé, un renvoyé. Le troisième n'est pas désigné.
+    const [un, deux] = avant.body.data.dossiers;
+    const tranche = await api()
+      .post(`/api/ministere/lots/${lotId}/traiter`)
+      .set(auth(t))
+      .send({
+        dossiers_valides: [un.id],
+        dossiers_rejetes: [{ dossier_id: deux.id, motif: 'Relevé de notes illisible.' }],
+      });
+    assert.equal(tranche.status, 200, JSON.stringify(tranche.body));
+    assert.equal(tranche.body.data.valides, 1);
+    assert.equal(tranche.body.data.rejetes, 1);
+    assert.equal(tranche.body.data.restants, 1, 'le non-désigné reste à statuer');
+    assert.equal(tranche.body.data.lot_solde, false);
+    // Le lot n'est pas soldé : il reste « en examen », pas « validé ».
+    assert.equal(tranche.body.data.lot.statut, 'en_examen');
+  });
+
+  test('un dossier déjà statué ne se rejuge pas au passage', async () => {
+    const t = await login('+22890000001');
+    const detail = await api().get(`/api/ministere/lots/${lotId}`).set(auth(t));
+    const dejaValide = detail.body.data.dossiers.find((d) => d.statut === 'valide');
+    const enAttente = detail.body.data.dossiers.find((d) => d.en_attente);
+
+    const res = await api()
+      .post(`/api/ministere/lots/${lotId}/traiter`)
+      .set(auth(t))
+      .send({ dossiers_valides: [dejaValide.id] });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'DOSSIER_DEJA_STATUE');
+
+    const contradiction = await api()
+      .post(`/api/ministere/lots/${lotId}/traiter`)
+      .set(auth(t))
+      .send({
+        dossiers_valides: [enAttente.id],
+        dossiers_rejetes: [{ dossier_id: enAttente.id, motif: 'Décision contradictoire.' }],
+      });
+    assert.equal(contradiction.status, 400);
+    assert.equal(contradiction.body.error.code, 'DECISION_CONTRADICTOIRE');
+  });
+
+  test('le lot ne se solde qu’une fois le dernier dossier statué', async () => {
+    const t = await login('+22890000001');
+    const detail = await api().get(`/api/ministere/lots/${lotId}`).set(auth(t));
+    const dernier = detail.body.data.dossiers.find((d) => d.en_attente);
+
+    const fin = await api()
+      .post(`/api/ministere/lots/${lotId}/traiter`)
+      .set(auth(t))
+      .send({ dossiers_valides: [dernier.id] });
+    assert.equal(fin.status, 200, JSON.stringify(fin.body));
+    assert.equal(fin.body.data.restants, 0);
+    assert.equal(fin.body.data.lot_solde, true);
+    // Un rejet subsiste dans le lot : « partiellement traité », pas « validé ».
+    assert.equal(fin.body.data.lot.statut, 'partiellement_traite');
+    assert.equal(fin.body.data.total_valides, 2);
+    assert.equal(fin.body.data.total_rejetes, 1);
+
+    const epuise = await api()
+      .post(`/api/ministere/lots/${lotId}/traiter`)
+      .set(auth(t))
+      .send({ dossiers_valides: [dernier.id] });
+    assert.equal(epuise.status, 409);
+    assert.equal(epuise.body.error.code, 'LOT_NON_INSTRUISABLE');
+  });
+
+  // ── Urgence côté ministère ───────────────────────────────────────
+
+  // ── Fiche étudiant ───────────────────────────────────────────────
+
+  test('la fiche rassemble ce qui était éparpillé sur cinq écrans', async () => {
+    const t = await login('+22890000002');
+    const res = await api()
+      .get(`/api/candidats/${etudiants[0].candidat_id}/fiche`)
+      .set(auth(t));
+
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const f = res.body.data;
+    assert.equal(f.candidat.numero_etudiant, 'TRA-001');
+    // L'établissement est nommé, pas réduit à son UUID.
+    assert.ok(f.candidat.etablissement_nom);
+    assert.equal(f.parcours.length, 1, 'son inscription');
+    assert.equal(f.dossiers.length, 1, 'le dossier engendré par la transmission');
+    assert.ok(f.dossiers[0].lot_reference, 'le lot d’origine est rappelé');
+    assert.equal(f.pieces.complet, true);
+    assert.ok(Array.isArray(f.diplomes));
+    assert.ok(Array.isArray(f.alertes));
+  });
+
+  test('la fiche signale ce qui manque plutôt que de laisser un vide', async () => {
+    const t = await login('+22890000002');
+    // Cet étudiant a été créé sans lieu de naissance ; il a en revanche
+    // toutes ses pièces et un numéro. La fiche ne doit donc alerter que
+    // sur ce qui compte, pas sur tout ce qui est vide.
+    const res = await api()
+      .get(`/api/candidats/${etudiants[1].candidat_id}/fiche`)
+      .set(auth(t));
+    assert.equal(res.status, 200);
+    assert.equal(
+      res.body.data.alertes.length,
+      0,
+      JSON.stringify(res.body.data.alertes)
+    );
+  });
+
+  test('un établissement ne peut pas ouvrir la fiche d’un étudiant d’un autre', async () => {
+    const autre = await login('+22890000200');
+    const res = await api()
+      .get(`/api/candidats/${etudiants[0].candidat_id}/fiche`)
+      .set(auth(autre));
+    // 404 et non 403 : confirmer l'existence est déjà une fuite.
+    assert.equal(res.status, 404);
+    assert.equal(res.body.error.code, 'CANDIDAT_INTROUVABLE');
+  });
+
+  test('le ministère atteint la même fiche, mais depuis le dossier', async () => {
+    const t = await login('+22890000001');
+    const detail = await api().get(`/api/ministere/lots/${lotId}`).set(auth(t));
+    const dossier = detail.body.data.dossiers[0];
+
+    const res = await api().get(`/api/ministere/dossiers/${dossier.id}/fiche`).set(auth(t));
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.data.dossier_courant, dossier.id, 'le dossier d’où l’on vient');
+    assert.equal(res.body.data.candidat.nom, dossier.nom);
+    // La grille de pièces voyage AVEC la fiche : la route de grille
+    // appartient à l'établissement, le ministère ne l'appelle pas.
+    assert.ok(Array.isArray(res.body.data.pieces.cases));
+    assert.ok(res.body.data.pieces.cases.length > 0);
+  });
+
+  test('le ministère voit les urgences tous lots confondus', async () => {
+    const t = await login('+22890000001');
+    const res = await api().get('/api/ministere/dossiers/urgents').set(auth(t));
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.ok(Array.isArray(res.body.data.dossiers));
+    assert.ok(
+      res.body.data.dossiers.every((d) => d.priorite === 'urgente'),
+      'la vue ne contient que des urgences'
+    );
+  });
+
+  test('la priorité n’a plus d’objet sur un dossier déjà statué', async () => {
+    const t = await login('+22890000001');
+    const detail = await api().get(`/api/ministere/lots/${lotId}`).set(auth(t));
+    const statue = detail.body.data.dossiers[0];
+
+    const res = await api()
+      .patch(`/api/ministere/dossiers/${statue.id}/priorite`)
+      .set(auth(t))
+      .send({ priorite: 'urgente', motif_urgence: 'Demande arrivée après la décision.' });
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'DOSSIER_DEJA_STATUE');
   });
 });

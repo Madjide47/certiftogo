@@ -24,6 +24,16 @@ export async function transmettre(req, res, next) {
   }
 }
 
+/** GET /api/promotions/:id/transmission — ce qui manque avant d'envoyer. */
+export async function preparerTransmission(req, res, next) {
+  try {
+    const data = await lotService.preparerTransmission(req.params.id, etab(req));
+    return res.json({ success: true, data });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 /** GET /api/lots?statut= */
 export async function listerPourEtablissement(req, res, next) {
   try {
@@ -80,6 +90,22 @@ export async function examiner(req, res, next) {
 export async function valider(req, res, next) {
   try {
     const data = await lotService.valider(req.params.id, agentId(req), req.body || {});
+    return res.json({ success: true, data });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/**
+ * POST /api/ministere/lots/:id/traiter
+ * body: { dossiers_valides: [id], dossiers_rejetes: [{dossier_id, motif}] }
+ *
+ * Statue sur une tranche seulement : ce qui n'est pas désigné reste en
+ * attente, et l'agent peut reprendre plus tard.
+ */
+export async function traiterDossiers(req, res, next) {
+  try {
+    const data = await lotService.traiterDossiers(req.params.id, agentId(req), req.body || {});
     return res.json({ success: true, data });
   } catch (err) {
     return next(err);

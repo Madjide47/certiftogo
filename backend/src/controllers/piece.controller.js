@@ -25,6 +25,33 @@ export async function listerPourCandidat(req, res, next) {
   }
 }
 
+/**
+ * Grille de dépôt d'un étudiant : une case par nature attendue. C'est
+ * elle que l'écran affiche — la liste plate ne montrait que le déposé,
+ * jamais le manquant.
+ */
+export async function grilleCandidat(req, res, next) {
+  try {
+    return res.json({
+      success: true,
+      data: await pieces.grilleCandidat(req.params.id, req.utilisateur),
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function grillePromotion(req, res, next) {
+  try {
+    return res.json({
+      success: true,
+      data: await pieces.grillePromotion(req.params.id, req.utilisateur),
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 export async function deposerPourCandidat(req, res, next) {
   try {
     const piece = await pieces.deposerPourCandidat(

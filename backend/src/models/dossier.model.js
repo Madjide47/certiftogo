@@ -9,7 +9,7 @@ const SELECT_AVEC_CANDIDAT = `
   d.id, d.reference, d.etablissement_id, d.candidat_id, d.filiere, d.parcours,
   d.mention, d.date_obtention, d.type_diplome, d.annee_academique, d.notes,
   d.statut, d.motif_rejet, d.date_transmission, d.date_traitement,
-  d.lot_id,
+  d.lot_id, d.priorite, d.motif_urgence, d.date_echeance,
   c.nom AS candidat_nom, c.prenom AS candidat_prenom,
   c.numero_etudiant AS candidat_numero_etudiant,
   -- L'état civil part sur le diplôme imprimé : c'est ce qui distingue
@@ -160,6 +160,7 @@ const SELECT_MINISTERE = `
   d.id, d.reference, d.etablissement_id, d.candidat_id, d.filiere, d.parcours,
   d.mention, d.date_obtention, d.type_diplome, d.annee_academique, d.notes,
   d.statut, d.motif_rejet, d.date_transmission, d.date_traitement,
+  d.priorite, d.motif_urgence, d.date_echeance,
   c.nom AS candidat_nom, c.prenom AS candidat_prenom,
   c.numero_etudiant AS candidat_numero_etudiant,
   e.nom AS etablissement_nom`;
@@ -169,12 +170,21 @@ const SELECT_MINISTERE = `
  * Par défaut, exclut les brouillons (non transmis). Filtre statut optionnel.
  * @param {{ statut?: string, limit?: number, offset?: number }} opts
  */
-export async function listerPourMinistere({ statut = null, limit = 50, offset = 0 } = {}) {
+export async function listerPourMinistere({
+  statut = null,
+  priorite = null,
+  limit = 50,
+  offset = 0,
+} = {}) {
   const params = [];
-  let filtre = `d.statut <> 'brouillon'`;
+  const filtres = [statut ? null : `d.statut <> 'brouillon'`].filter(Boolean);
   if (statut) {
     params.push(statut);
-    filtre = `d.statut = $${params.length}`;
+    filtres.push(`d.statut = $${params.length}`);
+  }
+  if (priorite) {
+    params.push(priorite);
+    filtres.push(`d.priorite = $${params.length}`);
   }
   params.push(limit, offset);
   const { rows } = await query(
@@ -182,12 +192,38 @@ export async function listerPourMinistere({ statut = null, limit = 50, offset = 
        FROM dossiers d
        JOIN candidats c ON c.id = d.candidat_id
        JOIN etablissements e ON e.id = d.etablissement_id
-      WHERE ${filtre}
-      ORDER BY d.date_transmission DESC NULLS LAST, d.reference DESC
+      WHERE ${filtres.join(' AND ')}
+      -- Les urgents en tête, échéance la plus proche d'abord : la file
+      -- doit se lire dans l'ordre où le travail doit être fait.
+      ORDER BY (d.priorite = 'urgente') DESC,
+               d.date_echeance ASC NULLS LAST,
+               d.date_transmission DESC NULLS LAST, d.reference DESC
       LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );
   return rows;
+}
+
+/**
+ * Priorité d'un dossier. Le motif accompagne toujours la décision :
+ * la colonne porte une contrainte qui refuse une urgence sans raison.
+ */
+export async function definirPriorite(
+  id,
+  { priorite, motif_urgence, date_echeance, priorite_definie_par_id }
+) {
+  const { rows } = await query(
+    `UPDATE dossiers
+        SET priorite = $2,
+            motif_urgence = $3,
+            date_echeance = $4,
+            priorite_definie_par_id = $5,
+            date_priorite = now()
+      WHERE id = $1
+      RETURNING id, reference, statut, priorite, motif_urgence, date_echeance, date_priorite`,
+    [id, priorite, motif_urgence || null, date_echeance || null, priorite_definie_par_id || null]
+  );
+  return rows[0] || null;
 }
 
 /** Récupère un dossier (vue ministère, avec établissement émetteur). */

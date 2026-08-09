@@ -81,6 +81,9 @@ export function gestionErreurs(err, req, res, next) {
     error: {
       code,
       message: statusCode >= 500 ? 'Une erreur interne est survenue.' : erreur.message,
+      // Jamais sur un 5xx : les détails d'une erreur interne parlent du
+      // serveur, pas de la requête, et n'ont rien à faire chez le client.
+      ...(statusCode < 500 && erreur.details ? { details: erreur.details } : {}),
     },
   });
 }

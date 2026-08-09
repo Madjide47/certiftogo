@@ -16,6 +16,7 @@ import * as dossierModel from '../models/dossier.model.js';
 import * as promotionModel from '../models/promotion.model.js';
 import * as inscriptionModel from '../models/inscription.model.js';
 import { controlerLot } from './controle.service.js';
+import * as pieces from './piece-jointe.service.js';
 import { ErreurApp, avecErreursSql } from '../utils/errors.js';
 import { genererReferenceDossier } from '../utils/reference-generator.js';
 import { journaliser, journaliserStatutDossier, ACTIONS } from './audit.service.js';
@@ -38,6 +39,75 @@ function genererReferenceLot(annee = new Date().getFullYear()) {
 }
 
 // ── Transmission (établissement) ───────────────────────────────────
+
+/**
+ * État de préparation d'une promotion, AVANT de transmettre.
+ *
+ * L'agent découvrait les manques au moment du clic, sous forme d'un
+ * refus. Un refus ne se corrige pas : il faut ressortir de l'écran,
+ * retrouver les étudiants cités dans le message, compléter, revenir.
+ * Ce rapport dit la même chose avant, sous une forme sur laquelle on
+ * peut travailler.
+ *
+ * Aucune écriture : c'est une lecture, et le serveur revérifiera tout
+ * à la transmission. Ce que l'écran affiche n'autorise rien.
+ */
+export async function preparerTransmission(promotion_id, etablissement_id) {
+  if (!estUuidValide(promotion_id)) {
+    throw new ErreurApp(404, 'PROMOTION_INTROUVABLE', 'Promotion introuvable.');
+  }
+  const promotion = await promotionModel.trouverParId(promotion_id);
+  if (!promotion || promotion.etablissement_id !== etablissement_id) {
+    throw new ErreurApp(404, 'PROMOTION_INTROUVABLE', 'Promotion introuvable.');
+  }
+
+  const inscriptions = await inscriptionModel.listerParPromotion(promotion_id);
+  const admis = inscriptions.filter((i) => i.statut === 'admis');
+
+  const sansNumero = admis
+    .filter((i) => !i.telephone)
+    .map((i) => ({
+      candidat_id: i.candidat_id,
+      nom: i.nom,
+      prenom: i.prenom,
+      numero_etudiant: i.numero_etudiant,
+    }));
+
+  const etatPieces = await pieces.controlerAvantTransmission(
+    promotion_id,
+    admis.map((i) => ({
+      candidat_id: i.candidat_id,
+      nom: i.nom,
+      prenom: i.prenom,
+      numero_etudiant: i.numero_etudiant,
+    }))
+  );
+
+  const urgents = admis.filter((i) => i.priorite === 'urgente').length;
+
+  return {
+    promotion: {
+      id: promotion.id,
+      libelle: promotion.libelle,
+      statut: promotion.statut,
+      date_deliberation: promotion.date_deliberation,
+    },
+    inscrits: inscriptions.length,
+    admis: admis.length,
+    non_transmis: inscriptions.length - admis.length,
+    urgents,
+    sans_numero: sansNumero,
+    pieces: {
+      incomplets: etatPieces.incomplets,
+      manquants_collectifs: etatPieces.manquantsCollectifs,
+    },
+    // Le bouton reste actif quoi qu'il arrive : ce drapeau sert à
+    // afficher l'obstacle, pas à masquer l'action. C'est le serveur qui
+    // refuse, et son refus est la seule autorité.
+    transmissible:
+      admis.length > 0 && sansNumero.length === 0 && etatPieces.complet,
+  };
+}
 
 /**
  * Transmet une promotion entière au ministère.
@@ -138,6 +208,44 @@ export async function transmettre(promotion_id, etablissement_id, agent, donnees
     );
   }
 
+  // Les pièces justificatives font partie du dossier, pas de son
+  // accompagnement. Le contrôle existait déjà, mais il se jouait à la
+  // RÉCEPTION : le ministère rejetait, et l'établissement redéposait
+  // quelques jours plus tard un document qu'il avait sous la main depuis
+  // le début. Le même contrôle, joué ici, ne coûte que le temps de
+  // cliquer sur « déposer ».
+  const etatPieces = await pieces.controlerAvantTransmission(
+    promotion_id,
+    admis.map((i) => ({
+      candidat_id: i.candidat_id,
+      nom: i.nom,
+      prenom: i.prenom,
+      numero_etudiant: i.numero_etudiant,
+    }))
+  );
+
+  if (etatPieces.manquantsCollectifs.length > 0) {
+    throw new ErreurApp(
+      409,
+      'PIECES_COLLECTIVES_MANQUANTES',
+      `Acte(s) de délibération manquant(s) pour la promotion : ${etatPieces.manquantsCollectifs.join(', ')}. Déposez-les avant de transmettre.`
+    );
+  }
+
+  if (etatPieces.incomplets.length > 0) {
+    const exemples = etatPieces.incomplets
+      .slice(0, 5)
+      .map((e) => `${e.nom} ${e.prenom} (${e.numero_etudiant}) — ${e.manquants.join(', ')}`)
+      .join(' ; ');
+    throw new ErreurApp(
+      409,
+      'PIECES_MANQUANTES',
+      `${etatPieces.incomplets.length} étudiant(s) admis n'ont pas toutes leurs pièces obligatoires : ${exemples}${etatPieces.incomplets.length > 5 ? '…' : ''}. ` +
+        'Complétez leur dossier avant de transmettre — sans ces actes, le ministère ne peut rien instruire.',
+      { incomplets: etatPieces.incomplets }
+    );
+  }
+
   return avecErreursSql(() =>
     withTransaction(async (client) => {
       const lot_id = await lotModel.creer(
@@ -152,12 +260,19 @@ export async function transmettre(promotion_id, etablissement_id, agent, donnees
       );
 
       for (const inscription of admis) {
+        // L'urgence déclarée sur l'inscription suit le dossier : sans ce
+        // report, l'établissement aurait signalé un cas pressant que le
+        // ministère ne verrait jamais.
+        const urgent = inscription.priorite === 'urgente';
         await client.query(
           `INSERT INTO dossiers
              (reference, etablissement_id, candidat_id, filiere, mention,
               date_obtention, type_diplome, annee_academique,
-              statut, date_transmission, agent_etablissement_id, lot_id, promotion_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'soumis', now(), $9, $10, $11)`,
+              statut, date_transmission, agent_etablissement_id, lot_id, promotion_id,
+              priorite, motif_urgence, date_echeance,
+              priorite_definie_par_id, date_priorite)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'soumis', now(), $9, $10, $11,
+                   $12, $13, $14, $15, $16)`,
           [
             genererReferenceDossier(),
             etablissement_id,
@@ -170,6 +285,11 @@ export async function transmettre(promotion_id, etablissement_id, agent, donnees
             agent.utilisateur_id,
             lot_id,
             promotion_id,
+            urgent ? 'urgente' : 'normale',
+            urgent ? inscription.motif_urgence : null,
+            urgent ? inscription.date_echeance : null,
+            urgent ? agent.utilisateur_id : null,
+            urgent ? new Date() : null,
           ]
         );
       }
@@ -250,12 +370,51 @@ export async function recuperer(id) {
   return lot;
 }
 
-/** Vue d'instruction : le lot, ses dossiers, et le résultat des contrôles. */
+/**
+ * Vue d'instruction : le lot, ses dossiers, les contrôles — et, sur
+ * chaque dossier, ce qui l'empêche encore d'être validé.
+ *
+ * Sans cette imputation ligne à ligne, l'écran ne pouvait dire que
+ * « 12 pièces non examinées » sans jamais dire lesquelles : l'agent
+ * n'avait aucun moyen de savoir sur quoi il pouvait déjà statuer.
+ */
 export async function detailler(id) {
   const lot = await recuperer(id);
-  const dossiers = await lotModel.listerDossiers(id);
+  const bruts = await lotModel.listerDossiers(id);
   const controles = await controlerLot(lot);
-  return { lot, dossiers, controles };
+  const obstacles = await pieces.obstaclesParDossier(lot, bruts);
+  const bloquantsAuto = new Map(controles.bloquants.map((b) => [b.dossier_id, b.erreurs]));
+
+  const dossiers = bruts.map((d) => {
+    const raisons = [
+      ...new Set([
+        ...(obstacles.parDossier.get(d.id) || []),
+        ...(bloquantsAuto.get(d.id) || []),
+      ]),
+    ];
+    return {
+      ...d,
+      obstacles: raisons,
+      en_attente: A_STATUER.includes(d.statut),
+      validable: A_STATUER.includes(d.statut) && raisons.length === 0,
+    };
+  });
+
+  return {
+    lot,
+    dossiers,
+    controles,
+    obstacles_collectifs: obstacles.collectifs,
+    progression: {
+      total: dossiers.length,
+      en_attente: dossiers.filter((d) => d.en_attente).length,
+      validables: dossiers.filter((d) => d.validable).length,
+      valides: dossiers.filter((d) => d.statut === 'valide').length,
+      rejetes: dossiers.filter((d) => d.statut === 'rejete').length,
+      certifies: dossiers.filter((d) => d.statut === 'certifie').length,
+      urgents_en_attente: dossiers.filter((d) => d.en_attente && d.priorite === 'urgente').length,
+    },
+  };
 }
 
 export async function examiner(id, agent_ministere_id) {
@@ -293,73 +452,32 @@ export async function examiner(id, agent_ministere_id) {
   return { lot: await lotModel.trouverParId(id), controles };
 }
 
+// ── Instruction par tranches ───────────────────────────────────────
+//
+// L'instruction se faisait en un seul geste : ouvrir le lot, tout
+// examiner, tout valider. Sur 250 dossiers — et l'Université de Lomé en
+// annonce 12 000 — cela suppose une séance ininterrompue, et le travail
+// déjà fait est perdu si l'agent doit s'arrêter.
+//
+// Le lot reste l'unité de transmission ; il cesse d'être l'unité de
+// SÉANCE. L'agent statue sur les dossiers qu'il a examinés, revient
+// plus tard pour les autres, et le lot ne se solde que lorsqu'il ne
+// reste plus rien à décider.
+
+/** Statuts d'un dossier qui attend encore une décision du ministère. */
+const A_STATUER = ['soumis', 'en_examen'];
+
 /**
- * Validation du lot, avec rejet partiel.
+ * Écrit les décisions et recalcule l'état du lot.
  *
- * Sont rejetés : les dossiers signalés bloquants par les contrôles
- * automatiques, plus ceux que l'agent désigne explicitement. Les autres
- * sont validés et deviennent certifiables.
+ * Le statut du lot n'est pas décidé par l'appelant mais DÉDUIT de ce
+ * qu'il reste : tant qu'un dossier attend, le lot est « en examen » ;
+ * quand plus rien n'attend, il se solde — « validé » si aucun rejet,
+ * « partiellement traité » sinon.
  */
-export async function valider(id, agent_ministere_id, donnees = {}) {
-  const lot = await recuperer(id);
-  if (!INSTRUISABLES.includes(lot.statut)) {
-    throw new ErreurApp(409, 'LOT_NON_INSTRUISABLE', `Un lot « ${lot.statut} » est déjà traité.`);
-  }
-
-  const controles = await controlerLot(lot);
-  const dossiers = await lotModel.listerDossiers(id);
-
-  // « Ouvert, vu, validé » : le ministère ne valide pas un lot dont il
-  // n'a pas ouvert les pièces. Le contrôle est ici, pas seulement à
-  // l'écran — un appel direct à l'API doit buter dessus aussi.
-  const etatPieces = controles.synthese.pieces || {};
-  if (etatPieces.collectives_manquantes?.length > 0) {
-    throw new ErreurApp(
-      409,
-      'PIECES_COLLECTIVES_MANQUANTES',
-      `Ce lot ne peut pas être validé : ${etatPieces.collectives_manquantes.join(', ')} — acte(s) de délibération absent(s). Demandez-les à l'établissement.`
-    );
-  }
-  if (etatPieces.non_examinees > 0) {
-    throw new ErreurApp(
-      409,
-      'PIECES_NON_EXAMINEES',
-      `${etatPieces.non_examinees} pièce(s) n'ont pas encore été ouvertes. Consultez-les puis validez ou rejetez chacune avant de statuer sur le lot.`
-    );
-  }
-
-  // Rejets demandés par l'agent, indexés par dossier.
-  const rejetsManuels = new Map();
-  for (const rejet of donnees.dossiers_rejetes || []) {
-    const dossier_id = nettoyerTexte(rejet?.dossier_id);
-    const motif = nettoyerTexte(rejet?.motif);
-    if (!dossier_id) continue;
-    if (!motif) {
-      throw new ErreurApp(400, 'MOTIF_REQUIS', 'Chaque rejet doit porter un motif.');
-    }
-    if (!dossiers.some((d) => d.id === dossier_id)) {
-      throw new ErreurApp(400, 'DOSSIER_HORS_LOT', 'Un dossier rejeté n\'appartient pas à ce lot.');
-    }
-    rejetsManuels.set(dossier_id, motif);
-  }
-
-  // Rejets automatiques : les contrôles bloquants font foi.
-  const rejetsAutomatiques = new Map(
-    controles.bloquants.map((b) => [b.dossier_id, `Contrôle automatique : ${b.erreurs.join(' ; ')}`])
-  );
-
-  const aRejeter = new Map([...rejetsAutomatiques, ...rejetsManuels]);
-  const aValider = dossiers.filter((d) => !aRejeter.has(d.id));
-
-  if (aValider.length === 0) {
-    throw new ErreurApp(
-      409,
-      'AUCUN_DOSSIER_VALIDABLE',
-      'Tous les dossiers du lot sont en erreur. Rejetez le lot ou demandez une correction.'
-    );
-  }
-
-  const parId = new Map(dossiers.map((d) => [d.id, d]));
+async function appliquerDecisions(lot, agent_ministere_id, { aValider, aRejeter, controles }) {
+  const parId = new Map(aValider.map((d) => [d.id, d]));
+  let solde = null;
 
   await withTransaction(async (client) => {
     for (const dossier of aValider) {
@@ -375,13 +493,13 @@ export async function valider(id, agent_ministere_id, donnees = {}) {
           dossier_id: dossier.id,
           statut_avant: dossier.statut,
           statut_apres: 'valide',
-          lot_id: id,
+          lot_id: lot.id,
         },
         client
       );
     }
 
-    for (const [dossier_id, motif] of aRejeter) {
+    for (const [dossier_id, { motif, statut_avant }] of aRejeter) {
       await client.query(
         `UPDATE dossiers
             SET statut = 'rejete', motif_rejet = $3,
@@ -392,54 +510,306 @@ export async function valider(id, agent_ministere_id, donnees = {}) {
       await journaliserStatutDossier(
         {
           dossier_id,
-          statut_avant: parId.get(dossier_id)?.statut || null,
+          statut_avant: statut_avant || parId.get(dossier_id)?.statut || null,
           statut_apres: 'rejete',
           motif,
-          lot_id: id,
+          lot_id: lot.id,
         },
         client
       );
     }
 
-    const statutLot = aRejeter.size > 0 ? 'partiellement_traite' : 'valide';
+    // Compté APRÈS écriture et DANS la transaction : c'est le seul
+    // instant où l'on connaît le reste à faire sans course avec un
+    // second agent qui instruirait le même lot.
+    const { rows } = await client.query(
+      `SELECT COUNT(*) FILTER (WHERE statut = ANY($2))::int AS restants,
+              COUNT(*) FILTER (WHERE statut = 'rejete')::int  AS rejetes,
+              COUNT(*) FILTER (WHERE statut = 'valide')::int  AS valides
+         FROM dossiers WHERE lot_id = $1`,
+      [lot.id, A_STATUER]
+    );
+    const compte = rows[0];
+    solde = compte;
+
+    const statutLot =
+      compte.restants > 0
+        ? 'en_examen'
+        : compte.rejetes > 0
+          ? 'partiellement_traite'
+          : 'valide';
 
     await lotModel.changerStatut(
-      id,
+      lot.id,
       { statut: statutLot, agent_ministere_id, rapport_controles: controles },
       client
     );
+    solde.statut_lot = statutLot;
 
     await journaliser(
       {
         action: ACTIONS.LOT_VALIDE,
         entite: 'lots_transmission',
-        entite_id: id,
+        entite_id: lot.id,
         etablissement_id: lot.etablissement_id,
-        apres: { statut: statutLot, valides: aValider.length, rejetes: aRejeter.size },
-        message: `${aValider.length} validé(s), ${aRejeter.size} rejeté(s).`,
+        apres: {
+          statut: statutLot,
+          valides_cette_fois: aValider.length,
+          rejetes_cette_fois: aRejeter.size,
+          restants: compte.restants,
+        },
+        message:
+          compte.restants > 0
+            ? `${aValider.length} validé(s), ${aRejeter.size} rejeté(s) — ${compte.restants} dossier(s) restent à instruire.`
+            : `${aValider.length} validé(s), ${aRejeter.size} rejeté(s) : instruction du lot achevée.`,
       },
       client
     );
   });
 
-  await notifications.notifierEtablissement(
-    notifications.EVENEMENTS.LOT_VALIDE,
-    lot.etablissement_id,
-    {
-      reference: lot.reference,
-      valides: aValider.length,
-      rejetes: aRejeter.size,
-      entite: 'lots_transmission',
-      entite_id: id,
-    }
-  );
+  // L'établissement est prévenu quand le lot est SOLDÉ, pas à chaque
+  // tranche : dix notifications pour une même promotion n'informent
+  // personne, elles apprennent à ignorer les notifications.
+  if (solde.restants === 0) {
+    await notifications.notifierEtablissement(
+      notifications.EVENEMENTS.LOT_VALIDE,
+      lot.etablissement_id,
+      {
+        reference: lot.reference,
+        valides: solde.valides,
+        rejetes: solde.rejetes,
+        entite: 'lots_transmission',
+        entite_id: lot.id,
+      }
+    );
+  }
 
   return {
-    lot: await lotModel.trouverParId(id),
+    lot: await lotModel.trouverParId(lot.id),
     valides: aValider.length,
     rejetes: aRejeter.size,
-    details_rejets: [...aRejeter].map(([dossier_id, motif]) => ({ dossier_id, motif })),
+    restants: solde.restants,
+    lot_solde: solde.restants === 0,
+    total_valides: solde.valides,
+    total_rejetes: solde.rejetes,
+    details_rejets: [...aRejeter].map(([dossier_id, { motif }]) => ({ dossier_id, motif })),
   };
+}
+
+/** Lit et contrôle les rejets demandés par l'agent. */
+function lireRejets(donnees, dossiers) {
+  const rejets = new Map();
+  for (const rejet of donnees.dossiers_rejetes || []) {
+    const dossier_id = nettoyerTexte(rejet?.dossier_id);
+    const motif = nettoyerTexte(rejet?.motif);
+    if (!dossier_id) continue;
+    if (!motif) {
+      throw new ErreurApp(400, 'MOTIF_REQUIS', 'Chaque rejet doit porter un motif.');
+    }
+    const dossier = dossiers.find((d) => d.id === dossier_id);
+    if (!dossier) {
+      throw new ErreurApp(400, 'DOSSIER_HORS_LOT', "Un dossier rejeté n'appartient pas à ce lot.");
+    }
+    rejets.set(dossier_id, { motif, statut_avant: dossier.statut });
+  }
+  return rejets;
+}
+
+/**
+ * Statue sur une TRANCHE de dossiers : ceux que l'agent a examinés.
+ *
+ * Contrairement à `valider`, rien n'est décidé implicitement — un
+ * dossier non désigné reste en attente. C'est ce qui rend l'instruction
+ * reprenable : ce qui n'a pas été jugé n'est pas jugé.
+ */
+export async function traiterDossiers(id, agent_ministere_id, donnees = {}) {
+  const lot = await recuperer(id);
+  if (!INSTRUISABLES.includes(lot.statut)) {
+    throw new ErreurApp(409, 'LOT_NON_INSTRUISABLE', `Un lot « ${lot.statut} » est déjà traité.`);
+  }
+
+  const dossiers = await lotModel.listerDossiers(id);
+  const enAttente = dossiers.filter((d) => A_STATUER.includes(d.statut));
+  if (enAttente.length === 0) {
+    throw new ErreurApp(
+      409,
+      'LOT_DEJA_STATUE',
+      'Tous les dossiers de ce lot ont déjà reçu une décision.'
+    );
+  }
+
+  const controles = await controlerLot(lot);
+  const obstacles = await pieces.obstaclesParDossier(lot, dossiers);
+
+  // Les actes collectifs ne se découpent pas : le procès-verbal fonde
+  // la délibération entière. Tant qu'il manque ou n'a pas été ouvert,
+  // aucun dossier de la promotion ne repose sur rien.
+  if (obstacles.collectifs.length > 0) {
+    throw new ErreurApp(
+      409,
+      'PIECES_COLLECTIVES_MANQUANTES',
+      `Instruction impossible tant que les actes collectifs ne sont pas réglés : ${obstacles.collectifs.join(' ; ')}.`
+    );
+  }
+
+  const aValiderIds = [
+    ...new Set((donnees.dossiers_valides || []).map((v) => nettoyerTexte(v)).filter(Boolean)),
+  ];
+  const rejets = lireRejets(donnees, dossiers);
+
+  if (aValiderIds.length === 0 && rejets.size === 0) {
+    throw new ErreurApp(
+      400,
+      'AUCUN_DOSSIER_DESIGNE',
+      'Désignez au moins un dossier à valider ou à rejeter.'
+    );
+  }
+
+  const enAttenteIds = new Set(enAttente.map((d) => d.id));
+  for (const dossier_id of [...aValiderIds, ...rejets.keys()]) {
+    if (!dossiers.some((d) => d.id === dossier_id)) {
+      throw new ErreurApp(400, 'DOSSIER_HORS_LOT', "Un dossier désigné n'appartient pas à ce lot.");
+    }
+    if (!enAttenteIds.has(dossier_id)) {
+      throw new ErreurApp(
+        409,
+        'DOSSIER_DEJA_STATUE',
+        'Un dossier désigné a déjà reçu une décision. Rechargez le lot avant de continuer.'
+      );
+    }
+  }
+
+  const contradictoire = aValiderIds.find((d) => rejets.has(d));
+  if (contradictoire) {
+    throw new ErreurApp(
+      400,
+      'DECISION_CONTRADICTOIRE',
+      'Un même dossier ne peut pas être à la fois validé et rejeté.'
+    );
+  }
+
+  // Un dossier ne se valide pas « quand même » : ce qui l'empêche doit
+  // être levé — ouvrir les pièces, en obtenir une nouvelle — ou le
+  // dossier doit être rejeté explicitement, avec son motif.
+  const bloquantsAuto = new Map(controles.bloquants.map((b) => [b.dossier_id, b.erreurs]));
+  const empeches = aValiderIds
+    .map((dossier_id) => ({
+      dossier_id,
+      reference: dossiers.find((d) => d.id === dossier_id)?.reference,
+      raisons: [
+        ...new Set([
+          ...(obstacles.parDossier.get(dossier_id) || []),
+          ...(bloquantsAuto.get(dossier_id) || []),
+        ]),
+      ],
+    }))
+    .filter((e) => e.raisons.length > 0);
+
+  if (empeches.length > 0) {
+    const exemples = empeches
+      .slice(0, 3)
+      .map((e) => `${e.reference} (${e.raisons.join(', ')})`)
+      .join(' ; ');
+    throw new ErreurApp(
+      409,
+      'DOSSIERS_NON_VALIDABLES',
+      `${empeches.length} dossier(s) ne peuvent pas être validés en l'état : ${exemples}${empeches.length > 3 ? '…' : ''}. Levez l'obstacle ou rejetez-les explicitement.`,
+      { empeches }
+    );
+  }
+
+  const aValider = dossiers.filter((d) => aValiderIds.includes(d.id));
+  return appliquerDecisions(lot, agent_ministere_id, { aValider, aRejeter: rejets, controles });
+}
+
+/**
+ * Validation du lot entier — le geste de clôture.
+ *
+ * Statue d'un coup sur tout ce qui reste : les dossiers signalés
+ * bloquants par les contrôles automatiques sont rejetés, ceux que
+ * l'agent désigne aussi, les autres sont validés. Reste utile après une
+ * instruction par tranches, pour solder ce qui n'appelle pas de doute.
+ */
+export async function valider(id, agent_ministere_id, donnees = {}) {
+  const lot = await recuperer(id);
+  if (!INSTRUISABLES.includes(lot.statut)) {
+    throw new ErreurApp(409, 'LOT_NON_INSTRUISABLE', `Un lot « ${lot.statut} » est déjà traité.`);
+  }
+
+  const controles = await controlerLot(lot);
+  const dossiers = await lotModel.listerDossiers(id);
+  const enAttente = dossiers.filter((d) => A_STATUER.includes(d.statut));
+
+  if (enAttente.length === 0) {
+    throw new ErreurApp(
+      409,
+      'LOT_DEJA_STATUE',
+      'Tous les dossiers de ce lot ont déjà reçu une décision.'
+    );
+  }
+
+  // « Ouvert, vu, validé » : le ministère ne valide pas en bloc un lot
+  // dont il n'a pas ouvert les pièces. Le contrôle est ici, pas
+  // seulement à l'écran — un appel direct à l'API doit buter dessus.
+  // Pour statuer sans tout avoir ouvert, il existe l'instruction par
+  // tranches, qui exige la même chose mais dossier par dossier.
+  const etatPieces = controles.synthese.pieces || {};
+  if (etatPieces.collectives_manquantes?.length > 0) {
+    throw new ErreurApp(
+      409,
+      'PIECES_COLLECTIVES_MANQUANTES',
+      `Ce lot ne peut pas être validé : ${etatPieces.collectives_manquantes.join(', ')} — acte(s) de délibération absent(s). Demandez-les à l'établissement.`
+    );
+  }
+  if (etatPieces.non_examinees > 0) {
+    throw new ErreurApp(
+      409,
+      'PIECES_NON_EXAMINEES',
+      `${etatPieces.non_examinees} pièce(s) n'ont pas encore été ouvertes. Consultez-les puis validez ou rejetez chacune — ou traitez le lot par tranches, en ne statuant que sur les dossiers examinés.`
+    );
+  }
+
+  const enAttenteIds = new Set(enAttente.map((d) => d.id));
+
+  const rejetsManuels = lireRejets(donnees, dossiers);
+  // Un dossier déjà statué lors d'une tranche précédente ne se rejuge
+  // pas au passage : revenir sur une décision est une correction, elle
+  // a sa propre procédure.
+  for (const dossier_id of rejetsManuels.keys()) {
+    if (!enAttenteIds.has(dossier_id)) {
+      throw new ErreurApp(
+        409,
+        'DOSSIER_DEJA_STATUE',
+        'Un dossier rejeté a déjà reçu une décision. Rechargez le lot avant de continuer.'
+      );
+    }
+  }
+
+  // Rejets automatiques : les contrôles bloquants font foi.
+  const rejetsAutomatiques = new Map(
+    controles.bloquants
+      .filter((b) => enAttenteIds.has(b.dossier_id))
+      .map((b) => [
+        b.dossier_id,
+        {
+          motif: `Contrôle automatique : ${b.erreurs.join(' ; ')}`,
+          statut_avant: dossiers.find((d) => d.id === b.dossier_id)?.statut || null,
+        },
+      ])
+  );
+
+  const aRejeter = new Map([...rejetsAutomatiques, ...rejetsManuels]);
+  const aValider = enAttente.filter((d) => !aRejeter.has(d.id));
+
+  if (aValider.length === 0) {
+    throw new ErreurApp(
+      409,
+      'AUCUN_DOSSIER_VALIDABLE',
+      'Tous les dossiers restants sont en erreur. Rejetez le lot ou demandez une correction.'
+    );
+  }
+
+  return appliquerDecisions(lot, agent_ministere_id, { aValider, aRejeter, controles });
 }
 
 /** Rejet du lot entier : la promotion repart en correction. */

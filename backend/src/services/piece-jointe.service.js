@@ -29,30 +29,91 @@ import { nettoyerTexte, estUuidValide } from '../utils/validators.js';
 
 /**
  * Catalogue des pièces. `portee` dit à quoi la pièce se rattache, et
- * `requise` si son absence empêche la validation d'un dossier.
+ * `requise` si son absence empêche la transmission puis la validation.
  *
  * Le procès-verbal est COLLECTIF : c'est l'acte de la délibération, il
  * vaut pour la promotion entière. Le faire déposer une fois par étudiant
  * produirait 250 copies d'un même document, donc 250 occasions de
  * divergence.
+ *
+ * TOUTES les pièces individuelles sont obligatoires : un dossier de fin
+ * de cycle se juge sur l'ensemble de ses actes — résultats, travail
+ * soutenu, état civil — et non sur le seul relevé de notes. Le dossier
+ * est complet ou il ne l'est pas.
+ *
+ * Conséquence assumée : une filière sans mémoire ni stage ne peut pas
+ * transmettre tant que ces cases restent vides. Si le cas se présente,
+ * la sortie n'est pas de rendre la pièce facultative pour tout le monde
+ * — ce serait la rendre inexigible partout — mais de rattacher la liste
+ * des pièces requises à la FILIÈRE, qui est le seul niveau où la
+ * question a une réponse juste.
+ *
+ * `autre` n'est jamais requis : c'est le fourre-tout, il n'a pas de case
+ * dans la grille et ne peut donc pas être réclamé.
  */
 export const TYPES_PIECE = {
-  releve_notes: { libelle: 'Relevé de notes', portee: 'candidat', requise: true },
-  rapport_stage: { libelle: 'Rapport de stage', portee: 'candidat', requise: false },
+  releve_notes: {
+    libelle: 'Relevé de notes',
+    portee: 'candidat',
+    requise: true,
+    aide: 'Relevé de la dernière année, signé par la scolarité.',
+  },
+  rapport_stage: {
+    libelle: 'Rapport de stage',
+    portee: 'candidat',
+    requise: true,
+    aide: 'Rapport du stage de fin de cycle, visé par le maître de stage.',
+  },
   // La page de garde porte le titre du mémoire, le directeur et la date de
   // soutenance, signés par le jury : c'est elle qu'on relit, pas les 80 pages.
   page_garde_memoire: {
     libelle: 'Page de garde du mémoire',
     portee: 'candidat',
-    requise: false,
+    requise: true,
+    aide: 'Page signée par le jury : titre, directeur de mémoire, date de soutenance.',
   },
-  memoire: { libelle: 'Mémoire de fin de cycle', portee: 'candidat', requise: false },
-  acte_naissance: { libelle: 'Acte de naissance', portee: 'candidat', requise: false },
-  piece_identite: { libelle: "Pièce d'identité", portee: 'candidat', requise: false },
-  attestation: { libelle: 'Attestation', portee: 'candidat', requise: false },
-  proces_verbal: { libelle: 'Procès-verbal de délibération', portee: 'promotion', requise: true },
-  arrete_jury: { libelle: 'Arrêté de jury', portee: 'promotion', requise: false },
-  autre: { libelle: 'Autre document', portee: 'candidat', requise: false },
+  memoire: {
+    libelle: 'Mémoire de fin de cycle',
+    portee: 'candidat',
+    requise: true,
+    aide: 'Le document complet, tel que soutenu devant le jury.',
+  },
+  acte_naissance: {
+    libelle: 'Acte de naissance',
+    portee: 'candidat',
+    requise: true,
+    aide: "Établit l'état civil qui figurera sur le diplôme.",
+  },
+  piece_identite: {
+    libelle: "Pièce d'identité",
+    portee: 'candidat',
+    requise: true,
+    aide: "Carte nationale d'identité ou passeport en cours de validité.",
+  },
+  attestation: {
+    libelle: 'Attestation',
+    portee: 'candidat',
+    requise: true,
+    aide: 'Attestation nominative complétant le dossier.',
+  },
+  proces_verbal: {
+    libelle: 'Procès-verbal de délibération',
+    portee: 'promotion',
+    requise: true,
+    aide: 'Acte du jury pour la promotion entière : sans lui, rien ne prouve la délibération.',
+  },
+  arrete_jury: {
+    libelle: 'Arrêté de jury',
+    portee: 'promotion',
+    requise: false,
+    aide: 'Acte de nomination du jury, quand il existe.',
+  },
+  autre: {
+    libelle: 'Autre document',
+    portee: 'candidat',
+    requise: false,
+    aide: 'Hors nomenclature : à nommer explicitement.',
+  },
 };
 
 export const TYPES_REQUIS_CANDIDAT = Object.entries(TYPES_PIECE)
@@ -319,6 +380,122 @@ export async function listerPourPromotion(promotion_id, utilisateur) {
   return (await pieceModel.listerParPromotion(promotion_id)).map(formater);
 }
 
+// ── Grille de dépôt ────────────────────────────────────────────────
+
+/**
+ * La liste des pièces déposées ne dit pas ce qui MANQUE : elle ne montre
+ * que ce qui est là. Un agent qui a déposé trois documents sur quatre
+ * voit trois lignes vertes et rien qui l'avertisse.
+ *
+ * La grille inverse la lecture : une case par nature attendue, remplie
+ * ou vide, obligatoire ou facultative. Ce qu'il reste à faire devient
+ * visible sans que personne ait à connaître la nomenclature par cœur.
+ *
+ * @returns {{ cases, complementaires, manquantes, complet }}
+ */
+function construireGrille(portee, pieces) {
+  const formatees = pieces.map(formater);
+
+  const cases = Object.entries(TYPES_PIECE)
+    .filter(([code, t]) => t.portee === portee && code !== 'autre')
+    // Les obligatoires d'abord : l'ordre de la grille est l'ordre du travail.
+    .sort(([, a], [, b]) => Number(b.requise) - Number(a.requise))
+    .map(([code, t]) => {
+      const deposees = formatees.filter((p) => p.type_piece === code);
+      // Une pièce rejetée ne remplit pas sa case : elle laisse la case
+      // vide ET explique pourquoi, ce qui n'est pas la même chose qu'un
+      // simple manque.
+      const retenue = deposees.find((p) => p.statut !== 'rejetee') || null;
+      const rejetee = deposees.find((p) => p.statut === 'rejetee') || null;
+
+      return {
+        type_piece: code,
+        libelle: t.libelle,
+        aide: t.aide,
+        requise: t.requise,
+        remplie: Boolean(retenue),
+        piece: retenue,
+        rejetee,
+        versions: deposees.length,
+      };
+    });
+
+  // « Autre document » n'a pas de case : c'est le fourre-tout assumé, il
+  // s'ajoute au dossier sans jamais être attendu.
+  const complementaires = formatees.filter((p) => p.type_piece === 'autre');
+  const manquantes = cases.filter((c) => c.requise && !c.remplie);
+
+  return {
+    cases,
+    complementaires,
+    manquantes: manquantes.map((c) => ({ type_piece: c.type_piece, libelle: c.libelle })),
+    complet: manquantes.length === 0,
+  };
+}
+
+/** Grille de dépôt d'un étudiant. */
+export async function grilleCandidat(candidat_id, utilisateur) {
+  const pieces = await listerPourCandidat(candidat_id, utilisateur);
+  // `listerPourCandidat` a déjà formaté ; la grille reformate sans
+  // dommage — `formater` est idempotent sur une pièce sans `chemin`.
+  return construireGrille('candidat', pieces);
+}
+
+/** Grille de dépôt d'une promotion — les actes collectifs. */
+export async function grillePromotion(promotion_id, utilisateur) {
+  const pieces = await listerPourPromotion(promotion_id, utilisateur);
+  return construireGrille('promotion', pieces);
+}
+
+/**
+ * Ce qui manque, du point de vue des pièces, pour que la promotion parte
+ * au ministère.
+ *
+ * Ce contrôle existait déjà — mais à la RÉCEPTION, chez le ministère, où
+ * il produisait un rejet. Un rejet, c'est un aller-retour de plusieurs
+ * jours pour un document que l'établissement avait sous la main. Le
+ * même contrôle, joué avant l'envoi, ne coûte que le temps de le déposer.
+ *
+ * @param {string} promotion_id
+ * @param {Array<{candidat_id: string, nom: string, prenom: string, numero_etudiant: string}>} etudiants
+ */
+export async function controlerAvantTransmission(promotion_id, etudiants) {
+  const [collectives, typesAcquis] = await Promise.all([
+    pieceModel.listerParPromotion(promotion_id),
+    pieceModel.typesAcquisParCandidats(etudiants.map((e) => e.candidat_id)),
+  ]);
+
+  const acquisesCollectives = new Set(
+    collectives.filter((p) => p.statut !== 'rejetee').map((p) => p.type_piece)
+  );
+  const manquantsCollectifs = TYPES_REQUIS_PROMOTION.filter(
+    (t) => !acquisesCollectives.has(t)
+  ).map((t) => TYPES_PIECE[t].libelle);
+
+  const incomplets = [];
+  for (const etudiant of etudiants) {
+    const presents = new Set(typesAcquis.get(etudiant.candidat_id) || []);
+    const manquants = TYPES_REQUIS_CANDIDAT.filter((t) => !presents.has(t)).map(
+      (t) => TYPES_PIECE[t].libelle
+    );
+    if (manquants.length > 0) {
+      incomplets.push({
+        candidat_id: etudiant.candidat_id,
+        nom: etudiant.nom,
+        prenom: etudiant.prenom,
+        numero_etudiant: etudiant.numero_etudiant,
+        manquants,
+      });
+    }
+  }
+
+  return {
+    complet: incomplets.length === 0 && manquantsCollectifs.length === 0,
+    incomplets,
+    manquantsCollectifs,
+  };
+}
+
 /** Dossier de pièces d'un lot, groupé pour l'instruction ministérielle. */
 export async function listerPourLot(lot_id) {
   exigerUuid(lot_id, 'Lot introuvable.');
@@ -521,6 +698,88 @@ export async function supprimer(piece_id, utilisateur) {
 }
 
 // ── Contrôle à l'instruction ───────────────────────────────────────
+
+/**
+ * Ce qui, du point de vue des pièces, empêche de statuer sur CHAQUE
+ * dossier — et séparément sur le lot entier.
+ *
+ * `controlerLot` répond « ce lot est-il validable ? ». C'est une
+ * question de tout ou rien : tant qu'une seule pièce sur 250 dossiers
+ * n'a pas été ouverte, la réponse est non, et l'agent doit tout traiter
+ * d'une traite avant de pouvoir valider quoi que ce soit. Une promotion
+ * de 12 000 diplômés ne s'instruit pas en une séance.
+ *
+ * Cette fonction découpe le verdict : l'obstacle est imputé au dossier
+ * qu'il concerne. Un dossier dont les pièces sont examinées peut être
+ * validé aujourd'hui, les autres attendront demain.
+ *
+ * Les actes COLLECTIFS restent hors découpage : le procès-verbal fonde
+ * la délibération entière, il bloque tout tant qu'il manque. Mais c'est
+ * un ou deux documents, pas 250 — les examiner d'abord est tenable.
+ *
+ * @returns {{ collectifs: string[], parDossier: Map<string, string[]> }}
+ */
+export async function obstaclesParDossier(lot, dossiers) {
+  const toutes = await pieceModel.listerParLot(lot.id);
+
+  const collectives = toutes.filter((p) => !p.candidat_id);
+  const parCandidat = new Map();
+  for (const piece of toutes) {
+    if (!piece.candidat_id) continue;
+    if (!parCandidat.has(piece.candidat_id)) parCandidat.set(piece.candidat_id, []);
+    parCandidat.get(piece.candidat_id).push(piece);
+  }
+
+  const collectifs = [];
+  const acquisesCollectives = new Set(
+    collectives.filter((p) => p.statut !== 'rejetee').map((p) => p.type_piece)
+  );
+  for (const type of TYPES_REQUIS_PROMOTION) {
+    if (!acquisesCollectives.has(type)) {
+      collectifs.push(`acte collectif absent ou rejeté : ${TYPES_PIECE[type].libelle.toLowerCase()}`);
+    }
+  }
+  const collectivesNonOuvertes = collectives.filter((p) => p.statut === 'deposee').length;
+  if (collectivesNonOuvertes > 0) {
+    collectifs.push(
+      `${collectivesNonOuvertes} acte(s) collectif(s) pas encore ouvert(s) : ils fondent toute la promotion.`
+    );
+  }
+
+  const parDossier = new Map();
+  for (const dossier of dossiers) {
+    const siennes = parCandidat.get(dossier.candidat_id) || [];
+    const valables = new Set(siennes.filter((p) => p.statut !== 'rejetee').map((p) => p.type_piece));
+    const rejetees = siennes.filter((p) => p.statut === 'rejetee');
+    const obstacles = [];
+
+    for (const type of TYPES_REQUIS_CANDIDAT) {
+      if (valables.has(type)) continue;
+      const libelle = TYPES_PIECE[type].libelle.toLowerCase();
+      obstacles.push(
+        rejetees.some((p) => p.type_piece === type)
+          ? `pièce obligatoire rejetée et non remplacée : ${libelle}`
+          : `pièce obligatoire manquante : ${libelle}`
+      );
+    }
+
+    // Une pièce facultative rejetée n'invalide pas le dossier mais mérite
+    // d'être dite : l'agent doit savoir sur quoi il statue.
+    const rejetsFacultatifs = rejetees.filter((p) => !TYPES_REQUIS_CANDIDAT.includes(p.type_piece));
+    if (rejetsFacultatifs.length > 0) {
+      obstacles.push(`${rejetsFacultatifs.length} pièce(s) complémentaire(s) rejetée(s)`);
+    }
+
+    const nonOuvertes = siennes.filter((p) => p.statut === 'deposee').length;
+    if (nonOuvertes > 0) {
+      obstacles.push(`${nonOuvertes} pièce(s) de ce dossier n'ont pas encore été ouvertes`);
+    }
+
+    if (obstacles.length > 0) parDossier.set(dossier.id, obstacles);
+  }
+
+  return { collectifs, parDossier };
+}
 
 /**
  * Ce qui manque ou bloque, du point de vue des pièces, pour valider un lot.

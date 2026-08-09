@@ -200,14 +200,18 @@ async function creerChaineAcademique(etab, annee, session, candidats) {
         const inscription = await promotionService.inscrire(promotion.id, etab.id, {
           candidat_id: candidat.id,
         });
-        // Le relevé de notes conditionne l'instruction : sans lui, chaque
-        // dossier serait bloqué et la file du ministère ne montrerait que
-        // des rejets automatiques.
-        await deposerPiece(
-          { candidat_id: candidat.id, etablissement_id: etab.id, agent_id: etab.agent_id },
-          'releve_notes',
-          `releve-${candidat.numero_etudiant || candidat.id.slice(0, 8)}.pdf`
-        );
+        // Le dossier complet conditionne la transmission : il manque une
+        // seule pièce obligatoire et la promotion entière reste à quai —
+        // la file du ministère serait alors vide, et la démonstration
+        // s'arrêterait à l'écran d'établissement.
+        const reference = candidat.numero_etudiant || candidat.id.slice(0, 8);
+        for (const type of pieceService.TYPES_REQUIS_CANDIDAT) {
+          await deposerPiece(
+            { candidat_id: candidat.id, etablissement_id: etab.id, agent_id: etab.agent_id },
+            type,
+            `${type}-${reference}.pdf`
+          );
+        }
         const admis = Math.random() > 0.25;
         // La mention n'est plus tirée au hasard : elle découle de la
         // moyenne. Un jeu de démonstration qui montrerait un 10,2

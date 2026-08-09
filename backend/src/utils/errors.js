@@ -8,11 +8,16 @@ export class ErreurApp extends Error {
    * @param {number} statusCode - code HTTP (400, 403, 404, 409…)
    * @param {string} code - code applicatif (ex: 'CANDIDAT_INTROUVABLE')
    * @param {string} message - message lisible destiné au client
+   * @param {object} [details] - données structurées accompagnant l'erreur.
+   *   Un message dit ce qui ne va pas ; les détails permettent à l'écran
+   *   d'AGIR — lister les étudiants incomplets et ouvrir leur fiche vaut
+   *   mieux qu'une phrase où l'agent doit repérer les noms à la main.
    */
-  constructor(statusCode, code, message) {
+  constructor(statusCode, code, message, details = null) {
     super(message);
     this.statusCode = statusCode;
     this.code = code;
+    if (details) this.details = details;
   }
 }
 

@@ -2,6 +2,7 @@
 // Contrôleur "dossier" — module établissement.
 // ─────────────────────────────────────────────────────────────
 import * as dossierService from '../services/dossier.service.js';
+import * as priorite from '../services/priorite.service.js';
 
 /** GET /api/dossiers?statut=&limit=&offset= */
 export async function lister(req, res, next) {
@@ -75,6 +76,26 @@ export async function supprimer(req, res, next) {
   try {
     await dossierService.supprimer(req.params.id, req.utilisateur.etablissement_id);
     return res.json({ success: true, data: { supprime: true } });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/**
+ * PATCH /api/dossiers/:id/priorite
+ * body: { priorite, motif_urgence, date_echeance }
+ *
+ * L'établissement peut signaler une urgence APRÈS transmission : la
+ * situation de l'étudiant ne s'arrête pas au moment de l'envoi.
+ */
+export async function definirPriorite(req, res, next) {
+  try {
+    const dossier = await priorite.definirPourDossier(
+      req.params.id,
+      req.utilisateur,
+      req.body || {}
+    );
+    return res.json({ success: true, data: { dossier } });
   } catch (err) {
     return next(err);
   }

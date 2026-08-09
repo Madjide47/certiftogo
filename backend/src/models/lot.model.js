@@ -40,9 +40,25 @@ export async function lister({ statut = null, etablissement_id = null } = {}) {
             (SELECT COUNT(*)::int FROM dossiers d WHERE d.lot_id = l.id) AS dossiers_total,
             (SELECT COUNT(*)::int FROM dossiers d WHERE d.lot_id = l.id AND d.statut = 'valide') AS dossiers_valides,
             (SELECT COUNT(*)::int FROM dossiers d WHERE d.lot_id = l.id AND d.statut = 'rejete') AS dossiers_rejetes,
-            (SELECT COUNT(*)::int FROM dossiers d WHERE d.lot_id = l.id AND d.statut = 'certifie') AS dossiers_certifies
+            (SELECT COUNT(*)::int FROM dossiers d WHERE d.lot_id = l.id AND d.statut = 'certifie') AS dossiers_certifies,
+            -- Ce qui reste à faire, et ce qui presse : la file du
+            -- ministère doit pouvoir se trier sur l'urgence, pas
+            -- seulement sur la date d'arrivée.
+            (SELECT COUNT(*)::int FROM dossiers d
+              WHERE d.lot_id = l.id AND d.statut IN ('soumis', 'en_examen')) AS dossiers_en_attente,
+            (SELECT COUNT(*)::int FROM dossiers d
+              WHERE d.lot_id = l.id AND d.priorite = 'urgente'
+                AND d.statut IN ('soumis', 'en_examen')) AS dossiers_urgents,
+            (SELECT MIN(d.date_echeance) FROM dossiers d
+              WHERE d.lot_id = l.id AND d.priorite = 'urgente'
+                AND d.statut IN ('soumis', 'en_examen')) AS echeance_la_plus_proche
        ${FROM} ${where}
-      ORDER BY l.date_transmission DESC`,
+      -- Un lot qui contient une urgence remonte, quelle que soit sa
+      -- date d'arrivée : c'est tout l'objet de la priorité.
+      ORDER BY (SELECT COUNT(*) FROM dossiers d
+                 WHERE d.lot_id = l.id AND d.priorite = 'urgente'
+                   AND d.statut IN ('soumis', 'en_examen')) DESC,
+               l.date_transmission DESC`,
     params
   );
   return rows;
@@ -54,7 +70,18 @@ export async function trouverParId(id) {
             (SELECT COUNT(*)::int FROM dossiers d WHERE d.lot_id = l.id) AS dossiers_total,
             (SELECT COUNT(*)::int FROM dossiers d WHERE d.lot_id = l.id AND d.statut = 'valide') AS dossiers_valides,
             (SELECT COUNT(*)::int FROM dossiers d WHERE d.lot_id = l.id AND d.statut = 'rejete') AS dossiers_rejetes,
-            (SELECT COUNT(*)::int FROM dossiers d WHERE d.lot_id = l.id AND d.statut = 'certifie') AS dossiers_certifies
+            (SELECT COUNT(*)::int FROM dossiers d WHERE d.lot_id = l.id AND d.statut = 'certifie') AS dossiers_certifies,
+            -- Ce qui reste à faire, et ce qui presse : la file du
+            -- ministère doit pouvoir se trier sur l'urgence, pas
+            -- seulement sur la date d'arrivée.
+            (SELECT COUNT(*)::int FROM dossiers d
+              WHERE d.lot_id = l.id AND d.statut IN ('soumis', 'en_examen')) AS dossiers_en_attente,
+            (SELECT COUNT(*)::int FROM dossiers d
+              WHERE d.lot_id = l.id AND d.priorite = 'urgente'
+                AND d.statut IN ('soumis', 'en_examen')) AS dossiers_urgents,
+            (SELECT MIN(d.date_echeance) FROM dossiers d
+              WHERE d.lot_id = l.id AND d.priorite = 'urgente'
+                AND d.statut IN ('soumis', 'en_examen')) AS echeance_la_plus_proche
        ${FROM}
       WHERE l.id = $1`,
     [id]
@@ -71,6 +98,7 @@ export async function listerDossiers(lot_id) {
   const { rows } = await query(
     `SELECT d.id, d.reference, d.statut, d.type_diplome, d.mention,
             d.date_obtention, d.filiere, d.annee_academique, d.motif_rejet,
+            d.priorite, d.motif_urgence, d.date_echeance,
             c.id AS candidat_id, c.numero_etudiant, c.nom, c.prenom,
             c.date_naissance, c.telephone, c.personne_id,
             i.moyenne, i.statut AS statut_inscription
@@ -78,7 +106,13 @@ export async function listerDossiers(lot_id) {
        JOIN candidats c ON c.id = d.candidat_id
   LEFT JOIN inscriptions i ON i.candidat_id = d.candidat_id AND i.promotion_id = d.promotion_id
       WHERE d.lot_id = $1
-      ORDER BY c.nom, c.prenom`,
+      -- Ordre de travail, pas ordre alphabétique : les urgents d'abord,
+      -- et parmi eux les échéances les plus proches. Un agent qui
+      -- instruit par tranches traite le haut de la liste ; il faut donc
+      -- que le haut de la liste soit ce qui presse.
+      ORDER BY (d.priorite = 'urgente') DESC,
+               d.date_echeance ASC NULLS LAST,
+               c.nom, c.prenom`,
     [lot_id]
   );
   return rows;

@@ -23,7 +23,11 @@ import {
   enregistrerResultat,
   desinscrireEtudiant,
 } from '../../services/promotion.service.js';
-import { transmettrePromotion } from '../../services/lot.service.js';
+import {
+  transmettrePromotion,
+  preparerTransmission,
+  prioriserInscription,
+} from '../../services/lot.service.js';
 import {
   simulerImport,
   executerImport,
@@ -31,8 +35,9 @@ import {
 } from '../../services/import.service.js';
 import { listerAnnees, listerSessions } from '../../services/referentiel.service.js';
 import { listerFilieres, monProfil } from '../../services/structure.service.js';
-import { listerCandidats } from '../../services/candidat.service.js';
+import { listerCandidats, creerCandidat } from '../../services/candidat.service.js';
 import PiecesJointes from '../../components/PiecesJointes.jsx';
+import ChampsEtudiant, { ETUDIANT_VIDE } from '../../components/ChampsEtudiant.jsx';
 import {
   LIBELLES_STATUT_PROMOTION,
   TON_STATUT_PROMOTION,
@@ -56,6 +61,7 @@ import {
   Bouton,
   Champ,
   Saisie,
+  Zone,
   Liste,
   Icone,
   Chiffre,
@@ -98,6 +104,11 @@ export default function PromotionsPage() {
   const [candidatAAjouter, setCandidatAAjouter] = useState('');
   const [erreurEtudiants, setErreurEtudiants] = useState('');
   const [resultatEnCours, setResultatEnCours] = useState(null);
+  // Création d'un étudiant SANS quitter la promotion : voir `creerEtInscrire`.
+  const [nouvelEtudiant, setNouvelEtudiant] = useState(null);
+  const [creationEnCours, setCreationEnCours] = useState(false);
+  const [erreurNouvel, setErreurNouvel] = useState('');
+  const [dernierAjout, setDernierAjout] = useState('');
 
   // Import
   const [importCible, setImportCible] = useState(null);
@@ -112,6 +123,13 @@ export default function PromotionsPage() {
 
   // Transmission
   const [transmission, setTransmission] = useState(null);
+  // Urgence déclarée AVANT transmission : à ce stade le dossier n'existe
+  // pas encore, seule l'inscription porte l'étudiant.
+  const [urgence, setUrgence] = useState(null);
+  const [declarationUrgence, setDeclarationUrgence] = useState({
+    motif_urgence: '',
+    date_echeance: '',
+  });
   const [dateDeliberation, setDateDeliberation] = useState(aujourdhui());
   const [erreurTransmission, setErreurTransmission] = useState('');
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
@@ -322,17 +340,90 @@ export default function PromotionsPage() {
     }
   }
 
+  /**
+   * Crée l'étudiant ET l'inscrit dans la promotion ouverte, d'un geste.
+   *
+   * Le parcours précédent imposait de quitter l'écran, d'aller créer la
+   * fiche, de revenir, de retrouver la promotion, puis de sélectionner
+   * l'étudiant dans une liste devenue longue — pour chaque étudiant
+   * d'une cohorte. Les deux opérations restent distinctes côté serveur ;
+   * c'est le geste de l'agent qui est réunifié.
+   */
+  async function creerEtInscrire(evenement, continuer) {
+    evenement.preventDefault();
+    setCreationEnCours(true);
+    setErreurNouvel('');
+    try {
+      const candidat = await creerCandidat({
+        ...nouvelEtudiant,
+        date_naissance: nouvelEtudiant.date_naissance || undefined,
+        email: nouvelEtudiant.email || undefined,
+      });
+      await inscrireEtudiant(promotionOuverte.id, candidat.id);
+
+      const [ins, liste] = await Promise.all([
+        listerInscriptions(promotionOuverte.id),
+        listerCandidats(),
+      ]);
+      setInscriptions(ins);
+      setCandidats(liste);
+      setDernierAjout(`${candidat.nom} ${candidat.prenom} inscrit(e).`);
+
+      // Une scolarité saisit une cohorte d'affilée : refermer la modale
+      // à chaque étudiant ferait rouvrir deux cents fois. Le numéro
+      // n'est pas prérempli — il n'est jamais séquentiel de façon fiable.
+      if (continuer) setNouvelEtudiant({ ...ETUDIANT_VIDE });
+      else setNouvelEtudiant(null);
+    } catch (err) {
+      setErreurNouvel(messageErreur(err));
+    } finally {
+      setCreationEnCours(false);
+    }
+  }
+
+  // ── Priorité d'un étudiant ────────────────────────────────────
+  /**
+   * L'urgence se déclare ici, avant l'envoi, parce que c'est ici qu'on
+   * la connaît : c'est l'établissement qui sait qu'un de ses diplômés
+   * doit produire son acte avant une date. Elle suivra le dossier
+   * engendré par la transmission.
+   */
+  async function soumettreUrgence(priorite) {
+    setErreur('');
+    try {
+      await prioriserInscription(promotionOuverte.id, urgence.id, {
+        priorite,
+        motif_urgence: declarationUrgence.motif_urgence,
+        date_echeance: declarationUrgence.date_echeance || undefined,
+      });
+      setUrgence(null);
+      setInscriptions(await listerInscriptions(promotionOuverte.id));
+      setSucces(
+        priorite === 'urgente'
+          ? `${urgence.nom_complet} signalé urgent : son dossier partira en tête de file.`
+          : `Urgence levée pour ${urgence.nom_complet}.`
+      );
+    } catch (err) {
+      setErreur(messageErreur(err));
+    }
+  }
+
   // ── Transmission ──────────────────────────────────────────────
+  /**
+   * Le rapport de préparation vient du SERVEUR, pas d'un décompte fait
+   * ici : c'est lui qui refusera l'envoi, il doit donc être lui qui dit
+   * ce qui manque. Un décompte local finirait toujours par diverger de
+   * la règle appliquée, et l'agent découvrirait l'obstacle au clic.
+   */
   async function ouvrirTransmission(promotion) {
     setErreurTransmission('');
     setDateDeliberation(promotion.date_deliberation?.slice(0, 10) || aujourdhui());
-    setTransmission({ promotion, inscriptions: null });
+    setTransmission({ promotion, rapport: null });
     try {
-      const ins = await listerInscriptions(promotion.id);
-      setTransmission({ promotion, inscriptions: ins });
+      setTransmission({ promotion, rapport: await preparerTransmission(promotion.id) });
     } catch (err) {
       setErreurTransmission(messageErreur(err));
-      setTransmission({ promotion, inscriptions: [] });
+      setTransmission({ promotion, rapport: undefined });
     }
   }
 
@@ -359,14 +450,19 @@ export default function PromotionsPage() {
   const promotionFigee = promotionOuverte && STATUTS_FIGES.includes(promotionOuverte.statut);
   const dejaInscrits = new Set(inscriptions.map((i) => i.candidat_id));
   const candidatsDisponibles = candidats.filter((c) => !dejaInscrits.has(c.id));
-  const admisATransmettre = (transmission?.inscriptions || []).filter((i) => i.statut === 'admis');
-  const nonAdmis = (transmission?.inscriptions || []).length - admisATransmettre.length;
+  const preparation = transmission?.rapport;
+  const admisATransmettre = preparation?.admis ?? 0;
+  const nonAdmis = preparation?.non_transmis ?? 0;
   // Mention affichée pendant la saisie : le serveur la recalcule et fait foi.
   const mentionCalculee = resultatEnCours
     ? mentionPourMoyenne(resultatEnCours.moyenne)
     : null;
   // A-17 : un admis sans numéro bloque la transmission côté serveur.
-  const sansNumero = admisATransmettre.filter((i) => !i.telephone);
+  const sansNumero = preparation?.sans_numero || [];
+  // E-12 : une pièce obligatoire manquante aussi — et c'est le contrôle
+  // le plus coûteux à découvrir tard, puisqu'il faut retrouver l'étudiant.
+  const piecesIncompletes = preparation?.pieces?.incomplets || [];
+  const actesManquants = preparation?.pieces?.manquants_collectifs || [];
 
   return (
     <div>
@@ -722,7 +818,27 @@ export default function PromotionsPage() {
           lignes={inscriptions}
           colonnes={[
             { cle: 'numero_etudiant', libelle: 'N° étudiant', tabulaire: true },
-            { cle: 'etudiant', libelle: 'Étudiant', rendu: (i) => `${i.nom} ${i.prenom}` },
+            {
+              cle: 'etudiant',
+              libelle: 'Étudiant',
+              rendu: (i) => (
+                <span className="flex flex-wrap items-center gap-2">
+                  <span>
+                    {i.nom} {i.prenom}
+                  </span>
+                  {i.priorite === 'urgente' && (
+                    <span title={i.motif_urgence || undefined}>
+                      <Etiquette ton="alerte">
+                        Urgent
+                        {i.date_echeance
+                          ? ` — ${new Date(i.date_echeance).toLocaleDateString('fr-FR')}`
+                          : ''}
+                      </Etiquette>
+                    </span>
+                  )}
+                </span>
+              ),
+            },
             {
               cle: 'statut',
               libelle: 'Statut',
@@ -779,6 +895,21 @@ export default function PromotionsPage() {
                   {!promotionFigee && (
                     <Bouton
                       variante="discret"
+                      className="ml-3"
+                      onClick={() => {
+                        setUrgence({ ...i, nom_complet: `${i.nom} ${i.prenom}` });
+                        setDeclarationUrgence({
+                          motif_urgence: i.motif_urgence || '',
+                          date_echeance: i.date_echeance ? i.date_echeance.slice(0, 10) : '',
+                        });
+                      }}
+                    >
+                      {i.priorite === 'urgente' ? 'Urgence' : 'Prioriser'}
+                    </Bouton>
+                  )}
+                  {!promotionFigee && (
+                    <Bouton
+                      variante="discret"
                       className="ml-3 text-erreur hover:text-erreur"
                       onClick={() => retirerEtudiant(i)}
                     >
@@ -816,9 +947,79 @@ export default function PromotionsPage() {
                 />
               </Champ>
             </div>
-            <Bouton type="submit" icone="add">
+            <Bouton type="submit" icone="add" disabled={!candidatAAjouter}>
               Inscrire
             </Bouton>
+
+            {/* L'étudiant n'est pas encore dans la base : le créer ici
+                évite de quitter la promotion, de la retrouver, et de
+                recommencer pour chacun des deux cents suivants. */}
+            <Bouton
+              variante="secondaire"
+              icone="person_add"
+              onClick={() => {
+                setNouvelEtudiant({ ...ETUDIANT_VIDE });
+                setErreurNouvel('');
+                setDernierAjout('');
+              }}
+            >
+              Nouvel étudiant
+            </Bouton>
+          </form>
+        )}
+
+        {!promotionFigee && candidatsDisponibles.length === 0 && candidats.length > 0 && (
+          <p className="mt-2 text-sm text-gris-500">
+            Tous vos étudiants déjà enregistrés sont inscrits dans cette promotion. Utilisez
+            « Nouvel étudiant » pour en ajouter un.
+          </p>
+        )}
+      </Modale>
+
+      {/* ── Création d'un étudiant depuis la promotion ── */}
+      <Modale
+        ouvert={Boolean(nouvelEtudiant)}
+        titre={`Nouvel étudiant — ${promotionOuverte?.libelle || ''}`}
+        onFermer={() => setNouvelEtudiant(null)}
+        largeur="max-w-3xl"
+      >
+        {nouvelEtudiant && (
+          <form onSubmit={(e) => creerEtInscrire(e, false)} className="space-y-4">
+            {erreurNouvel && <Encart ton="erreur">{erreurNouvel}</Encart>}
+            {dernierAjout && !erreurNouvel && <Encart ton="succes">{dernierAjout}</Encart>}
+
+            <Encart ton="info">
+              L'étudiant sera créé dans votre établissement <strong>et</strong> inscrit dans
+              cette promotion. Ses pièces justificatives se déposent ensuite depuis la liste
+              des étudiants.
+            </Encart>
+
+            <ChampsEtudiant
+              valeurs={nouvelEtudiant}
+              onChange={(champ, valeur) =>
+                setNouvelEtudiant((n) => ({ ...n, [champ]: valeur }))
+              }
+              prefixe="ne"
+            />
+
+            <div className="flex flex-wrap justify-end gap-2 border-t border-gris-200 pt-4">
+              <Bouton variante="neutre" onClick={() => setNouvelEtudiant(null)}>
+                Fermer
+              </Bouton>
+              {/* Saisir une cohorte, c'est enchaîner : refermer la modale
+                  à chaque étudiant ferait rouvrir deux cents fois. */}
+              <Bouton
+                variante="secondaire"
+                icone="playlist_add"
+                enCours={creationEnCours}
+                onClick={(e) => creerEtInscrire(e, true)}
+              >
+                Inscrire et continuer
+              </Bouton>
+              <Bouton type="submit" icone="check" enCours={creationEnCours}>
+                Inscrire et fermer
+              </Bouton>
+            </div>
           </form>
         )}
       </Modale>
@@ -1045,22 +1246,61 @@ export default function PromotionsPage() {
         <form onSubmit={confirmerTransmission} className="space-y-4">
           {erreurTransmission && <Encart ton="erreur">{erreurTransmission}</Encart>}
 
-          {transmission?.inscriptions === null ? (
-            <p className="text-base text-gris-500">Décompte des étudiants…</p>
+          {transmission?.rapport === null ? (
+            <p className="text-base text-gris-500">Vérification du dossier de la promotion…</p>
           ) : (
             <>
               <Encart
-                ton={admisATransmettre.length === 0 ? 'alerte' : 'info'}
-                titre={`${admisATransmettre.length} dossier(s) seront créés`}
+                ton={admisATransmettre === 0 ? 'alerte' : 'info'}
+                titre={`${admisATransmettre} dossier(s) seront créés`}
               >
                 Seuls les étudiants <strong>admis</strong> partent au ministère.
                 {nonAdmis > 0 && (
                   <> {nonAdmis} étudiant(s) non admis resteront dans la promotion sans dossier.</>
                 )}
-                {admisATransmettre.length === 0 && (
+                {admisATransmettre === 0 && (
                   <> Saisissez d'abord les résultats depuis « Étudiants ».</>
                 )}
+                {preparation?.urgents > 0 && (
+                  <> {preparation.urgents} dossier(s) signalé(s) urgent(s) partiront en tête de file.</>
+                )}
               </Encart>
+
+              {/* Les actes collectifs manquent au lot entier : les
+                  imputer à un étudiant ferait chercher au mauvais
+                  endroit. */}
+              {actesManquants.length > 0 && (
+                <Encart ton="erreur" titre="Actes de la promotion manquants">
+                  {actesManquants.join(', ')}. Déposez-les depuis « Actes de la promotion » :
+                  sans eux, rien n'atteste que le jury a délibéré, et le ministère ne peut
+                  rien instruire.
+                </Encart>
+              )}
+
+              {/* Le même contrôle se jouait auparavant à la RÉCEPTION,
+                  chez le ministère, sous forme de rejet : plusieurs jours
+                  d'aller-retour pour un document que l'établissement
+                  avait sous la main. */}
+              {piecesIncompletes.length > 0 && (
+                <Encart
+                  ton="erreur"
+                  titre={`${piecesIncompletes.length} étudiant(s) admis sans toutes leurs pièces obligatoires`}
+                >
+                  <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                    {piecesIncompletes.slice(0, 6).map((e) => (
+                      <li key={e.candidat_id}>
+                        {e.nom} {e.prenom} ({e.numero_etudiant}) — {e.manquants.join(', ')}
+                      </li>
+                    ))}
+                    {piecesIncompletes.length > 6 && (
+                      <li>… et {piecesIncompletes.length - 6} autres.</li>
+                    )}
+                  </ul>
+                  <p className="mt-2">
+                    Déposez les documents manquants depuis « Étudiants », colonne Pièces.
+                  </p>
+                </Encart>
+              )}
 
               {/* Le serveur refuse la transmission ; autant le dire ici,
                   où la correction est à portée de clic. */}
@@ -1071,7 +1311,7 @@ export default function PromotionsPage() {
                 >
                   <ul className="mt-1 list-disc space-y-0.5 pl-5">
                     {sansNumero.slice(0, 6).map((i) => (
-                      <li key={i.id}>
+                      <li key={i.candidat_id}>
                         {i.nom} {i.prenom} — {i.numero_etudiant}
                       </li>
                     ))}
@@ -1116,19 +1356,83 @@ export default function PromotionsPage() {
             <Bouton
               type="submit"
               enCours={envoiEnCours}
-              disabled={
-                !transmission?.inscriptions ||
-                admisATransmettre.length === 0 ||
-                sansNumero.length > 0
-              }
+              disabled={!preparation || !preparation.transmissible}
             >
               {/* Le bouton porte le nombre : « Transmettre » seul laisse
                   cliquer sans avoir lu ce qu'on envoie, et l'acte est
                   irréversible — la promotion est figée ensuite. */}
-              Transmettre {admisATransmettre.length} étudiant(s) au ministère
+              Transmettre {admisATransmettre} étudiant(s) au ministère
             </Bouton>
           </div>
         </form>
+      </Modale>
+
+      {/* ── Urgence d'un étudiant ── */}
+      <Modale
+        ouvert={Boolean(urgence)}
+        titre={`Priorité — ${urgence?.nom_complet || ''}`}
+        onFermer={() => setUrgence(null)}
+      >
+        <div className="space-y-4">
+          <Encart ton="info" titre="Signaler un dossier à traiter en priorité">
+            Le ministère verra ce dossier en tête de sa file. Le motif reste attaché au
+            dossier et au journal : c'est ce qui distingue un arbitrage d'un passe-droit,
+            et ce qui permet d'en rendre compte.
+          </Encart>
+
+          <Champ
+            label="Motif de l'urgence"
+            htmlFor="u-motif"
+            requis
+            aide="Une phrase suffit : bourse, inscription à l'étranger, concours, embauche…"
+          >
+            <Zone
+              id="u-motif"
+              rows={3}
+              value={declarationUrgence.motif_urgence}
+              onChange={(e) =>
+                setDeclarationUrgence((d) => ({ ...d, motif_urgence: e.target.value }))
+              }
+            />
+          </Champ>
+
+          <Champ
+            label="Échéance"
+            htmlFor="u-echeance"
+            aide="Facultative. Elle ordonne les urgences entre elles : la plus proche passe d'abord."
+          >
+            <Saisie
+              id="u-echeance"
+              type="date"
+              value={declarationUrgence.date_echeance}
+              onChange={(e) =>
+                setDeclarationUrgence((d) => ({ ...d, date_echeance: e.target.value }))
+              }
+            />
+          </Champ>
+
+          <div className="flex flex-wrap justify-end gap-2 border-t border-gris-200 pt-4">
+            <Bouton variante="neutre" onClick={() => setUrgence(null)}>
+              Annuler
+            </Bouton>
+            {urgence?.priorite === 'urgente' && (
+              <Bouton variante="neutre" onClick={() => soumettreUrgence('normale')}>
+                Lever l'urgence
+              </Bouton>
+            )}
+            <Bouton
+              disabled={declarationUrgence.motif_urgence.trim().length < 10}
+              title={
+                declarationUrgence.motif_urgence.trim().length < 10
+                  ? "Expliquez l'urgence en une phrase"
+                  : undefined
+              }
+              onClick={() => soumettreUrgence('urgente')}
+            >
+              Déclarer urgent
+            </Bouton>
+          </div>
+        </div>
       </Modale>
 
       {/* ── Pièces d'un étudiant ── */}
@@ -1141,7 +1445,7 @@ export default function PromotionsPage() {
         <PiecesJointes
           portee="candidat"
           cibleId={piecesEtudiant?.candidat_id}
-          aide="Ces documents sont ceux que le ministère ouvrira pour instruire le dossier. Le relevé de notes est obligatoire ; mémoire, page de garde et autres pièces le complètent. Le procès-verbal de délibération ne se dépose pas ici : il vaut pour la promotion entière, sous « Actes de la promotion »."
+          aide="Ces documents sont ceux que le ministère ouvrira pour instruire le dossier. Ils sont tous obligatoires : une seule case vide et la promotion entière reste à quai. Le procès-verbal de délibération ne se dépose pas ici — il vaut pour la promotion entière, sous « Actes de la promotion »."
         />
       </Modale>
 
