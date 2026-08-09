@@ -64,10 +64,10 @@ et (à terme) le même smart contract :
 
 ## 4. Modèle de données (PostgreSQL)
 
-**37 tables métier**, réparties en **18 migrations incrémentales**. Les migrations
-001 à 004 posent le socle ; 005 à 018 répondent une à une aux exigences du cahier
+**37 tables métier**, réparties en **19 migrations incrémentales**. Les migrations
+001 à 004 posent le socle ; 005 à 019 répondent une à une aux exigences du cahier
 des charges (gouvernance, transmission par lot, audit, notifications, sécurité,
-cas exceptionnels).
+cas exceptionnels, priorité de traitement).
 
 **`001_init_schema.sql`** — socle (10 tables) : `etablissements`, `ministeres`,
 `candidats`, `utilisateurs`, `codes_otp`, `dossiers`, `diplomes`,
@@ -260,8 +260,8 @@ serveur, `useNomenclatures` côté front.
 écrite pour un dossier administratif (relevé de notes, acte de naissance) et
 ignorait ce qui fonde réellement un diplôme de fin de cycle. Sans nom propre,
 ces documents tombaient dans « Autre document » — et un fourre-tout ne se
-réclame pas. Tous deux restent **facultatifs** : toutes les filières ne
-soutiennent pas de mémoire.
+réclame pas. Nommer la pièce, c'est pouvoir l'exiger : toutes deux sont
+depuis **obligatoires**, comme l'ensemble des pièces individuelles.
 
 **`018_dossier_integration.sql`** — identité complète du demandeur et table
 `pieces_demande`. La demande d'intégration (005) tenait en douze champs
@@ -280,6 +280,60 @@ et attestation fiscale pour le privé.
 > fois **transmis**, pièces obligatoires vérifiées côté serveur. L'autorisation
 > du déposant tient au **jeton** rendu une seule fois à l'ouverture : la
 > référence (`DI-2026-00042`) se devine, elle ne peut pas tenir lieu de secret.
+
+**`019_priorite_dossiers.sql`** — priorité de traitement sur `inscriptions`
+et `dossiers`. La file du ministère était strictement chronologique : un diplômé
+qui doit produire son acte pour une bourse ou une inscription à l'étranger avait
+une **échéance**, son voisin de promotion non, et rien ne permettait de le dire.
+L'urgence se réglait par téléphone, sans trace de qui avait fait passer qui devant.
+
+> Elle se déclare **des deux côtés**, parce qu'elle se découvre des deux côtés :
+> l'établissement connaît la situation de son étudiant **avant** de transmettre —
+> le dossier n'existe pas encore, seule l'inscription le porte — et le ministère
+> reçoit les demandes qui arrivent après. La transmission recopie la priorité de
+> l'inscription sur le dossier engendré. Un **motif écrit** est exigé dans les deux
+> cas : sans lui, une priorité n'est pas un arbitrage mais un passe-droit, et le
+> journal ne peut en rendre compte. `priorite.service.js`.
+
+**Dépôt des pièces en grille.** L'écran affichait la *liste* des documents
+déposés ; une liste ne montre que ce qui est là. L'agent qui avait fourni trois
+pièces sur quatre voyait trois lignes et rien qui l'avertisse — le manque
+n'apparaissait qu'à la transmission, sous forme de refus. La **grille** inverse
+la lecture : une case par document attendu, remplie ou vide, chacune avec son
+bouton de dépôt (`grilleCandidat` / `grillePromotion`).
+
+> **Toutes les pièces individuelles sont obligatoires** — relevé de notes,
+> rapport de stage, page de garde et mémoire, acte de naissance, pièce
+> d'identité, attestation — plus le **procès-verbal** côté promotion. Un
+> dossier de fin de cycle se juge sur l'ensemble de ses actes, pas sur le seul
+> relevé. Seul l'arrêté de jury reste facultatif : il n'existe pas partout.
+> Conséquence assumée : une filière sans mémoire ni stage ne transmet pas tant
+> que ces cases sont vides ; la sortie propre, si le cas se présente, est de
+> rattacher la liste des pièces requises à la **filière** — seul niveau où la
+> question a une réponse juste — et non de rendre la pièce inexigible partout.
+
+Corollaire : **la transmission est bloquée** tant qu'un admis
+n'a pas ses pièces obligatoires (409 `PIECES_MANQUANTES`, étudiants nommés dans
+`error.details`) ou que la promotion n'a pas ses actes collectifs
+(`PIECES_COLLECTIVES_MANQUANTES`). `GET /api/promotions/:id/transmission` rend le
+même verdict **avant** le clic.
+
+> Le contrôle existait déjà, mais à la **réception** : le ministère rejetait, et
+> l'établissement redéposait quelques jours plus tard un document qu'il avait sous
+> la main depuis le début. Joué à l'émission, il ne coûte que le temps de le déposer.
+
+**Instruction par tranches.** Le lot reste l'unité de transmission ; il cesse
+d'être l'unité de **séance**. `POST /api/ministere/lots/:id/traiter` statue sur
+les seuls dossiers désignés — ce qui n'est pas désigné **reste en attente** — et
+le lot ne se solde (`valide` / `partiellement_traite`) qu'une fois le dernier
+dossier jugé ; entre-temps il demeure `en_examen`. Le contrôle des pièces passe
+du lot au **dossier** (`obstaclesParDossier`), sauf les actes collectifs qui
+fondent la promotion entière et bloquent tout tant qu'ils manquent.
+
+> Auparavant, valider exigeait d'avoir tout examiné : sur 250 dossiers — 12 000
+> pour l'Université de Lomé — cela suppose une séance ininterrompue, et le travail
+> fait était perdu si l'agent devait s'arrêter. `valider` subsiste comme geste de
+> **clôture** : solder d'un coup tout ce qui reste.
 
 Les migrations sont **incrémentales** : `scripts/run-migrations.js` joue les
 fichiers dans l'ordre et note chacun dans `schema_migrations`. Un fichier déjà
@@ -346,6 +400,10 @@ npm run seed       # joue seeds/seed_dev.sql
 npm run migrate:reset  # ⚠️ reconstruit le schéma (efface les données)
 npm run db:reset   # schéma + seed d'un coup (⚠️ destructif)
 npm run seed:demo  # AJOUTE un gros jeu de données de démo (via les vrais services)
+npm run pdf:regenerer  # réimprime les diplômes existants après une correction de
+                       # mise en page. Sans danger : le hash et la signature portent
+                       # sur les DONNÉES, jamais sur le fichier — la vérification
+                       # publique répond exactement comme avant.
 npm run db:demo    # reset + seed + démo (données riches pour présentation)
 ```
 
@@ -354,7 +412,7 @@ npm run db:demo    # reset + seed + démo (données riches pour présentation)
 cd backend
 npm install
 npm run dev       # http://localhost:4000  (nodemon)
-npm test          # 278 tests — exécution SÉQUENTIELLE (--test-concurrency=1) :
+npm test          # 296 tests — exécution SÉQUENTIELLE (--test-concurrency=1) :
                   # les fichiers partagent la base certiftogo_test, et les écrire
                   # en parallèle corrompt le canal du test runner.
 ```
@@ -531,8 +589,8 @@ du numéro et du template par Meta.
 - ✅ **Seed de démo** (`npm run seed:demo`) : ~6 établissements, ~36 candidats,
   ~40 dossiers (tous statuts), ~20 diplômes (PDF/QR/hash réels), vérifications.
 - ✅ **Tests automatisés (Phase 8)** :
-  - Backend : `cd backend && npm test` — **278 tests** répartis en 6 fichiers.
-    - `api.test.js` (238) — intégration sur une base dédiée `certiftogo_test`,
+  - Backend : `cd backend && npm test` — **296 tests** répartis en 6 fichiers.
+    - `api.test.js` (255) — intégration sur une base dédiée `certiftogo_test`,
       recréée avant chaque exécution : auth OTP, RBAC, cycle de vie du dossier,
       certification, vérification publique, portefeuille candidat, admin et
       isolation inter-établissements ; référentiel académique et ses API ;
@@ -544,9 +602,12 @@ du numéro et du template par Meta.
       ERR-003 à ERR-006 ; sous-rôles d'établissement ; pièces justificatives
       (dépôt, instruction, intégrité) ; changement de numéro ; nomenclatures ;
       mention calculée ; traçabilité des clés de signature ; corbeille ;
-      traduction des erreurs techniques.
+      traduction des erreurs techniques ; grille de pièces et blocage à
+      l'émission ; instruction d'un lot par tranches successives ; dossiers
+      urgents et ordre de traitement ; fiche étudiant, des deux côtés.
     - `dates.test.js` (13) — `canoniserDate`, formes acceptées et refusées.
-    - `pdf.test.js` (8) — génération du diplôme imprimé.
+    - `pdf.test.js` (9) — génération du diplôme imprimé, dont le maintien du
+      bloc de signature sur un document saturé.
     - `securite.test.js` (5) — limitation de débit, jetons de session.
     - `signature.test.js` (7) — dont le refus de démarrer en production sans
       `MINISTERE_SIGNING_SECRET`.

@@ -268,7 +268,7 @@ ci-dessus : voici ce que seul le CDC mentionne.
 |---|---|---|---|
 | P-00 | **Refonte complète du frontend** — socle « service public » (DSFR/GOV.UK) appliqué aux quatre espaces du back-office et au front public. | 26 | ✅ |
 | P-01 | **Description écran par écran** : composition, actions, états vides, états d'erreur | 26.4 | 🔨 *les écrans portent leurs états ; la description reste à rédiger* |
-| P-02 | **Accessibilité et affichage mobile** | 26.5 | ⬜ *reporté avec la refonte* |
+| P-02 | **Accessibilité et affichage mobile** | 26.5 | 🔨 *navigation repliable sous 1024 px (la barre latérale disparaissait sans remplacement), lien d'évitement, focus visible, tableaux défilants, mouvement réduit ; audit RGAA complet restant* |
 | P-03 | **Tests de charge** : promotion de 12 000 diplômés | 31.4 | ⬜ |
 | P-04 | **Tests de sécurité** | 31.5 | ⬜ |
 | P-05 | Glossaire métier (français) et technique (anglais) | 1.3 | ✅ |
