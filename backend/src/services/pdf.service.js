@@ -89,6 +89,23 @@ function filigrane(doc, texte) {
   doc.opacity(1).restore();
 }
 
+/**
+ * Plus grande taille de police à laquelle le texte tient sur une seule
+ * ligne, sans descendre sous `min`.
+ *
+ * Un nom composé togolais — « Koffi Mawuli Sénamé Elom Kokou » — passe
+ * à la ligne en corps 20 et déséquilibre tout l'acte. Le rétrécir vaut
+ * mieux que le couper : c'est le nom du titulaire, il ne s'abrège pas.
+ */
+function tailleQuiTient(doc, texte, largeur, max, min, police = 'Helvetica-Bold') {
+  doc.font(police);
+  for (let taille = max; taille > min; taille -= 0.5) {
+    doc.fontSize(taille);
+    if (doc.widthOfString(texte) <= largeur) return taille;
+  }
+  return min;
+}
+
 /** Bandeau d'invalidité — un PDF survit toujours à sa validité. */
 function bandeauInvalide(doc, libelle, motif) {
   const y = doc.page.height / 2 - 40;
@@ -120,6 +137,7 @@ function bandeauInvalide(doc, libelle, motif) {
  * @param {string} [d.parcours]
  * @param {string} [d.annee_academique]
  * @param {string} [d.date_obtention]
+ * @param {string|Date} [d.date_certification] - date de l'acte ; à défaut, l'instant
  * @param {string} d.etablissement_nom
  * @param {number} [d.version]      - > 1 si le diplôme remplace un précédent
  * @param {string} [d.statut]       - 'actif' | 'revoque' | 'remplace'
@@ -202,58 +220,43 @@ export async function genererPdfDiplome(d) {
       doc.rect(gauche + i * largeurFilet, y, largeurFilet, 3).fillColor(couleur).fill();
     }
 
-    // ── Titre ────────────────────────────────────────────────────
-    y += 28;
-    doc.font('Helvetica-Bold').fontSize(26).fillColor(ENCRE);
-    doc.text('DIPLÔME', gauche, y, { width: largeur, align: 'center', characterSpacing: 4 });
-    y += 32;
-    doc.font('Helvetica').fontSize(11).fillColor(VERT);
-    doc.text(
-      (LIBELLES_TYPE_DIPLOME[d.type_diplome] || d.type_diplome || '').toUpperCase(),
-      gauche,
-      y,
-      { width: largeur, align: 'center', characterSpacing: 2 }
-    );
+    // ═════════════════════════════════════════════════════════════
+    // Mise en page : les extrémités sont ANCRÉES, le milieu fléchit.
+    //
+    // La version précédente empilait tout de haut en bas puis testait
+    // `if (ySignature < H - M - 96)` avant de dessiner la signature :
+    // sur un diplôme chargé — nom composé, établissement à rallonge —
+    // la condition tombait et le bloc de signature DISPARAISSAIT. Un
+    // acte administratif sans signature reste un acte à l'écran, mais
+    // plus rien sur le papier ; c'est le genre de défaut qu'on ne voit
+    // qu'en production, sur le diplôme de quelqu'un.
+    //
+    // Désormais : le pied de page et la signature sont posés depuis le
+    // BAS, l'en-tête depuis le haut, et l'espace restant est réparti
+    // entre les blocs du milieu. Quand la place manque, ce sont les
+    // respirations qui se resserrent — jamais le contenu qui saute.
+    // ═════════════════════════════════════════════════════════════
+    const yPied = H - M - 34;
+    const hauteurSignature = 66;
+    const yZoneSignature = yPied - 14 - hauteurSignature;
 
-    // ── Formule de certification ─────────────────────────────────
-    y += 30;
-    doc.font('Helvetica').fontSize(10).fillColor(GRIS);
-    doc.text(
-      "Le Ministre de l'Enseignement Supérieur et de la Recherche certifie que",
-      gauche,
-      y,
-      { width: largeur, align: 'center' }
-    );
-
-    y += 22;
+    // ── Contenu du milieu, mesuré avant d'être dessiné ────────────
+    const titreDiplome = (
+      LIBELLES_TYPE_DIPLOME[d.type_diplome] ||
+      d.type_diplome ||
+      ''
+    ).toUpperCase();
     const titulaire = `${d.candidat_prenom || ''} ${(d.candidat_nom || '').toUpperCase()}`.trim();
-    doc.font('Helvetica-Bold').fontSize(20).fillColor(ENCRE);
-    doc.text(titulaire || '—', gauche, y, { width: largeur, align: 'center' });
+    // Le nom du titulaire ne s'abrège pas : il rétrécit.
+    const tailleTitulaire = tailleQuiTient(doc, titulaire || '—', largeur, 20, 12);
 
-    // État civil : c'est ce qui distingue deux homonymes.
-    y += 26;
     const naissance = [
       dateEnToutesLettres(d.date_naissance) && `né(e) le ${dateEnToutesLettres(d.date_naissance)}`,
       d.lieu_naissance && `à ${d.lieu_naissance}`,
     ]
       .filter(Boolean)
       .join(' ');
-    if (naissance) {
-      doc.font('Helvetica-Oblique').fontSize(9.5).fillColor(GRIS);
-      doc.text(naissance, gauche, y, { width: largeur, align: 'center' });
-      y += 14;
-    }
 
-    doc.font('Helvetica').fontSize(10).fillColor(GRIS);
-    doc.text(
-      'a satisfait aux épreuves et obtenu le diplôme mentionné ci-dessus.',
-      gauche,
-      y,
-      { width: largeur, align: 'center' }
-    );
-
-    // ── Tableau des mentions ─────────────────────────────────────
-    y += 26;
     const champs = [
       ['Établissement', d.etablissement_nom],
       ['Filière', d.filiere],
@@ -264,13 +267,86 @@ export async function genererPdfDiplome(d) {
       ['Numéro étudiant', d.candidat_numero_etudiant],
     ].filter(([, v]) => v);
 
-    const hauteurLigne = 21;
-    const hauteurTable = champs.length * hauteurLigne;
+    // Chaque ligne prend la hauteur de sa valeur : le nom complet d'un
+    // établissement ne se tronque pas à l'ellipse sur un diplôme.
+    const largeurValeur = largeur - 176;
+    const lignes = champs.map(([label, valeur]) => {
+      doc.font('Helvetica-Bold').fontSize(10);
+      const hauteurTexte = doc.heightOfString(String(valeur), { width: largeurValeur });
+      return { label, valeur: String(valeur), hauteur: Math.max(21, hauteurTexte + 12) };
+    });
+    const hauteurTable = lignes.reduce((total, l) => total + l.hauteur, 0);
+
+    const tailleQr = 104;
+    const hauteurVerification = tailleQr + 18;
+
+    // Hauteurs incompressibles des blocs du milieu, dans l'ordre.
+    const blocs = [
+      32, // DIPLÔME
+      18, // type de diplôme
+      14, // « Le Ministre … certifie que »
+      tailleTitulaire + 6,
+      naissance ? 14 : 0,
+      14, // « a satisfait aux épreuves … »
+      hauteurTable,
+      hauteurVerification,
+    ];
+    const hauteurContenu = blocs.reduce((a, b) => a + b, 0);
+    const espaceLibre = yZoneSignature - y - 28 - hauteurContenu;
+    // Sept intervalles entre huit blocs. Bornés : trop serré devient
+    // illisible, trop lâche donne un document qui flotte.
+    const respiration = Math.max(4, Math.min(26, espaceLibre / 7));
+
+    // ── Titre ────────────────────────────────────────────────────
+    y += 28;
+    doc.font('Helvetica-Bold').fontSize(26).fillColor(ENCRE);
+    doc.text('DIPLÔME', gauche, y, { width: largeur, align: 'center', characterSpacing: 4 });
+    y += blocs[0];
+
+    doc.font('Helvetica').fontSize(11).fillColor(VERT);
+    doc.text(titreDiplome, gauche, y, {
+      width: largeur,
+      align: 'center',
+      characterSpacing: 2,
+    });
+    y += blocs[1] + respiration;
+
+    // ── Formule de certification ─────────────────────────────────
+    doc.font('Helvetica').fontSize(10).fillColor(GRIS);
+    doc.text(
+      "Le Ministre de l'Enseignement Supérieur et de la Recherche certifie que",
+      gauche,
+      y,
+      { width: largeur, align: 'center' }
+    );
+    y += blocs[2] + respiration;
+
+    doc.font('Helvetica-Bold').fontSize(tailleTitulaire).fillColor(ENCRE);
+    doc.text(titulaire || '—', gauche, y, { width: largeur, align: 'center', lineBreak: false });
+    y += blocs[3];
+
+    // État civil : c'est ce qui distingue deux homonymes.
+    if (naissance) {
+      doc.font('Helvetica-Oblique').fontSize(9.5).fillColor(GRIS);
+      doc.text(naissance, gauche, y, { width: largeur, align: 'center' });
+      y += blocs[4];
+    }
+
+    doc.font('Helvetica').fontSize(10).fillColor(GRIS);
+    doc.text(
+      'a satisfait aux épreuves et obtenu le diplôme mentionné ci-dessus.',
+      gauche,
+      y,
+      { width: largeur, align: 'center' }
+    );
+    y += blocs[5] + respiration;
+
+    // ── Tableau des mentions ─────────────────────────────────────
     doc.rect(gauche, y, largeur, hauteurTable).fillColor('#f7f9f8').fill();
     doc.rect(gauche, y, 3, hauteurTable).fillColor(VERT).fill();
 
-    champs.forEach(([label, valeur], i) => {
-      const yl = y + i * hauteurLigne;
+    let yl = y;
+    for (const [i, ligne] of lignes.entries()) {
       if (i > 0) {
         doc
           .moveTo(gauche + 12, yl)
@@ -280,15 +356,15 @@ export async function genererPdfDiplome(d) {
           .stroke();
       }
       doc.font('Helvetica').fontSize(9).fillColor(GRIS);
-      doc.text(label, gauche + 16, yl + 6.5, { width: 140 });
+      doc.text(ligne.label, gauche + 16, yl + 6.5, { width: 140 });
       doc.font('Helvetica-Bold').fontSize(10).fillColor(ENCRE);
-      doc.text(String(valeur), gauche + 160, yl + 6, { width: largeur - 176, ellipsis: true });
-    });
-    y += hauteurTable + 24;
+      doc.text(ligne.valeur, gauche + 160, yl + 6, { width: largeurValeur });
+      yl += ligne.hauteur;
+    }
+    y += hauteurTable + respiration;
 
     // ── Vérification : QR à gauche, empreintes à droite ──────────
     const yBloc = y;
-    const tailleQr = 104;
 
     try {
       doc.image(dataUrlEnBuffer(d.qrDataUrl), gauche, yBloc, { width: tailleQr });
@@ -347,28 +423,31 @@ export async function genererPdfDiplome(d) {
     empreinte('Signature numérique du ministère', d.signature);
 
     // ── Signature manuscrite ─────────────────────────────────────
-    const ySignature = Math.max(doc.y, yBloc + tailleQr + 24) + 14;
-    if (ySignature < H - M - 96) {
-      const xSig = gauche + largeur - 190;
-      doc.font('Helvetica').fontSize(8.5).fillColor(GRIS);
-      doc.text(
-        `Fait à Lomé, le ${dateEnToutesLettres(new Date())}`,
-        xSig,
-        ySignature,
-        { width: 190, align: 'center' }
-      );
-      doc
-        .moveTo(xSig + 20, ySignature + 44)
-        .lineTo(xSig + 170, ySignature + 44)
-        .lineWidth(0.6)
-        .strokeColor(GRIS_CLAIR)
-        .stroke();
-      doc.fontSize(8).fillColor(GRIS);
-      doc.text('Le Ministre', xSig, ySignature + 48, { width: 190, align: 'center' });
-    }
+    // Ancrée au bas de la page : elle ne dépend plus de ce qui la
+    // précède, donc elle ne peut plus manquer.
+    const ySignature = yZoneSignature;
+    const xSig = gauche + largeur - 190;
+
+    // La date de l'ACTE est celle de la certification, pas celle de
+    // l'impression. Régénérer le PDF deux ans plus tard ne doit pas
+    // redater le diplôme — ce serait réécrire l'acte à chaque tirage.
+    doc.font('Helvetica').fontSize(8.5).fillColor(GRIS);
+    doc.text(
+      `Fait à Lomé, le ${dateEnToutesLettres(d.date_certification || new Date())}`,
+      xSig,
+      ySignature,
+      { width: 190, align: 'center' }
+    );
+    doc
+      .moveTo(xSig + 20, ySignature + 44)
+      .lineTo(xSig + 170, ySignature + 44)
+      .lineWidth(0.6)
+      .strokeColor(GRIS_CLAIR)
+      .stroke();
+    doc.fontSize(8).fillColor(GRIS);
+    doc.text('Le Ministre', xSig, ySignature + 48, { width: 190, align: 'center' });
 
     // ── Pied de page ─────────────────────────────────────────────
-    const yPied = H - M - 34;
     doc
       .moveTo(gauche, yPied)
       .lineTo(gauche + largeur, yPied)

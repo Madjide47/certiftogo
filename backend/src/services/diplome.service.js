@@ -105,6 +105,9 @@ export async function construireDiplomeDepuisDossier(dossier) {
     parcours: dossier.parcours,
     annee_academique: dossier.annee_academique,
     date_obtention: dossier.date_obtention,
+    // Date de l'acte, figée ici : un PDF régénéré plus tard ne doit pas
+    // se redater, sinon le document contredirait la trace d'audit.
+    date_certification: new Date(),
     etablissement_nom: dossier.etablissement_nom,
     hash,
     signature,
