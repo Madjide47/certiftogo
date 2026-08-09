@@ -43,6 +43,13 @@ export default {
         fonce: '#8a6d00',
         clair: '#fff6d6',
       },
+      // Rouge du drapeau. Réservé au FILET TRICOLORE, jamais à un état :
+      // `erreur` est la seule couleur qui signifie qu'quelque chose ne va
+      // pas. Confondre les deux ferait lire une alerte dans un liseré
+      // décoratif — ou l'inverse, ce qui est pire.
+      rouge: {
+        DEFAULT: '#d21034',
+      },
 
       // Échelle de gris — la structure de l'interface.
       gris: {
