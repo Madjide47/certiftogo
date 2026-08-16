@@ -12,6 +12,7 @@ import pg from 'pg';
 import request from 'supertest';
 import ExcelJS from 'exceljs';
 import app from '../src/app.js';
+import * as references from '../src/services/reference.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cfg = {
@@ -136,6 +137,39 @@ describe('Vérification publique', () => {
     assert.equal(res.status, 400);
     assert.equal(res.body.error.code, 'LOT_TROP_GRAND');
     assert.equal(res.body.error.details.maximum, 50);
+  });
+});
+
+describe('Références métier — compteur atomique', () => {
+  // Le tirage aléatoire d'origine passait ces tests à 25 dossiers et
+  // échouait à 2 000 : c'est un banc de charge qui l'a révélé. On fige
+  // ici le volume qui faisait tomber l'ancienne version.
+  test('12 000 références attribuées, aucune collision', async () => {
+    const lot = await references.reserver('CT', 12000, null, 2099);
+    assert.equal(lot.length, 12000);
+    assert.equal(new Set(lot).size, 12000, 'toutes les références doivent différer');
+    // Au-delà de 99 999, la référence s'allonge plutôt que de boucler.
+    assert.match(lot[0], /^CT-2099-\d{5,}$/);
+  });
+
+  test('deux réservations simultanées obtiennent des plages disjointes', async () => {
+    const [a, b] = await Promise.all([
+      references.reserver('DIP', 500, null, 2098),
+      references.reserver('DIP', 500, null, 2098),
+    ]);
+    const ensemble = new Set([...a, ...b]);
+    assert.equal(ensemble.size, 1000, 'aucun numéro ne doit être attribué deux fois');
+  });
+
+  test('les numéros se suivent, sans trou dans une même réservation', async () => {
+    const lot = await references.reserver('LOT', 3, null, 2097);
+    const suffixes = lot.map((r) => Number(r.split('-')[2]));
+    assert.equal(suffixes[1], suffixes[0] + 1);
+    assert.equal(suffixes[2], suffixes[1] + 1);
+  });
+
+  test('un préfixe inconnu est refusé plutôt que composé au hasard', async () => {
+    await assert.rejects(() => references.reserver('XX', 1), /Préfixe de référence inconnu/);
   });
 });
 

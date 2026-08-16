@@ -17,7 +17,7 @@ import * as verificationService from '../src/services/verification.service.js';
 import * as promotionService from '../src/services/promotion.service.js';
 import * as lotService from '../src/services/lot.service.js';
 import * as pieceService from '../src/services/piece-jointe.service.js';
-import { genererReferenceDossier } from '../src/utils/reference-generator.js';
+import * as references from '../src/services/reference.service.js';
 
 const MINISTERE_ID = '10000000-0000-0000-0000-000000000001';
 
@@ -33,13 +33,10 @@ const VILLES_LIEU = ['Lomé','Kara','Sokodé','Kpalimé','Atakpamé','Dapaong','
 const rand = (a) => a[Math.floor(Math.random() * a.length)];
 const randInt = (n) => Math.floor(Math.random() * n);
 
-let refCounter = 1;
-async function refUnique() {
-  for (let i = 0; i < 8; i += 1) {
-    const r = genererReferenceDossier();
-    if (!(await dossierModel.referenceExiste(r))) return r;
-  }
-  return `CT-2025-${String(90000 + refCounter++).slice(-5)}`;
+// Même compteur que l'application : un seed qui numéroterait à sa façon
+// laisserait des références que le service pourrait réattribuer ensuite.
+function refUnique() {
+  return references.reserverUne('CT');
 }
 
 // Depuis la migration 004, un étudiant n'existe pas sans son identité

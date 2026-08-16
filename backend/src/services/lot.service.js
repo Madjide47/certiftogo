@@ -18,7 +18,7 @@ import * as inscriptionModel from '../models/inscription.model.js';
 import { controlerLot } from './controle.service.js';
 import * as pieces from './piece-jointe.service.js';
 import { ErreurApp, avecErreursSql } from '../utils/errors.js';
-import { genererReferenceDossier } from '../utils/reference-generator.js';
+import * as references from './reference.service.js';
 import { journaliser, journaliserStatutDossier, ACTIONS } from './audit.service.js';
 import * as notifications from './notification.service.js';
 import * as permissions from './permissions.service.js';
@@ -33,10 +33,9 @@ import {
 const STATUTS_LOT = ['transmis', 'en_examen', 'valide', 'partiellement_traite', 'rejete', 'certifie'];
 const INSTRUISABLES = ['transmis', 'en_examen'];
 
-/** Référence de lot : LOT-AAAA-XXXXX */
-function genererReferenceLot(annee = new Date().getFullYear()) {
-  return `LOT-${annee}-${String(Math.floor(Math.random() * 100000)).padStart(5, '0')}`;
-}
+// Les références sont attribuées par `reference.service.js`, sur un
+// compteur atomique. Le tirage aléatoire d'origine ne survivait pas à
+// une promotion de quelques milliers : voir la migration 020.
 
 // ── Transmission (établissement) ───────────────────────────────────
 
@@ -248,9 +247,16 @@ export async function transmettre(promotion_id, etablissement_id, agent, donnees
 
   return avecErreursSql(() =>
     withTransaction(async (client) => {
+      // Une seule réservation pour tout le lot : la promotion de 12 000
+      // de l'Université de Lomé obtient sa plage de références en un
+      // aller-retour, au lieu de 12 000 tirages dont deux finiraient par
+      // se heurter.
+      const [referenceLot] = await references.reserver('LOT', 1, client);
+      const referencesDossiers = await references.reserver('CT', admis.length, client);
+
       const lot_id = await lotModel.creer(
         {
-          reference: genererReferenceLot(),
+          reference: referenceLot,
           promotion_id,
           etablissement_id,
           agent_emetteur_id: agent.utilisateur_id,
@@ -259,7 +265,7 @@ export async function transmettre(promotion_id, etablissement_id, agent, donnees
         client
       );
 
-      for (const inscription of admis) {
+      for (const [rang, inscription] of admis.entries()) {
         // L'urgence déclarée sur l'inscription suit le dossier : sans ce
         // report, l'établissement aurait signalé un cas pressant que le
         // ministère ne verrait jamais.
@@ -274,7 +280,7 @@ export async function transmettre(promotion_id, etablissement_id, agent, donnees
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'soumis', now(), $9, $10, $11,
                    $12, $13, $14, $15, $16)`,
           [
-            genererReferenceDossier(),
+            referencesDossiers[rang],
             etablissement_id,
             inscription.candidat_id,
             promotion.filiere_nom,

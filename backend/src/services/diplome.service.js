@@ -16,7 +16,7 @@ import { journaliser, journaliserStatutDossier, ACTIONS } from './audit.service.
 import * as quatreYeux from './validation-critique.service.js';
 import * as notifications from './notification.service.js';
 import { ErreurApp } from '../utils/errors.js';
-import { genererReferenceDiplome } from '../utils/reference-generator.js';
+import * as references from './reference.service.js';
 import { estUuidValide } from '../utils/validators.js';
 import { calculerHash } from './hash.service.js';
 import { signer, empreinteCle, verifier as verifierSignature } from './signature.service.js';
@@ -61,13 +61,9 @@ function construireSnapshot(dossier) {
   };
 }
 
-/** Génère une référence DIP-AAAA-XXXXX unique. */
-async function genererReferenceUnique() {
-  for (let i = 0; i < 5; i += 1) {
-    const reference = genererReferenceDiplome();
-    if (!(await diplomeModel.referenceExiste(reference))) return reference;
-  }
-  throw new ErreurApp(500, 'REFERENCE_INDISPONIBLE', 'Impossible de générer une référence unique.');
+/** Attribue une référence DIP-AAAA-XXXXX (compteur atomique, migration 020). */
+function genererReferenceUnique() {
+  return references.reserverUne('DIP');
 }
 
 /**

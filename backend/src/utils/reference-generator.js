@@ -1,28 +1,12 @@
 // ─────────────────────────────────────────────────────────────
-// Génération des références métier (dossiers, diplômes).
-// Formats : CT-AAAA-XXXXX (dossier) et DIP-AAAA-XXXXX (diplôme).
-// (Utilisé à partir de la Phase 3 ; défini ici pour cohérence.)
+// Composition du code officiel d'un établissement.
+//
+// Les générateurs de références métier vivaient ici. Ils tiraient un
+// suffixe au hasard sur cinq chiffres, ce qui ne résiste pas au volume :
+// voir `services/reference.service.js` et la migration 020, qui les
+// remplacent par un compteur atomique. Ce fichier ne garde que ce qui
+// n'a rien à voir avec la numérotation.
 // ─────────────────────────────────────────────────────────────
-
-function suffixeAleatoire(longueur = 5) {
-  const max = 10 ** longueur;
-  return String(Math.floor(Math.random() * max)).padStart(longueur, '0');
-}
-
-/** Référence de dossier : CT-AAAA-XXXXX */
-export function genererReferenceDossier(annee = new Date().getFullYear()) {
-  return `CT-${annee}-${suffixeAleatoire()}`;
-}
-
-/** Référence de diplôme : DIP-AAAA-XXXXX */
-export function genererReferenceDiplome(annee = new Date().getFullYear()) {
-  return `DIP-${annee}-${suffixeAleatoire()}`;
-}
-
-/** Référence de demande d'intégration : DI-AAAA-XXXXX */
-export function genererReferenceDemande(annee = new Date().getFullYear()) {
-  return `DI-${annee}-${suffixeAleatoire()}`;
-}
 
 /**
  * Initiales d'un nom d'établissement, pour composer son code officiel.

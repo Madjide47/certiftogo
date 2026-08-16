@@ -27,6 +27,10 @@ function vuePublique(d, resultat) {
     date_certification: d.date_certification,
     hash: d.hash_sha256,
     transaction_id: d.transaction_id,
+    // Le QR encode l'adresse publique de vérification : il est fait pour
+    // circuler, et le rendre disponible ici évite au vérificateur de
+    // retaper une référence pour la transmettre à un tiers.
+    qr_url: d.qr_code_url,
     motif_revocation: d.statut === 'revoque' ? d.motif_revocation : null,
     version: d.version,
     message:
