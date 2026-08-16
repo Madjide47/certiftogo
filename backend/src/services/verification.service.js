@@ -8,6 +8,7 @@ import * as diplomeModel from '../models/diplome.model.js';
 import * as verificationModel from '../models/verification.model.js';
 import * as blockchain from './blockchain.service.js';
 import * as notifications from './notification.service.js';
+import { ErreurApp } from '../utils/errors.js';
 
 const METHODES = ['hash', 'qr', 'pdf'];
 const RE_HASH = /^[0-9a-f]{64}$/i;
@@ -103,6 +104,93 @@ export async function verifier(valeur, { methode = 'hash', ip = null, userAgent 
   }
 
   return vue;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Vérification par lot.
+//
+// Un employeur qui recrute une promotion entière, un service des
+// équivalences qui instruit un dossier de plusieurs diplômes : vérifier
+// vaut la peine seulement si vérifier est plus rapide que téléphoner.
+// Un par un, c'est un formulaire à remplir vingt fois — en pratique,
+// personne ne le fait, et la fraude passe.
+//
+// C'est aussi la plus petite forme utile de l'API d'intégration (N-04) :
+// elle ouvre l'usage machine sans construire encore le dispositif de
+// clés, de quotas et de webhooks que celui-ci suppose.
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Plafond de codes par appel. Il n'est pas là pour économiser la base —
+ * la requête est indexée — mais pour empêcher qu'un appel unique
+ * contourne la limitation de débit et serve à énumérer les références.
+ */
+const MAX_CODES_PAR_LOT = 50;
+
+/**
+ * Vérifications menées de front. En mode `onchain`, chaque vérification
+ * comporte une lecture RPC ; enchaînées, cinquante lectures tiendraient
+ * une minute. Toutes lancées ensemble, le fournisseur RPC nous limite.
+ */
+const CONCURRENCE = 5;
+
+/**
+ * Vérifie plusieurs diplômes en un appel.
+ *
+ * Chaque code est traité indépendamment : un code introuvable n'invalide
+ * pas les autres, il ressort simplement `introuvable`. L'ordre de la
+ * réponse suit celui de la demande, pour que l'appelant puisse rapprocher
+ * les résultats de sa propre liste sans se fier aux références.
+ *
+ * @param {string[]} codes
+ * @param {{ methode?: string, ip?: string, userAgent?: string }} [ctx]
+ * @returns {Promise<{ demandes: number, resultats: object[], synthese: object }>}
+ */
+export async function verifierLot(codes, ctx = {}) {
+  if (!Array.isArray(codes) || codes.length === 0) {
+    throw new ErreurApp(
+      400,
+      'CODES_REQUIS',
+      'Fournissez un tableau « codes » contenant au moins une référence ou empreinte.'
+    );
+  }
+
+  if (codes.length > MAX_CODES_PAR_LOT) {
+    throw new ErreurApp(
+      400,
+      'LOT_TROP_GRAND',
+      `Un appel porte au plus ${MAX_CODES_PAR_LOT} codes ; ${codes.length} ont été fournis.`,
+      { maximum: MAX_CODES_PAR_LOT, fournis: codes.length }
+    );
+  }
+
+  const demandes = codes.map((c) => (typeof c === 'string' ? c.trim() : ''));
+
+  // Les doublons sont fréquents dans une liste collée depuis un tableur.
+  // On ne vérifie qu'une fois et on redistribue : sinon le titulaire
+  // reçoit plusieurs avis de consultation pour un seul examen, et le
+  // journal compte des vérifications qui n'ont pas eu lieu.
+  const uniques = [...new Set(demandes)];
+  const parCode = new Map();
+
+  for (let i = 0; i < uniques.length; i += CONCURRENCE) {
+    const tranche = uniques.slice(i, i + CONCURRENCE);
+    const vues = await Promise.all(tranche.map((code) => verifier(code, ctx)));
+    tranche.forEach((code, j) => parCode.set(code, vues[j]));
+  }
+
+  const resultats = demandes.map((code, index) => ({
+    index,
+    code,
+    ...parCode.get(code),
+  }));
+
+  const synthese = resultats.reduce(
+    (acc, r) => ({ ...acc, [r.resultat]: (acc[r.resultat] || 0) + 1 }),
+    {}
+  );
+
+  return { demandes: demandes.length, verifies: uniques.length, resultats, synthese };
 }
 
 /**

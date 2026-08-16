@@ -104,6 +104,39 @@ describe('Vérification publique', () => {
     assert.equal(res.status, 200);
     assert.equal(res.body.data.resultat, 'introuvable');
   });
+
+  test('lot : chaque code répond pour lui-même, dans l\'ordre demandé', async () => {
+    const codes = ['DIP-0000-00001', 'DIP-0000-00002', 'DIP-0000-00003'];
+    const res = await api().post('/api/verification/lot').send({ codes });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.demandes, 3);
+    assert.deepEqual(res.body.data.resultats.map((r) => r.code), codes);
+    assert.equal(res.body.data.synthese.introuvable, 3);
+  });
+
+  test('lot : les doublons ne sont vérifiés qu\'une fois', async () => {
+    const res = await api()
+      .post('/api/verification/lot')
+      .send({ codes: ['DIP-0000-00001', 'DIP-0000-00001', 'DIP-0000-00002'] });
+    assert.equal(res.body.data.demandes, 3);
+    assert.equal(res.body.data.verifies, 2);
+    // La réponse reste alignée sur la demande, doublon compris.
+    assert.equal(res.body.data.resultats.length, 3);
+  });
+
+  test('lot vide → 400 CODES_REQUIS', async () => {
+    const res = await api().post('/api/verification/lot').send({ codes: [] });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'CODES_REQUIS');
+  });
+
+  test('lot au-delà du plafond → 400 LOT_TROP_GRAND', async () => {
+    const codes = Array.from({ length: 51 }, (_, i) => `DIP-0000-${String(i).padStart(5, '0')}`);
+    const res = await api().post('/api/verification/lot').send({ codes });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error.code, 'LOT_TROP_GRAND');
+    assert.equal(res.body.error.details.maximum, 50);
+  });
 });
 
 describe('Parcours complet : saisie → certification → vérification → révocation', () => {
@@ -140,6 +173,17 @@ describe('Parcours complet : saisie → certification → vérification → rév
 
     assert.equal((await api().get(`/api/verification/${diplome.hash_sha256}`)).body.data.resultat, 'authentique');
     assert.equal((await api().get(`/api/verification/${diplome.reference}`)).body.data.resultat, 'authentique');
+
+    // Le même diplôme, vu par la vérification par lot : un code
+    // authentique et un code inconnu voyagent ensemble sans se gêner.
+    const lot = await api()
+      .post('/api/verification/lot')
+      .send({ codes: [diplome.reference, 'DIP-0000-00000'] });
+    assert.equal(lot.status, 200);
+    assert.equal(lot.body.data.resultats[0].resultat, 'authentique');
+    assert.equal(lot.body.data.resultats[0].titulaire, `${candidat.prenom} ${candidat.nom}`);
+    assert.equal(lot.body.data.resultats[1].resultat, 'introuvable');
+    assert.deepEqual(lot.body.data.synthese, { authentique: 1, introuvable: 1 });
 
     // Double certification interdite.
     assert.equal((await api().post(`/api/ministere/dossiers/${dossierId}/certifier`).set(auth(tMin))).status, 409);
