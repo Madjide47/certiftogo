@@ -1,0 +1,21 @@
+# Ce qui ne doit jamais entrer dans l'image.
+node_modules
+npm-debug.log
+
+# Secrets : ils viennent de l'environnement au démarrage, pas de l'image.
+.env
+.env.*
+!.env.example
+
+# Fichiers produits à l'exécution — montés en volume, pas copiés.
+uploads
+stockage
+
+# Inutile en production.
+tests
+coverage
+*.md
+.git
+.gitignore
+Dockerfile
+.dockerignore

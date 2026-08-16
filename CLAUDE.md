@@ -387,6 +387,18 @@ certiftogo/
 
 ## 7. Commandes utiles
 
+### Pile complète en conteneurs (démonstration)
+```bash
+docker compose --profile complet up -d --build
+#   API          http://localhost:4000
+#   back-office  http://localhost:5173
+#   public       http://localhost:5174
+docker compose --profile complet ps    # état de santé des 4 conteneurs
+```
+> Sans `--profile complet`, seule la base démarre : c'est le mode de travail
+> quotidien (`npm run dev` et rechargement à chaud). Détail en
+> [`docs/DEPLOIEMENT.md`](docs/DEPLOIEMENT.md) §0.
+
 ### Base de données
 ```bash
 # Option Docker (à la racine)

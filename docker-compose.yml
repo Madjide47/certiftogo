@@ -1,10 +1,19 @@
 # ─────────────────────────────────────────────────────────────
-# PostgreSQL local pour CertifTOGO (optionnel).
-# À utiliser si vous préférez Docker plutôt qu'un PostgreSQL installé.
+# CertifTOGO — orchestration locale.
 #
-#   docker compose up -d        # démarre la base
-#   docker compose down         # arrête la base (données conservées)
-#   docker compose down -v      # arrête + supprime les données
+# Deux usages, volontairement séparés par un profil :
+#
+#   docker compose up -d                      # la base seule (défaut)
+#   docker compose --profile complet up -d    # base + API + les 2 fronts
+#   docker compose down                       # arrête (données conservées)
+#   docker compose down -v                    # arrête + efface les données
+#
+# Le défaut reste la base seule, parce que c'est le mode de travail
+# quotidien : on veut `npm run dev` et son rechargement à chaud, pas une
+# reconstruction d'image à chaque ligne écrite. Le profil `complet`
+# existe pour la démonstration et la répétition de soutenance — il donne
+# en une commande l'état exact que verra le jury, sans dépendre de trois
+# terminaux ouverts au bon endroit.
 # ─────────────────────────────────────────────────────────────
 services:
   postgres:
@@ -28,5 +37,81 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── API Express ────────────────────────────────────────────────────
+  api:
+    profiles: [complet]
+    build:
+      context: ./backend
+    container_name: certiftogo_api
+    restart: unless-stopped
+    env_file:
+      # Secrets et réglages métier (JWT_SECRET, MINISTERE_SIGNING_SECRET,
+      # mode blockchain, mode WhatsApp…). Le fichier n'est pas versionné.
+      - ./backend/.env
+    environment:
+      # Ces quatre-là écrasent le .env : à l'intérieur du réseau Docker,
+      # la base ne s'appelle pas « localhost:5433 » mais « postgres:5432 ».
+      # Sans cette réécriture, l'API cherche PostgreSQL dans son propre
+      # conteneur et échoue au démarrage.
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-certiftogo}
+      PGUSER: ${POSTGRES_USER:-certiftogo}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-certiftogo_dev}
+      # Une URL de connexion héritée du .env serait prioritaire dans le
+      # code et annulerait les cinq lignes ci-dessus : on la neutralise.
+      DATABASE_URL: ""
+      NODE_ENV: production
+      PORT: 4000
+      # Les fronts sont servis par nginx sur ces deux ports.
+      CORS_ORIGINS: http://localhost:${PORT_BACK_OFFICE:-5173},http://localhost:${PORT_PUBLIC:-5174}
+      PUBLIC_BASE_URL: http://localhost:${PORT_API:-4000}
+      # Encodée dans les QR codes : c'est l'adresse que le téléphone du
+      # jury ouvrira, elle doit donc être joignable depuis l'extérieur
+      # du conteneur.
+      PUBLIC_VERIFY_URL: http://localhost:${PORT_PUBLIC:-5174}/verifier
+    ports:
+      - "${PORT_API:-4000}:4000"
+    volumes:
+      # Les PDF, QR et pièces justificatives survivent à la reconstruction
+      # de l'image : ce sont des données, pas du code.
+      - certiftogo_uploads:/app/uploads
+      - certiftogo_stockage:/app/stockage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── Back-office (React, espace privé OTP) ──────────────────────────
+  back-office:
+    profiles: [complet]
+    build:
+      context: ./frontend-back-office
+      args:
+        # Bâties au build : Vite fige `import.meta.env` dans le bundle.
+        VITE_API_URL: http://localhost:${PORT_API:-4000}/api
+        VITE_PUBLIC_URL: http://localhost:${PORT_PUBLIC:-5174}
+    container_name: certiftogo_back_office
+    restart: unless-stopped
+    ports:
+      - "${PORT_BACK_OFFICE:-5173}:80"
+    depends_on:
+      - api
+
+  # ── Front-office public (vérification) ─────────────────────────────
+  public:
+    profiles: [complet]
+    build:
+      context: ./frontend-public
+      args:
+        VITE_API_URL: http://localhost:${PORT_API:-4000}/api
+    container_name: certiftogo_public
+    restart: unless-stopped
+    ports:
+      - "${PORT_PUBLIC:-5174}:80"
+    depends_on:
+      - api
+
 volumes:
   certiftogo_pgdata:
+  certiftogo_uploads:
+  certiftogo_stockage:
