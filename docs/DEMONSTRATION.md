@@ -193,6 +193,14 @@ révoqué.
 Montrer : les deux fiches, le PDF, le QR, le lien de vérification publique, et
 le **compteur de consultations**.
 
+> **Ses deux diplômes afficheront « non inscrit sur la chaîne ».** Le dire
+> avant qu'on le remarque : *« ce portefeuille vient du jeu de démonstration,
+> certifié en simulation. Le serveur a bel et bien interrogé la chaîne — c'est
+> pour cela qu'il peut l'affirmer — et il ne prétend pas y avoir écrit. Les
+> diplômes réellement ancrés sont ceux de l'onglet 2. »* La plateforme ne
+> confond pas « je n'ai pas écrit » et « ce n'est pas là » : c'est un point
+> fort, à condition de l'énoncer soi-même.
+
 > *« Il voit combien de fois son diplôme a été vérifié, et quand. Jamais par
 > qui : un candidat n'a pas à savoir quel employeur l'a contrôlé. »*
 

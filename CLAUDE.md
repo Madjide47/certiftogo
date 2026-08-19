@@ -715,8 +715,20 @@ Le contrat `RegistreDiplomes` est déployé et **vérifié** sur le testnet publ
   signe avec **la même clé** que le déploiement, aucun appel `autoriser()` requis.
 - `hardhat-verify` exige le format de clé **Etherscan API V2** (une clé unique,
   `etherscan: { apiKey: '…' }`) ; l'ancien format par réseau est rejeté.
-- **Coût réel ≈ 0,0075 POL par opération** (certification ou révocation).
-  Prévoir le solde en conséquence ; faucet : https://faucet.polygon.technology
+- **Coût réel : 146 704 gas par certification**, soit ≈ 0,0044 POL au prix
+  observé le 19/08/2026 (30 gwei). Le chiffre en POL suit le marché — mesurer
+  plutôt que le citer :
+
+  ```bash
+  node -e "import('ethers').then(async({ethers})=>{const p=new ethers.JsonRpcProvider(process.env.BLOCKCHAIN_RPC_URL);console.log(ethers.formatEther(await p.getBalance('0x038151d7d0A18B4fe604C94EeE72D8913A3b871D')),'POL')})"
+  ```
+
+  > ⚠️ **Le portefeuille est à sec** : 0,0125 POL au 19/08/2026, soit **2
+  > opérations**. C'est la marge de secours pour réancrer les diplômes vitrine
+  > après un incident, pas un budget disponible. **Le POL d'Amoy est gratuit**
+  > (testnet) : recharger au faucet https://faucet.polygon.technology **bien
+  > avant** d'en avoir besoin — il est plafonné par jour et exige parfois une
+  > authentification, ce qu'on ne découvre pas la veille d'une soutenance.
 - ⚠️ **Données mixtes en base de démo** : les diplômes issus de `seed:demo` sont
   ancrés en mode `mock` — leurs hash **ne sont pas** sur le contrat, et la
   vérification publique renvoie honnêtement `ancrage_blockchain.ancre = false`.
