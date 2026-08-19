@@ -396,8 +396,10 @@ docker compose --profile complet up -d --build
 #   public       http://localhost:5174
 docker compose --profile complet ps    # état de santé des 4 conteneurs
 
-# Hydrater les fichiers générés (PDF et QR) — À FAIRE APRÈS UN `down -v` :
-docker cp backend/uploads/. certiftogo_api:/app/uploads/
+# Hydrater les fichiers — À FAIRE APRÈS UN `down -v`, et après tout script
+# lancé depuis l'hôte (seed, equiper-promotion) qui écrit hors du conteneur :
+docker cp backend/uploads/.  certiftogo_api:/app/uploads/     # PDF et QR
+docker cp backend/stockage/. certiftogo_api:/app/stockage/    # pièces justificatives
 ```
 
 > Sans `--profile complet`, seule la base démarre : c'est le mode de travail
@@ -412,6 +414,13 @@ docker cp backend/uploads/. certiftogo_api:/app/uploads/
 > s'affichent cassés. Le volume n'est pas en tort : c'est le bon emballage pour
 > une image qui doit tourner ailleurs. C'est le couple base-hors-conteneur /
 > fichiers-dans-le-conteneur qu'il faut recoller, une fois, à la main.
+
+> **`stockage/` se recolle pour une raison de plus.** Un script lancé depuis
+> l'hôte (`seed:demo`, `equiper-promotion.mjs`) écrit les pièces dans
+> `backend/stockage/`, sur Windows — pendant que l'API du conteneur lit
+> `/app/stockage`, sous Linux. Sans la copie, l'instruction des pièces répond
+> « document absent » sur des fichiers pourtant déposés, et **aucun lot ne peut
+> être validé** puisqu'une pièce obligatoire non examinée bloque la décision.
 
 ### Base de données
 ```bash
