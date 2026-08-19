@@ -375,6 +375,7 @@ certiftogo/
 ├── blockchain/       Solidity/Hardhat (contrat RegistreDiplomes)
 ├── docs/
 │   ├── CDC-V2.md              cahier des charges (+ docs/cdc/)
+│   ├── DEMONSTRATION.md       déroulé minuté de la soutenance
 │   ├── BACKLOG-V2.md          reste à faire
 │   ├── DEPLOIEMENT.md         blueprint Render
 │   ├── WHATSAPP.md            bascule mock → cloud
