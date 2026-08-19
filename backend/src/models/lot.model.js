@@ -22,12 +22,21 @@ const FROM = `FROM lots_transmission l
          LEFT JOIN utilisateurs ag      ON ag.id = l.agent_emetteur_id`;
 
 /** File d'attente du ministère : un lot par ligne, pas 250 dossiers. */
-export async function lister({ statut = null, etablissement_id = null } = {}) {
+export async function lister({ statut = null, etablissement_id = null, a_certifier = false } = {}) {
   const params = [];
   const filtres = [];
   if (statut) {
     params.push(statut);
     filtres.push(`l.statut = $${params.length}`);
+  }
+  // « À certifier » est une question sur le CONTENU du lot, pas sur son
+  // étiquette : un lot `partiellement_traite` porte des dossiers validés
+  // au même titre qu'un lot `valide`. Filtrer sur le statut du lot les
+  // laissait hors de la file, et l'agent ne les retrouvait plus.
+  if (a_certifier) {
+    filtres.push(
+      `EXISTS (SELECT 1 FROM dossiers d WHERE d.lot_id = l.id AND d.statut = 'valide')`
+    );
   }
   if (etablissement_id) {
     params.push(etablissement_id);
@@ -176,4 +185,23 @@ export async function compterParStatut() {
     `SELECT statut, COUNT(*)::int AS total FROM lots_transmission GROUP BY statut`
   );
   return rows;
+}
+
+/**
+ * Dossiers validés qui attendent leur certification, tous lots confondus.
+ *
+ * Compter les LOTS étiquetés `valide` sous-estime le travail restant : un
+ * lot `partiellement_traite` porte lui aussi des dossiers validés, prêts à
+ * certifier. Son étiquette dit où en est son instruction, pas ce qu'il
+ * reste à faire — et l'agent perdait de vue des dossiers en attente parce
+ * que le lot qui les contient portait le mauvais nom.
+ */
+export async function compterDossiersACertifier() {
+  const { rows } = await query(
+    `SELECT COUNT(*)::int AS total,
+            COUNT(DISTINCT lot_id)::int AS lots
+       FROM dossiers
+      WHERE statut = 'valide' AND lot_id IS NOT NULL`
+  );
+  return rows[0] || { total: 0, lots: 0 };
 }

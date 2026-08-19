@@ -361,12 +361,23 @@ export async function transmettre(promotion_id, etablissement_id, agent, donnees
 // ── Instruction (ministère) ────────────────────────────────────────
 
 export async function lister({ statut } = {}) {
-  if (!estDansEnum(statut, STATUTS_LOT)) {
+  // `a_certifier` n'est pas un statut de lot mais une question sur son
+  // contenu : « reste-t-il ici des dossiers validés à certifier ? ». Elle
+  // traverse deux étiquettes — `valide` et `partiellement_traite` — et
+  // c'est justement ce que l'agent cherche.
+  const filtreContenu = nettoyerTexte(statut) === 'a_certifier';
+  if (!filtreContenu && !estDansEnum(statut, STATUTS_LOT)) {
     throw new ErreurApp(400, 'STATUT_INVALIDE', 'Statut de lot inconnu.');
   }
-  const lots = await lotModel.lister({ statut: nettoyerTexte(statut) });
+  const lots = await lotModel.lister(
+    filtreContenu ? { a_certifier: true } : { statut: nettoyerTexte(statut) }
+  );
   const repartition = await lotModel.compterParStatut();
-  return { lots, repartition };
+  // Le reste à faire ne se lit pas dans l'étiquette des lots : un lot
+  // `partiellement_traite` porte des dossiers validés qui attendent leur
+  // certification au même titre qu'un lot `valide`.
+  const a_certifier = await lotModel.compterDossiersACertifier();
+  return { lots, repartition, a_certifier };
 }
 
 export async function recuperer(id) {
