@@ -8,11 +8,47 @@ Durée visée : **15 minutes**, hors questions.
 
 ---
 
-## 0. Avant d'entrer dans la salle (5 min, la veille)
+## 0. Avant d'entrer dans la salle
+
+### 0a. Le réseau, EN PREMIER (5 min, sur place)
+
+**À faire une fois connecté au réseau que partagera le jury** — partage de
+connexion depuis ton téléphone, de préférence : tu le maîtrises, le Wi-Fi d'une
+école non.
 
 ```bash
-docker compose --profile complet up -d --build
-docker cp backend/uploads/. certiftogo_api:/app/uploads/   # sinon PDF et QR en 404
+cd backend && node scripts/preparer-demo.mjs   # détecte l'adresse, régénère les QR
+cd .. && docker compose --profile complet up -d --build
+docker cp backend/uploads/. certiftogo_api:/app/uploads/
+```
+
+> **Pourquoi ce n'est pas optionnel.** Les QR encodent l'adresse de la page de
+> vérification. Par défaut `http://localhost:5174/…` — parfait sur la machine,
+> **inutilisable ailleurs** : sur le téléphone du jury, `localhost` désigne le
+> téléphone lui-même. Le QR ne mène nulle part, et l'argument le plus fort de la
+> démonstration tombe. L'adresse change à chaque réseau, d'où un script qui la
+> détecte plutôt qu'une valeur écrite en dur, garantie d'être fausse le jour J.
+>
+> Le `--build` n'est pas décoratif non plus : Vite fige l'adresse de l'API dans
+> le bundle. Sans reconstruction, le téléphone qui ouvre la page appellerait
+> « localhost:4000 », c'est-à-dire lui-même.
+
+**Puis, DEPUIS UN TÉLÉPHONE du réseau**, ouvrir `http://<adresse>:5174`. Si la
+machine y accède mais pas le téléphone, c'est le pare-feu Windows : autoriser
+les ports 4000 et 5174 en entrée, profil « réseau privé », dans un terminal
+administrateur.
+
+```powershell
+New-NetFirewallRule -DisplayName "CertifTOGO demo" -Direction Inbound `
+  -Protocol TCP -LocalPort 4000,5173,5174 -Action Allow -Profile Private
+```
+
+> Pour revenir au fonctionnement local : `node scripts/preparer-demo.mjs --localhost`,
+> puis le même `up -d --build`.
+
+### 0b. Vérifications (2 min)
+
+```bash
 docker compose --profile complet ps                        # 4 conteneurs "healthy"
 ```
 
@@ -24,7 +60,8 @@ curl -s -o /dev/null -w '%{http_code}\n' localhost:4000/uploads/qr-DIP-2026-8347
 curl -s -o /dev/null -w '%{http_code}\n' localhost:5174/demonstration
 ```
 
-Attendus : `"ancre":true`, puis `200`, puis `200`.
+Attendus : `"ancre":true`, puis `200`, puis `200`. Remplacer `localhost` par
+l'adresse réseau si l'étape 0a a été faite.
 
 **Onglets à ouvrir d'avance**, dans cet ordre :
 
@@ -186,6 +223,7 @@ et le lien vers l'explorateur.
 | Montrer la CI GitHub | Les jobs échouent en 2 s, sans une seule étape exécutée : c'est le blocage de facturation Actions, pas le code. Montrer la sortie locale des 304 tests. |
 | Improviser une référence | Les diplômes du seed sont ancrés en `mock` et répondront `ancré : non`. Utiliser celles de ce document. |
 | Oublier `docker cp` après un `down -v` | Tous les PDF et QR repassent en 404 : portefeuille vide, QR cassés. |
+| Changer de réseau sans rejouer l'étape 0a | Les QR gardent l'ancienne adresse et ne mènent plus nulle part. Un partage de connexion rouvert n'attribue pas forcément la même IP. |
 
 ## Aide-mémoire
 

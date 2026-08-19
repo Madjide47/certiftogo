@@ -30,6 +30,23 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 /** Racine des fichiers servis en statique (QR, PDF) : l'API sans /api. */
 const FICHIERS = API.replace(/\/api\/?$/, '');
 
+/**
+ * Adresse d'un fichier servi par l'API.
+ *
+ * `qr_url` arrive ABSOLUE de la vérification publique
+ * (`http://localhost:4000/uploads/qr-….png`) : la préfixer une seconde fois
+ * produisait `http://localhost:4000http://localhost:4000/uploads/…`, donc une
+ * image cassée — et un QR cassé sur la page faite pour être scannée.
+ *
+ * On ne « corrige » pas l'API pour autant : une URL absolue est ce qu'attend
+ * un QR imprimé, qui sera lu hors de tout contexte de page. C'est au client de
+ * savoir qu'une adresse déjà complète se laisse tranquille.
+ */
+function urlFichier(chemin) {
+  if (!chemin) return null;
+  return /^https?:\/\//i.test(chemin) ? chemin : `${FICHIERS}${chemin}`;
+}
+
 const REFERENCES = (
   import.meta.env.VITE_DEMO_REFERENCES || 'DIP-2026-83470,DIP-2026-91564'
 )
@@ -117,12 +134,21 @@ function Carte({ diplome }) {
       </div>
 
       <div className="flex flex-wrap gap-5 px-5 py-4">
+        {/* Assez grand pour être lu depuis une salle : un QR de 128 px
+            projeté au mur ne se scanne pas. Cliquable, aussi, pour qui
+            regarde l'écran de près plutôt qu'avec son téléphone. */}
         {diplome.qr_url && (
-          <img
-            src={`${FICHIERS}${diplome.qr_url}`}
-            alt={`QR code de vérification du diplôme ${diplome.reference}`}
-            className="h-32 w-32 shrink-0 border border-gris-300 bg-white"
-          />
+          <a
+            href={`/verifier/${diplome.reference}`}
+            className="shrink-0"
+            aria-label={`Vérifier le diplôme ${diplome.reference}`}
+          >
+            <img
+              src={urlFichier(diplome.qr_url)}
+              alt={`QR code de vérification du diplôme ${diplome.reference}`}
+              className="h-48 w-48 border border-gris-300 bg-white p-2"
+            />
+          </a>
         )}
 
         <div className="min-w-56 flex-1">

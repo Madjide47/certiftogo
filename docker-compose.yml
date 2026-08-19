@@ -74,13 +74,18 @@ services:
       # démonstration. Sans effet dès que WHATSAPP_MODE=cloud : un code
       # réellement envoyé n'est jamais réaffiché. À retirer en production.
       OTP_AFFICHE_CODE: "true"
-      # Les fronts sont servis par nginx sur ces deux ports.
-      CORS_ORIGINS: http://localhost:${PORT_BACK_OFFICE:-5173},http://localhost:${PORT_PUBLIC:-5174}
-      PUBLIC_BASE_URL: http://localhost:${PORT_API:-4000}
+      # Les fronts sont servis par nginx sur ces deux ports. Les deux
+      # origines sont admises : la machine elle-même continue de marcher
+      # en `localhost` quand HOTE_DEMO pointe ailleurs.
+      CORS_ORIGINS: http://localhost:${PORT_BACK_OFFICE:-5173},http://localhost:${PORT_PUBLIC:-5174},http://${HOTE_DEMO:-localhost}:${PORT_BACK_OFFICE:-5173},http://${HOTE_DEMO:-localhost}:${PORT_PUBLIC:-5174}
+      PUBLIC_BASE_URL: http://${HOTE_DEMO:-localhost}:${PORT_API:-4000}
       # Encodée dans les QR codes : c'est l'adresse que le téléphone du
       # jury ouvrira, elle doit donc être joignable depuis l'extérieur
-      # du conteneur.
-      PUBLIC_VERIFY_URL: http://localhost:${PORT_PUBLIC:-5174}/verifier
+      # du conteneur — et depuis un AUTRE APPAREIL. `localhost` y désigne
+      # le téléphone lui-même : le QR ne mène nulle part. D'où HOTE_DEMO,
+      # à poser sur l'adresse de la machine dans le réseau partagé.
+      # Voir `node backend/scripts/preparer-demo.mjs`.
+      PUBLIC_VERIFY_URL: http://${HOTE_DEMO:-localhost}:${PORT_PUBLIC:-5174}/verifier
     ports:
       - "${PORT_API:-4000}:4000"
     volumes:
@@ -99,8 +104,11 @@ services:
       context: ./frontend-back-office
       args:
         # Bâties au build : Vite fige `import.meta.env` dans le bundle.
-        VITE_API_URL: http://localhost:${PORT_API:-4000}/api
-        VITE_PUBLIC_URL: http://localhost:${PORT_PUBLIC:-5174}
+        # Donc un changement de HOTE_DEMO impose un `--build`, sans quoi
+        # le téléphone qui ouvre la page appellerait `localhost:4000` —
+        # c'est-à-dire lui-même.
+        VITE_API_URL: http://${HOTE_DEMO:-localhost}:${PORT_API:-4000}/api
+        VITE_PUBLIC_URL: http://${HOTE_DEMO:-localhost}:${PORT_PUBLIC:-5174}
     container_name: certiftogo_back_office
     restart: unless-stopped
     ports:
@@ -114,7 +122,7 @@ services:
     build:
       context: ./frontend-public
       args:
-        VITE_API_URL: http://localhost:${PORT_API:-4000}/api
+        VITE_API_URL: http://${HOTE_DEMO:-localhost}:${PORT_API:-4000}/api
     container_name: certiftogo_public
     restart: unless-stopped
     ports:
