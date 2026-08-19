@@ -424,7 +424,7 @@ npm run db:demo    # reset + seed + démo (données riches pour présentation)
 cd backend
 npm install
 npm run dev       # http://localhost:4000  (nodemon)
-npm test          # 296 tests — exécution SÉQUENTIELLE (--test-concurrency=1) :
+npm test          # 304 tests — exécution SÉQUENTIELLE (--test-concurrency=1) :
                   # les fichiers partagent la base certiftogo_test, et les écrire
                   # en parallèle corrompt le canal du test runner.
 ```
@@ -601,8 +601,8 @@ du numéro et du template par Meta.
 - ✅ **Seed de démo** (`npm run seed:demo`) : ~6 établissements, ~36 candidats,
   ~40 dossiers (tous statuts), ~20 diplômes (PDF/QR/hash réels), vérifications.
 - ✅ **Tests automatisés (Phase 8)** :
-  - Backend : `cd backend && npm test` — **296 tests** répartis en 6 fichiers.
-    - `api.test.js` (255) — intégration sur une base dédiée `certiftogo_test`,
+  - Backend : `cd backend && npm test` — **304 tests** répartis en 6 fichiers.
+    - `api.test.js` (263) — intégration sur une base dédiée `certiftogo_test`,
       recréée avant chaque exécution : auth OTP, RBAC, cycle de vie du dossier,
       certification, vérification publique, portefeuille candidat, admin et
       isolation inter-établissements ; référentiel académique et ses API ;

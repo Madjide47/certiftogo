@@ -83,13 +83,34 @@ fait, assumé.**
 
 | Paquet | Critiques | Hautes | Modérées |
 |---|---|---|---|
-| `backend/` | 0 | 0 | 2 *(exceljs → uuid, non atteignable)* |
+| `backend/` | 0 | 0 | 0 |
 | `frontend-back-office/` | 0 | 0 | 0 |
 | `frontend-public/` | 0 | 0 | 0 |
 | `blockchain/` | — | — | outillage seul, hors production |
 
+---
+
+## Backend — les deux dernières modérées, réglées par `overrides`
+
+`exceljs@4.4.0` déclare `uuid@^8.3.0`, visé par un avis modéré : absence de
+contrôle de bornes sur le tampon fourni à `v3`/`v5`/`v6`. `npm audit fix --force`
+proposait de **redescendre exceljs en 3.4.0** — une rupture qui casserait
+l'import Excel d'une promotion, pour corriger une faille que le projet
+n'atteint pas : exceljs n'importe que `v4`, et jamais avec un tampon.
+
+Le `overrides: { "uuid": "^11.1.1" }` de `backend/package.json` force la
+version saine sans toucher à exceljs. Le pari est mince et vérifié :
+`cf-rule-ext-xform.js` est le seul fichier d'exceljs à requérir uuid, il en
+tire `{ v4 }`, export nommé toujours présent en CJS sur uuid 11. Les **304
+tests passent**, import Excel compris.
+
+> Corriger une dépendance transitive vaut mieux que dégrader la dépendance
+> directe qui la tire : la seconde a des utilisateurs dans le code, la
+> première non.
+
 ## Ce qu'il reste à faire
 
-1. Revoir `exceljs` quand une version alignée sur `uuid@11.1.1` sortira.
+1. Retirer l'`overrides` le jour où exceljs publie une version alignée sur
+   `uuid@11` — l'override est une béquille, pas une réparation amont.
 2. `npm audit --audit-level=high` est en CI, pour que la prochaine
    alerte critique ne dorme pas six mois.

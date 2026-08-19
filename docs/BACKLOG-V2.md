@@ -5,7 +5,7 @@ et numérotée pour que tu puisses valider, refuser ou réordonner.
 
 **Légende** — ✅ fait et testé · 🔨 partiel ou en cours · ⬜ à faire
 
-Dernière mise à jour : 2 août 2026.
+Dernière mise à jour : 19 août 2026.
 
 ---
 
@@ -216,7 +216,7 @@ Dernière mise à jour : 2 août 2026.
 | L-11 | **Rotation de clés** et procédure de compromission | ✅ |
 | L-12 | Sort des diplômes signés avec l'ancienne clé | ✅ *diplômes concernés dénombrés, marche à suivre produite* |
 | L-13 | Protection CSRF | ✅ *sans objet : auth par en-tête Bearer, aucun cookie de session* |
-| L-14 | Dépendances vulnérables (`tar` critique, `body-parser`, `brace-expansion`) | 🔨 *backend assaini (0 critique, 0 haute) et audit ajouté à la CI ; mise à jour des deux fronts en attente — voir [`docs/SECURITE-DEPENDANCES.md`](SECURITE-DEPENDANCES.md)* |
+| L-14 | Dépendances vulnérables (`tar` critique, `body-parser`, `brace-expansion`) | ✅ *zéro alerte sur le backend et les deux fronts, audit en CI ; outillage Hardhat hors production, écart assumé — voir [`docs/SECURITE-DEPENDANCES.md`](SECURITE-DEPENDANCES.md)* |
 
 ## M. Cas exceptionnels
 
@@ -302,8 +302,8 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 183 |
-| 🔨 partiel ou en cours | 17 |
+| ✅ fait et testé | 184 |
+| 🔨 partiel ou en cours | 16 |
 | ⬜ à faire | 5 |
 | **Total** | **174** |
 
