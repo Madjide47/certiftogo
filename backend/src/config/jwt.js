@@ -13,7 +13,7 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 /**
  * Génère un JWT signé pour un utilisateur.
  * @param {{ utilisateur_id: string, role: string, etablissement_id?: string|null,
- *           ministere_id?: string|null, candidat_id?: string|null }} payload
+ *           ministere_id?: string|null, personne_id?: string|null }} payload
  * @returns {string} token signé
  */
 export function genererToken(payload) {

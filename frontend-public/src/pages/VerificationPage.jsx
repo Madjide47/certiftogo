@@ -1,69 +1,97 @@
 // ─────────────────────────────────────────────────────────────
-// Résultat de vérification d'un diplôme (cible des QR codes).
-// Trois cas : authentique · révoqué · introuvable.
+// Résultat de vérification — cible des QR codes imprimés.
+//
+// C'est l'écran le plus exposé du système : celui que lit un employeur,
+// souvent sur un téléphone, avec le document en main. La réponse doit
+// donc être lisible en deux secondes, et ne jamais dire plus que ce
+// qu'elle sait.
+//
+// CINQ résultats, pas trois. L'écran précédent n'en connaissait que
+// trois et rangeait les deux autres dans « introuvable » : un diplôme en
+// cours d'ancrage, ou remplacé par une version corrigée, était donc
+// annoncé comme inexistant. Dire « ce diplôme n'existe pas » d'un diplôme
+// valide est la pire erreur que ce service puisse commettre.
 // ─────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { verifierDiplome } from '../services/verification.service.js';
 import { LIBELLES_TYPE_DIPLOME, LIBELLES_MENTION, messageErreur } from '../utils/libelles.js';
-import Icon from '../components/Icon.jsx';
+import { Icone, Encart, Champ } from '../components/ui.jsx';
 
-const CARTES = {
+const VERDICTS = {
   authentique: {
-    icone: 'check_circle',
+    icone: 'verified',
     titre: 'Diplôme authentique',
-    edge: 'bg-primary-fixed',
-    banner: 'border-emerald-200 bg-emerald-50',
-    iconBg: 'bg-primary-container text-on-primary',
-    titreColor: 'text-emerald-800',
+    resume: 'Ce diplôme figure au registre national et n’a pas été modifié.',
+    bordure: 'border-succes',
+    fond: 'bg-succes-clair',
+    texte: 'text-succes',
+  },
+  en_attente_ancrage: {
+    icone: 'schedule',
+    titre: 'Diplôme délivré — enregistrement en cours',
+    resume:
+      'Le ministère a certifié ce diplôme. Son inscription sur la blockchain est en file d’attente.',
+    bordure: 'border-info',
+    fond: 'bg-info-clair',
+    texte: 'text-info',
+  },
+  remplace: {
+    icone: 'find_replace',
+    titre: 'Document remplacé par une version corrigée',
+    resume: 'Le diplôme reste valide, mais ce document n’est plus celui qui fait foi.',
+    bordure: 'border-alerte',
+    fond: 'bg-alerte-clair',
+    texte: 'text-alerte',
   },
   revoque: {
     icone: 'gpp_bad',
     titre: 'Diplôme révoqué',
-    edge: 'bg-error',
-    banner: 'border-red-200 bg-red-50',
-    iconBg: 'bg-error text-on-error',
-    titreColor: 'text-error',
+    resume: 'Ce diplôme a été annulé par le ministère. Il ne vaut plus preuve.',
+    bordure: 'border-erreur',
+    fond: 'bg-erreur-clair',
+    texte: 'text-erreur',
   },
   introuvable: {
     icone: 'help',
-    titre: 'Diplôme introuvable',
-    edge: 'bg-secondary-fixed-dim',
-    banner: 'border-amber-200 bg-amber-50',
-    iconBg: 'bg-secondary-fixed text-secondary',
-    titreColor: 'text-secondary',
+    titre: 'Aucun diplôme correspondant',
+    resume: 'Aucune inscription du registre ne correspond à ce code.',
+    bordure: 'border-gris-500',
+    fond: 'bg-gris-100',
+    texte: 'text-gris-700',
   },
 };
 
-function Detail({ label, valeur, wide }) {
-  if (!valeur) return null;
-  return (
-    <div className={`flex flex-col ${wide ? 'md:col-span-2' : ''}`}>
-      <span className="text-xs font-semibold uppercase tracking-wide text-outline">{label}</span>
-      <span className="mt-1 font-medium text-on-surface">{valeur}</span>
-    </div>
-  );
-}
+const date = (v) => (v ? new Date(v).toLocaleDateString('fr-FR') : null);
 
-function BlocCode({ label, valeur }) {
+function Empreinte({ label, valeur }) {
   const [copie, setCopie] = useState(false);
-  function copier() {
-    navigator.clipboard?.writeText(valeur).then(() => {
+  if (!valeur) return null;
+
+  async function copier() {
+    try {
+      await navigator.clipboard.writeText(valeur);
       setCopie(true);
-      setTimeout(() => setCopie(false), 1500);
-    });
+      setTimeout(() => setCopie(false), 2000);
+    } catch {
+      /* presse-papiers indisponible : la valeur reste sélectionnable */
+    }
   }
+
   return (
     <div>
-      <span className="mb-1 block text-sm text-outline">{label}</span>
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-outline-variant/40 bg-surface p-3 transition-colors hover:border-primary/50">
-        <code className="break-all font-mono text-xs text-on-surface-variant">{valeur}</code>
+      <p className="text-sm text-gris-500">{label}</p>
+      <div className="mt-1 flex items-start gap-2">
+        <code className="min-w-0 flex-1 break-all border border-gris-300 bg-gris-50 px-3 py-2 font-mono text-xs text-gris-700">
+          {valeur}
+        </code>
         <button
+          type="button"
           onClick={copier}
-          title="Copier"
-          className="shrink-0 rounded-full p-1.5 text-outline transition-colors hover:bg-surface-variant hover:text-primary"
+          className="shrink-0 border border-gris-300 bg-white px-2 py-2 text-gris-700 hover:bg-gris-100"
+          aria-label={`Copier ${label}`}
         >
-          <Icon name={copie ? 'check' : 'content_copy'} size={18} />
+          <Icone nom={copie ? 'check' : 'content_copy'} taille={18} />
         </button>
       </div>
     </div>
@@ -83,7 +111,10 @@ export default function VerificationPage() {
     setErreur('');
     verifierDiplome(code, params.get('methode') || undefined)
       .then((r) => actif && setResultat(r))
-      .catch((err) => actif && setErreur(messageErreur(err, 'Vérification impossible pour le moment.')))
+      .catch(
+        (err) =>
+          actif && setErreur(messageErreur(err, 'Vérification impossible pour le moment.'))
+      )
       .finally(() => actif && setChargement(false));
     return () => {
       actif = false;
@@ -92,124 +123,189 @@ export default function VerificationPage() {
 
   if (chargement) {
     return (
-      <div className="mx-auto flex max-w-3xl flex-col items-center py-20 text-on-surface-variant">
-        <Icon name="progress_activity" size={36} className="animate-spin" />
-        <p className="mt-3">Vérification en cours…</p>
+      <div className="mx-auto max-w-3xl py-16 text-center text-gris-500">
+        <Icone nom="progress_activity" taille={32} />
+        <p className="mt-2 text-base">Interrogation du registre national…</p>
       </div>
     );
   }
 
   if (erreur) {
     return (
-      <div className="mx-auto w-full max-w-3xl">
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center text-error">{erreur}</div>
+      <div className="mx-auto max-w-3xl">
+        <Encart ton="erreur" titre="Vérification impossible">
+          {erreur} Cela ne dit rien du diplôme lui-même : réessayez dans un instant.
+        </Encart>
         <RetourAccueil />
       </div>
     );
   }
 
-  const type = resultat.resultat;
-  const carte = CARTES[type] || CARTES.introuvable;
-  const dateCertif = resultat.date_certification
-    ? new Date(resultat.date_certification).toLocaleDateString('fr-FR')
-    : null;
-  const onchain = resultat.ancrage_blockchain?.ancre === true;
+  const verdict = VERDICTS[resultat.resultat] || VERDICTS.introuvable;
+  const ancrage = resultat.ancrage_blockchain;
+  const connu = resultat.resultat !== 'introuvable';
 
   return (
     <div className="mx-auto w-full max-w-3xl">
-      <div className="mb-6">
-        <Link to="/" className="group inline-flex items-center text-sm font-medium text-primary hover:text-primary-container">
-          <Icon name="arrow_back" size={18} className="mr-2 transition-transform group-hover:-translate-x-1" />
-          Vérifier un autre diplôme
-        </Link>
-      </div>
-
-      <div className="glass-panel relative overflow-hidden rounded-2xl shadow-soft-md">
-        <div className={`h-2 w-full ${carte.edge}`} />
-        <div className="relative z-10 space-y-8 p-8 md:p-10">
-          {/* Bannière */}
-          <div className={`flex flex-col gap-5 rounded-xl border p-6 md:flex-row md:items-start ${carte.banner}`}>
-            <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full ${carte.iconBg}`}>
-              <Icon name={carte.icone} filled size={36} />
-            </div>
-            <div className="flex-grow">
-              <div className="mb-1 flex flex-wrap items-center gap-3">
-                <h1 className={`font-display text-xl font-bold ${carte.titreColor}`}>{carte.titre}</h1>
-                {type === 'authentique' && (
-                  <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
-                    <span className="mr-1.5 h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-700" />
-                    {onchain ? 'Vérifié sur blockchain' : 'Enregistré · signé'}
-                  </span>
+      {/* ── Verdict ── */}
+      <section className={`border-l-4 ${verdict.bordure} ${verdict.fond} px-5 py-4`}>
+        <div className="flex items-start gap-3">
+          <Icone nom={verdict.icone} taille={32} className={`mt-0.5 shrink-0 ${verdict.texte}`} />
+          <div>
+            <h1 className={`text-xl ${verdict.texte}`}>{verdict.titre}</h1>
+            <p className="mt-1 text-base text-gris-900">{verdict.resume}</p>
+            {resultat.reference && (
+              <p className="tabulaire mt-2 text-base font-bold text-gris-900">
+                {resultat.reference}
+                {resultat.version > 1 && (
+                  <span className="ml-2 font-normal text-gris-700">version {resultat.version}</span>
                 )}
-              </div>
-              {resultat.reference ? (
-                <>
-                  <p className="text-sm text-on-surface-variant/80">Référence du document</p>
-                  <p className={`mt-1 font-display text-2xl font-bold tracking-tight text-on-surface ${type === 'revoque' ? 'line-through decoration-error/50' : ''}`}>
-                    {resultat.reference}
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-on-surface-variant">
-                  Aucun diplôme ne correspond à « {code} ». Vérifiez la saisie ou le QR code.
-                </p>
-              )}
-            </div>
+              </p>
+            )}
           </div>
+        </div>
+      </section>
 
-          {type === 'revoque' && resultat.motif_revocation && (
-            <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-error">
-              <span className="font-semibold">Motif de révocation :</span> {resultat.motif_revocation}
+      {resultat.resultat === 'introuvable' && (
+        <div className="mt-4 space-y-3">
+          <Encart ton="info" titre="Que peut signifier ce résultat ?">
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-base">
+              <li>Le code a été mal saisi — vérifiez caractère par caractère.</li>
+              <li>
+                Le diplôme est antérieur à la mise en service du registre, ou délivré par un
+                établissement non agréé.
+              </li>
+              <li>Le document présenté n’est pas authentique.</li>
+            </ul>
+            <p className="mt-2 text-base">
+              Un résultat négatif n’est pas une accusation : contactez l’établissement émetteur
+              avant toute conclusion.
+            </p>
+          </Encart>
+          <p className="tabulaire text-sm text-gris-500">Code recherché : {code}</p>
+        </div>
+      )}
+
+      {resultat.message && (
+        <div className="mt-4">
+          <Encart ton={resultat.resultat === 'remplace' ? 'alerte' : 'info'}>
+            {resultat.message}
+          </Encart>
+        </div>
+      )}
+
+      {resultat.resultat === 'remplace' && resultat.version_en_vigueur && (
+        <div className="mt-3">
+          <Encart ton="info" titre="Version en vigueur">
+            <span className="tabulaire font-bold">{resultat.version_en_vigueur.reference}</span> —
+            version {resultat.version_en_vigueur.version}. Demandez ce document à son titulaire.
+          </Encart>
+        </div>
+      )}
+
+      {resultat.resultat === 'revoque' && resultat.motif_revocation && (
+        <div className="mt-4">
+          <Encart ton="erreur" titre="Motif de la révocation">
+            {resultat.motif_revocation}
+          </Encart>
+        </div>
+      )}
+
+      {connu && (
+        <>
+          {/* ── Ce que le registre déclare ── */}
+          <section className="mt-6 border border-gris-300 bg-white">
+            <h2 className="border-b border-gris-200 bg-gris-100 px-5 py-2.5 text-base font-bold text-gris-700">
+              Mentions portées au registre
+            </h2>
+            <dl className="grid gap-4 px-5 py-4 sm:grid-cols-2">
+              <Champ label="Titulaire" valeur={resultat.titulaire} large />
+              <Champ
+                label="Diplôme"
+                valeur={LIBELLES_TYPE_DIPLOME[resultat.type_diplome] || resultat.type_diplome}
+              />
+              <Champ label="Filière" valeur={resultat.filiere} />
+              <Champ
+                label="Mention"
+                valeur={LIBELLES_MENTION[resultat.mention] || resultat.mention}
+              />
+              <Champ label="Certifié le" valeur={date(resultat.date_certification)} />
+              <Champ label="Établissement" valeur={resultat.etablissement} large />
+            </dl>
+            <p className="border-t border-gris-200 px-5 py-3 text-sm text-gris-500">
+              Comparez le nom ci-dessus avec la pièce d’identité de la personne : le registre
+              atteste l’existence du diplôme, pas l’identité de qui vous le présente.
+            </p>
+          </section>
+
+          {/* ── Preuves ── */}
+          <section className="mt-5 border border-gris-300 bg-white">
+            <h2 className="border-b border-gris-200 bg-gris-100 px-5 py-2.5 text-base font-bold text-gris-700">
+              Preuves techniques
+            </h2>
+
+            <div className="space-y-4 px-5 py-4">
+              <EtatAncrage ancrage={ancrage} resultat={resultat.resultat} />
+              <Empreinte label="Empreinte SHA-256 du diplôme" valeur={resultat.hash} />
+              <Empreinte label="Transaction blockchain" valeur={resultat.transaction_id} />
             </div>
-          )}
-
-          {type !== 'introuvable' && (
-            <>
-              {/* Détails */}
-              <div className="space-y-6">
-                <h2 className="border-b border-outline-variant/20 pb-2 font-display text-lg font-bold text-on-surface">
-                  Détails de la certification
-                </h2>
-                <div className="grid grid-cols-1 gap-x-12 gap-y-6 md:grid-cols-2">
-                  <Detail label="Titulaire" valeur={resultat.titulaire} />
-                  <Detail label="Diplôme" valeur={LIBELLES_TYPE_DIPLOME[resultat.type_diplome] || resultat.type_diplome} />
-                  <Detail label="Filière" valeur={resultat.filiere} />
-                  <Detail label="Mention" valeur={LIBELLES_MENTION[resultat.mention] || resultat.mention} />
-                  <Detail label="Établissement" valeur={resultat.etablissement} wide />
-                  <Detail label="Certifié le" valeur={dateCertif} />
-                </div>
-              </div>
-
-              {/* Preuves cryptographiques */}
-              <div className="space-y-4 rounded-xl border border-outline-variant/30 bg-surface-container-low p-6">
-                <div className="flex items-center gap-2 text-on-surface">
-                  <Icon name="link" size={20} />
-                  <h3 className="text-xs font-bold uppercase tracking-wide">Preuves cryptographiques</h3>
-                </div>
-                {resultat.hash && <BlocCode label="Empreinte SHA-256" valeur={resultat.hash} />}
-                {resultat.transaction_id && (
-                  <BlocCode label="Transaction blockchain" valeur={resultat.transaction_id} />
-                )}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Filigrane */}
-        <div className="pointer-events-none absolute -bottom-16 -right-8 select-none text-primary opacity-[0.03]">
-          <Icon name="verified" filled size={300} />
-        </div>
-      </div>
+          </section>
+        </>
+      )}
 
       <RetourAccueil />
     </div>
   );
 }
 
+/**
+ * L'état on-chain est dit sans euphémisme : « non vérifié » n'est pas
+ * « faux ». Un nœud injoignable ne doit pas ressembler à une fraude.
+ */
+function EtatAncrage({ ancrage, resultat }) {
+  if (!ancrage) return null;
+
+  if (ancrage.mode === 'mock') {
+    return (
+      <Encart ton="alerte" titre="Vérification blockchain non disponible">
+        Ce serveur fonctionne en mode démonstration : l’inscription sur la chaîne publique n’est
+        pas contrôlée. Les mentions ci-dessus proviennent du registre du ministère.
+      </Encart>
+    );
+  }
+
+  if (ancrage.indisponible) {
+    return (
+      <Encart ton="alerte" titre="Chaîne publique momentanément injoignable">
+        Le registre du ministère a répondu, pas la blockchain. Réessayez plus tard pour obtenir la
+        confirmation indépendante.
+      </Encart>
+    );
+  }
+
+  if (ancrage.verifie && ancrage.ancre) {
+    return (
+      <Encart ton="succes" titre="Confirmé sur la blockchain publique">
+        L’empreinte de ce diplôme est inscrite sur la chaîne et son état y est
+        {ancrage.revoque ? ' révoqué' : ' valide'}. Cette inscription ne peut être ni effacée ni
+        réécrite, y compris par le ministère.
+      </Encart>
+    );
+  }
+
+  return (
+    <Encart ton={resultat === 'en_attente_ancrage' ? 'info' : 'alerte'} titre="Pas encore inscrit sur la chaîne">
+      {resultat === 'en_attente_ancrage'
+        ? 'L’inscription est en file d’attente : elle interviendra sous peu.'
+        : 'Le registre du ministère connaît ce diplôme, mais son empreinte n’a pas été retrouvée sur la chaîne publique. Signalez-le à l’établissement émetteur.'}
+    </Encart>
+  );
+}
+
 function RetourAccueil() {
   return (
-    <div className="mt-6 text-center">
-      <Link to="/" className="text-sm font-semibold text-primary hover:underline">
+    <div className="mt-6">
+      <Link to="/" className="text-base text-vert underline underline-offset-2 hover:text-vert-fonce">
         ← Vérifier un autre diplôme
       </Link>
     </div>

@@ -4,8 +4,18 @@
 // ─────────────────────────────────────────────────────────────
 import { query } from '../config/database.js';
 
-const COLONNES = `id, numero_etudiant, nom, prenom, date_naissance, lieu_naissance,
+// Colonnes RÉELLES. Elles servent aussi aux `RETURNING` : y glisser une
+// expression dérivée la ferait entrer dans la corbeille, puis échouer à
+// la restauration — `statut_contact` n'existe pas dans la table.
+const COLONNES = `id, personne_id, numero_etudiant, nom, prenom, date_naissance, lieu_naissance,
                   sexe, telephone, email, etablissement_id, date_creation`;
+
+// `statut_contact` est DÉRIVÉ, jamais stocké : il n'est rien d'autre que
+// « telephone IS NULL ». En faire une colonne inviterait les deux à
+// diverger — un étudiant marqué joignable sans numéro, ou l'inverse.
+const COLONNES_VUE = `${COLONNES},
+                  CASE WHEN telephone IS NULL OR telephone = ''
+                       THEN 'en_attente_numero' ELSE 'joignable' END AS statut_contact`;
 
 /**
  * Liste les candidats d'un établissement, avec recherche optionnelle.
@@ -23,7 +33,7 @@ export async function lister({ etablissement_id, recherche = '', limit = 50, off
 
   params.push(limit, offset);
   const { rows } = await query(
-    `SELECT ${COLONNES}
+    `SELECT ${COLONNES_VUE}
        FROM candidats
       WHERE etablissement_id = $1 ${filtreRecherche}
       ORDER BY nom, prenom
@@ -44,7 +54,7 @@ export async function compter(etablissement_id) {
 
 /** Récupère un candidat par id (sans filtre d'établissement). */
 export async function trouverParId(id) {
-  const { rows } = await query(`SELECT ${COLONNES} FROM candidats WHERE id = $1`, [id]);
+  const { rows } = await query(`SELECT ${COLONNES_VUE} FROM candidats WHERE id = $1`, [id]);
   return rows[0] || null;
 }
 
@@ -70,15 +80,17 @@ export async function numeroExiste(etablissement_id, numero_etudiant, exclureId 
   return rows.length > 0;
 }
 
-/** Crée un candidat. */
-export async function creer(data) {
-  const { rows } = await query(
+/** Crée un candidat. `client` permet de l'inscrire dans une transaction. */
+export async function creer(data, client = null) {
+  const executer = client ? client.query.bind(client) : query;
+  const { rows } = await executer(
     `INSERT INTO candidats
-       (numero_etudiant, nom, prenom, date_naissance, lieu_naissance,
+       (personne_id, numero_etudiant, nom, prenom, date_naissance, lieu_naissance,
         sexe, telephone, email, etablissement_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING ${COLONNES}`,
     [
+      data.personne_id,
       data.numero_etudiant,
       data.nom,
       data.prenom,

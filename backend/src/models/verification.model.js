@@ -22,3 +22,39 @@ export async function enregistrer(data) {
   );
   return rows[0];
 }
+
+/**
+ * Nombre de consultations d'un diplôme, et date de la dernière.
+ *
+ * Le titulaire a le droit de savoir combien de fois son diplôme a été
+ * vérifié. Il n'a PAS à savoir par qui : ni l'adresse IP, ni le
+ * navigateur du tiers ne sortent d'ici. Un employeur qui vérifie un
+ * candidat ne doit pas être identifiable par ce candidat.
+ */
+export async function compterParDiplome(diplome_ids = []) {
+  if (diplome_ids.length === 0) return new Map();
+  const { rows } = await query(
+    `SELECT diplome_id, COUNT(*)::int AS total, MAX(date_verification) AS derniere
+       FROM verifications_log
+      WHERE diplome_id = ANY($1::uuid[])
+      GROUP BY diplome_id`,
+    [diplome_ids]
+  );
+  return new Map(rows.map((r) => [r.diplome_id, { total: r.total, derniere: r.derniere }]));
+}
+
+/**
+ * Dernière consultation notifiée au titulaire, pour ne pas l'inonder.
+ * Un employeur qui recharge la page trois fois ne doit pas produire
+ * trois notifications.
+ */
+export async function derniereNotificationConsultation(diplome_id, fenetreHeures) {
+  const { rows } = await query(
+    `SELECT 1 FROM notifications
+      WHERE evenement = 'qr_consulte' AND entite_id = $1
+        AND date_creation > now() - ($2 || ' hours')::interval
+      LIMIT 1`,
+    [diplome_id, String(fenetreHeures)]
+  );
+  return rows.length > 0;
+}

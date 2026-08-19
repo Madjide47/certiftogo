@@ -1,54 +1,86 @@
 // ─────────────────────────────────────────────────────────────
-// Front-office public : vérification de diplômes (sans compte).
-//  - /                : accueil (saisie hash / référence)
-//  - /verifier/:code  : résultat de vérification (cible des QR codes)
+// Front-office public : vérification de diplômes, sans compte.
+//
+//   /                : saisie (empreinte, référence, QR)
+//   /verifier/:code  : résultat — cible des QR codes imprimés
+//   /integration     : demande d'agrément d'un établissement, et son suivi
+//
+// L'ossature est celle d'un site d'État : bandeau République Togolaise,
+// identité du service, pied de page institutionnel. Ce n'est pas de la
+// décoration — c'est ce qui autorise un employeur à croire la réponse
+// qu'il lit ici.
 // ─────────────────────────────────────────────────────────────
-import { Routes, Route, Navigate, Link, NavLink } from 'react-router-dom';
+import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import HomePage from './pages/HomePage.jsx';
 import VerificationPage from './pages/VerificationPage.jsx';
-import Icon from './components/Icon.jsx';
+import IntegrationPage from './pages/IntegrationPage.jsx';
+import { Icone } from './components/ui.jsx';
 
-function Header() {
+/** Bandeau d'État : filet tricolore et rattachement institutionnel. */
+function BandeauEtat() {
   return (
-    <nav className="glass-panel fixed top-0 z-50 w-full border-b border-outline-variant/30 shadow-sm">
-      <div className="mx-auto flex h-16 max-w-[1280px] items-center justify-between px-4 md:px-10">
-        <Link to="/" className="flex items-center gap-2 font-display text-lg font-extrabold text-primary md:text-xl">
-          <Icon name="verified_user" filled size={30} className="shrink-0" />
-          <span className="truncate">
-            CertifTOGO <span className="hidden font-semibold text-on-surface-variant sm:inline">/ Vérification</span>
-          </span>
-        </Link>
-        <div className="flex items-center gap-6">
-          <NavLink
-            to="/"
-            end
-            className={({ isActive }) =>
-              `text-xs font-semibold uppercase tracking-wide transition-colors ${
-                isActive ? 'border-b-2 border-primary pb-1 text-primary' : 'text-on-surface-variant hover:text-primary'
-              }`
-            }
-          >
-            Vérifier
-          </NavLink>
-        </div>
+    <div className="border-b border-gris-300 bg-white">
+      <div className="h-1 w-full bg-vert" />
+      <div className="mx-auto flex max-w-contenu items-center justify-between gap-4 px-5 py-2 lg:px-8">
+        <p className="text-xs font-bold uppercase tracking-wide text-gris-700">
+          République Togolaise
+        </p>
+        <p className="hidden text-xs text-gris-500 sm:block">
+          Ministère de l’Enseignement Supérieur et de la Recherche
+        </p>
       </div>
-    </nav>
+    </div>
   );
 }
 
-function Footer() {
+function Entete() {
   return (
-    <footer className="mt-auto w-full border-t border-outline-variant/20 bg-surface-container-low">
-      <div className="mx-auto flex max-w-[1280px] flex-col items-center justify-between gap-4 px-6 py-8 md:flex-row md:px-10">
-        <div className="font-display text-lg font-bold text-primary">CertifTOGO</div>
-        <div className="flex flex-wrap items-center justify-center gap-6 text-xs font-semibold uppercase tracking-wide">
-          <a className="text-on-surface-variant hover:text-primary" href="#">Mentions légales</a>
-          <a className="text-on-surface-variant hover:text-primary" href="#">Confidentialité</a>
-          <a className="text-on-surface-variant hover:text-primary" href="#">Contact</a>
-        </div>
-        <div className="text-center text-sm text-on-surface-variant md:text-right">
-          © République Togolaise — CertifTOGO.
-        </div>
+    <header className="border-b border-gris-300 bg-white">
+      <div className="mx-auto flex max-w-contenu flex-wrap items-center justify-between gap-3 px-5 py-4 lg:px-8">
+        <Link to="/" className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center bg-vert text-white">
+            <Icone nom="verified" taille={22} className="filled" />
+          </span>
+          <span>
+            <span className="block text-xl font-bold leading-tight text-gris-900">CertifTOGO</span>
+            <span className="block text-sm text-gris-500">
+              Registre national des diplômes — service de vérification
+            </span>
+          </span>
+        </Link>
+
+        <nav className="flex items-center gap-5">
+          <a
+            href="/#aide"
+            className="text-base text-vert underline underline-offset-2 hover:text-vert-fonce"
+          >
+            Comment ça marche ?
+          </a>
+          {/* Seule porte d'entrée de la plateforme : un établissement non
+              agréé n'a pas de compte pour demander à l'être. */}
+          <Link
+            to="/integration"
+            className="text-base text-vert underline underline-offset-2 hover:text-vert-fonce"
+          >
+            Espace établissements
+          </Link>
+        </nav>
+      </div>
+    </header>
+  );
+}
+
+function PiedDePage() {
+  return (
+    <footer className="mt-auto border-t border-gris-300 bg-white">
+      <div className="mx-auto max-w-contenu px-5 py-6 lg:px-8">
+        <p className="text-base font-bold text-gris-900">CertifTOGO</p>
+        <p className="mt-1 max-w-3xl text-sm text-gris-500">
+          Service public de vérification des diplômes délivrés par les établissements agréés de la
+          République Togolaise. La vérification est gratuite, anonyme et ne nécessite aucun
+          compte. Chaque consultation est comptabilisée sans identifier son auteur.
+        </p>
+        <p className="mt-3 text-sm text-gris-500">© République Togolaise</p>
       </div>
     </footer>
   );
@@ -56,16 +88,24 @@ function Footer() {
 
 export default function App() {
   return (
-    <div className="flex min-h-full flex-col">
-      <Header />
-      <main className="flex flex-grow flex-col px-4 pb-16 pt-24 md:px-10">
+    <div className="flex min-h-full flex-col bg-gris-50">
+      <a href="#contenu" className="lien-evitement">
+        Aller au contenu
+      </a>
+
+      <BandeauEtat />
+      <Entete />
+
+      <main id="contenu" className="mx-auto w-full max-w-contenu flex-grow px-5 py-8 lg:px-8">
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/verifier/:code" element={<VerificationPage />} />
+          <Route path="/integration" element={<IntegrationPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-      <Footer />
+
+      <PiedDePage />
     </div>
   );
 }

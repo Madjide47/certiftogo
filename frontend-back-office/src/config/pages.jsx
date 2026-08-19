@@ -1,16 +1,27 @@
 // ─────────────────────────────────────────────────────────────
 // Registre des pages réelles par rôle et par chemin.
-// App.jsx utilise ce registre : un chemin présent ici rend la vraie
-// page ; sinon on retombe sur un PlaceholderPage.
+// App.jsx l'utilise : un chemin présent ici rend la vraie page, sinon on
+// retombe sur un PlaceholderPage — ce qui permet de déclarer une entrée
+// de navigation avant que son écran n'existe.
 // ─────────────────────────────────────────────────────────────
 import DashboardPage from '../pages/etablissement/DashboardPage.jsx';
 import CandidatsPage from '../pages/etablissement/CandidatsPage.jsx';
 import DossiersPage from '../pages/etablissement/DossiersPage.jsx';
-import StatistiquesPage from '../pages/etablissement/StatistiquesPage.jsx';
+import StructurePage from '../pages/etablissement/StructurePage.jsx';
+import PromotionsPage from '../pages/etablissement/PromotionsPage.jsx';
+import LotsPage from '../pages/etablissement/LotsPage.jsx';
+import AgentsPage from '../pages/etablissement/AgentsPage.jsx';
+import JournalPage from '../pages/commun/JournalPage.jsx';
+import NotificationsPage from '../pages/commun/NotificationsPage.jsx';
+import RecuperationsPage from '../pages/commun/RecuperationsPage.jsx';
+import LotsRecusPage from '../pages/ministere/LotsRecusPage.jsx';
+import ValidationsPage from '../pages/ministere/ValidationsPage.jsx';
+import AncragePage from '../pages/ministere/AncragePage.jsx';
+import DemandesPage from '../pages/ministere/DemandesPage.jsx';
+import AnneesAcademiquesPage from '../pages/ministere/AnneesAcademiquesPage.jsx';
 import DossiersRecusPage from '../pages/ministere/DossiersRecusPage.jsx';
 import MinistereDiplomesPage from '../pages/ministere/DiplomesPage.jsx';
 import MinistereDashboardPage from '../pages/ministere/DashboardPage.jsx';
-import MinistereStatistiquesPage from '../pages/ministere/StatistiquesPage.jsx';
 import MinistereEtablissementsPage from '../pages/ministere/EtablissementsPage.jsx';
 import PortefeuillePage from '../pages/candidat/PortefeuillePage.jsx';
 import MesDiplomesPage from '../pages/candidat/MesDiplomesPage.jsx';
@@ -19,31 +30,51 @@ import AdminDashboardPage from '../pages/admin/DashboardPage.jsx';
 import UtilisateursPage from '../pages/admin/UtilisateursPage.jsx';
 import AdminEtablissementsPage from '../pages/admin/EtablissementsPage.jsx';
 import ConfigurationPage from '../pages/admin/ConfigurationPage.jsx';
+import CorbeillePage from '../pages/admin/CorbeillePage.jsx';
+import ClesPage from '../pages/admin/ClesPage.jsx';
 
 export const PAGES_PAR_ROLE = {
   etablissement: {
     '/': DashboardPage,
+    '/structure': StructurePage,
     '/candidats': CandidatsPage,
+    '/promotions': PromotionsPage,
+    '/lots': LotsPage,
     '/dossiers': DossiersPage,
-    '/statistiques': StatistiquesPage,
+    '/agents': AgentsPage,
+    '/journal': JournalPage,
+    '/notifications': NotificationsPage,
   },
   ministere: {
     '/': MinistereDashboardPage,
+    '/lots-recus': LotsRecusPage,
     '/dossiers-recus': DossiersRecusPage,
+    '/validations': ValidationsPage,
     '/diplomes': MinistereDiplomesPage,
+    '/ancrage': AncragePage,
     '/etablissements': MinistereEtablissementsPage,
-    '/statistiques': MinistereStatistiquesPage,
+    '/demandes': DemandesPage,
+    '/annees': AnneesAcademiquesPage,
+    '/journal': JournalPage,
+    '/recuperations': RecuperationsPage,
+    '/notifications': NotificationsPage,
   },
   candidat: {
     '/': PortefeuillePage,
     '/mes-diplomes': MesDiplomesPage,
     '/parametres': ParametresPage,
+    '/notifications': NotificationsPage,
   },
   admin_systeme: {
     '/': AdminDashboardPage,
     '/utilisateurs': UtilisateursPage,
     '/etablissements': AdminEtablissementsPage,
+    '/journal': JournalPage,
+    '/recuperations': RecuperationsPage,
+    '/corbeille': CorbeillePage,
+    '/cles': ClesPage,
     '/configuration': ConfigurationPage,
+    '/notifications': NotificationsPage,
   },
 };
 

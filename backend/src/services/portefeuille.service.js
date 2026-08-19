@@ -1,11 +1,16 @@
 // ─────────────────────────────────────────────────────────────
-// Service "portefeuille" — diplômes d'un candidat (module candidat, Phase 6).
-// Le candidat ne voit que ses propres diplômes (isolation par candidat_id).
+// Service "portefeuille" — diplômes d'une personne (module candidat).
+// Isolation par personne_id : le portefeuille est national, il agrège les
+// diplômes de tous les établissements fréquentés.
 // ─────────────────────────────────────────────────────────────
 import * as diplomeModel from '../models/diplome.model.js';
+import * as verificationModel from '../models/verification.model.js';
 import { ErreurApp } from '../utils/errors.js';
 
-const STATUTS = ['actif', 'revoque'];
+// `en_attente_ancrage` fait partie du cycle depuis la file d'ancrage
+// (migration 008). L'omettre ici afficherait « 0 diplôme » à quelqu'un
+// dont le diplôme vient d'être certifié — le pire moment pour douter.
+const STATUTS = ['en_attente_ancrage', 'actif', 'revoque'];
 
 /** Vue "portefeuille" d'un diplôme (champs utiles au candidat). */
 function vue(d) {
@@ -23,24 +28,39 @@ function vue(d) {
     pdf_url: d.pdf_url,
     qr_code_url: d.qr_code_url,
     motif_revocation: d.statut === 'revoque' ? d.motif_revocation : null,
+    // Versionnement : un diplôme corrigé (changement de nom, erreur de
+    // saisie) remplace le précédent. Le titulaire doit savoir laquelle de
+    // ses deux versions fait foi — sinon il présente l'ancienne.
+    version: d.version,
+    motif_version: d.motif_version,
+    remplace_reference: d.remplace_reference || null,
   };
 }
 
-/** Liste les diplômes du candidat courant. */
-export async function lister(candidat_id) {
-  if (!candidat_id) {
+/** Liste les diplômes de la personne connectée. */
+export async function lister(personne_id) {
+  if (!personne_id) {
     throw new ErreurApp(403, 'CANDIDAT_REQUIS', 'Compte candidat requis.');
   }
-  const diplomes = await diplomeModel.listerParCandidat(candidat_id);
-  return diplomes.map(vue);
+  const diplomes = await diplomeModel.listerParPersonne(personne_id);
+
+  // Combien de fois chaque diplôme a été vérifié (K-11). En une requête :
+  // une par diplôme ferait dix allers-retours pour dix lignes.
+  const consultations = await verificationModel.compterParDiplome(diplomes.map((d) => d.id));
+
+  return diplomes.map((d) => ({
+    ...vue(d),
+    consultations: consultations.get(d.id)?.total || 0,
+    derniere_consultation: consultations.get(d.id)?.derniere || null,
+  }));
 }
 
 /** Statistiques du portefeuille (répartition par statut). */
-export async function statistiques(candidat_id) {
-  if (!candidat_id) {
+export async function statistiques(personne_id) {
+  if (!personne_id) {
     throw new ErreurApp(403, 'CANDIDAT_REQUIS', 'Compte candidat requis.');
   }
-  const repartition = await diplomeModel.compterParCandidat(candidat_id);
+  const repartition = await diplomeModel.compterParPersonne(personne_id);
   const parStatut = Object.fromEntries(STATUTS.map((s) => [s, 0]));
   let total = 0;
   for (const { statut, total: n } of repartition) {

@@ -6,6 +6,8 @@
 //   Erreur : { success: false, error: { code, message } }
 // ─────────────────────────────────────────────────────────────
 import * as authService from '../services/auth.service.js';
+import * as sessionService from '../services/session.service.js';
+import * as changementNumero from '../services/changement-numero.service.js';
 import * as utilisateurModel from '../models/utilisateur.model.js';
 import { normaliserTelephone, estTelephoneValide, estCodeOtpValide } from '../utils/validators.js';
 
@@ -76,6 +78,117 @@ export async function moi(req, res, next) {
     return res.status(200).json({
       success: true,
       data: { utilisateur: authService.formaterUtilisateur(utilisateur) },
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** POST /api/auth/refresh  body: { jeton_rafraichissement } */
+export async function rafraichir(req, res, next) {
+  try {
+    const data = await authService.rafraichir((req.body || {}).jeton_rafraichissement);
+    return res.json({ success: true, data });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** POST /api/auth/logout — ferme la session courante */
+export async function deconnecter(req, res, next) {
+  try {
+    await sessionService.fermer(req.utilisateur, req.utilisateur.session_id);
+    return res.json({ success: true, data: { deconnecte: true } });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** GET /api/auth/sessions — appareils connectés */
+export async function listerSessions(req, res, next) {
+  try {
+    const sessions = await sessionService.lister(req.utilisateur);
+    return res.json({ success: true, data: { sessions } });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** DELETE /api/auth/sessions/:id — ferme une session à distance */
+export async function fermerSession(req, res, next) {
+  try {
+    await sessionService.fermer(req.utilisateur, req.params.id);
+    return res.json({ success: true, data: { fermee: true } });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** POST /api/auth/sessions/fermer-autres — après une connexion suspecte */
+export async function fermerAutresSessions(req, res, next) {
+  try {
+    const fermees = await sessionService.fermerLesAutres(req.utilisateur);
+    return res.json({ success: true, data: { fermees } });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// ── Changement volontaire de numéro (A-14) ─────────────────────────
+
+/** GET /api/auth/changement-numero — reprendre une demande en cours */
+export async function etatChangementNumero(req, res, next) {
+  try {
+    return res.json({ success: true, data: await changementNumero.etat(req.utilisateur) });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** POST /api/auth/changement-numero — envoie un code à l'ANCIEN numéro */
+export async function demanderChangementNumero(req, res, next) {
+  try {
+    const data = await changementNumero.demander(req.utilisateur, req.body || {});
+    return res.status(201).json({ success: true, data });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** POST /api/auth/changement-numero/:id/confirmer-ancien */
+export async function confirmerAncienNumero(req, res, next) {
+  try {
+    const data = await changementNumero.confirmerAncien(
+      req.utilisateur,
+      req.params.id,
+      (req.body || {}).code
+    );
+    return res.json({ success: true, data });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** POST /api/auth/changement-numero/:id/confirmer-nouveau — applique */
+export async function confirmerNouveauNumero(req, res, next) {
+  try {
+    const data = await changementNumero.confirmerNouveau(
+      req.utilisateur,
+      req.params.id,
+      (req.body || {}).code
+    );
+    return res.json({ success: true, data });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** DELETE /api/auth/changement-numero/:id */
+export async function annulerChangementNumero(req, res, next) {
+  try {
+    return res.json({
+      success: true,
+      data: await changementNumero.annuler(req.utilisateur, req.params.id),
     });
   } catch (err) {
     return next(err);

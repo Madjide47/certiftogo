@@ -10,4 +10,15 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Un envoi de fichier n'est pas du JSON. Axios calcule lui-même
+// « multipart/form-data; boundary=… », mais seulement si l'en-tête n'est
+// pas déjà fixé — le défaut ci-dessus l'en empêcherait, et le serveur
+// recevrait un corps multipart annoncé en JSON, donc aucun fichier.
+api.interceptors.request.use((config) => {
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
+  return config;
+});
+
 export default api;

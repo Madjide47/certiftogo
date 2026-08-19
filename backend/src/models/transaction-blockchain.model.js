@@ -10,14 +10,17 @@ const exec = (client) => (client ? (t, p) => client.query(t, p) : query);
 export async function creer(data, client) {
   const { rows } = await exec(client)(
     `INSERT INTO transactions_blockchain
-       (diplome_id, transaction_hash, block_number, adresse_contrat, statut)
-     VALUES ($1, $2, $3, $4, $5)
+       (diplome_id, transaction_hash, block_number, adresse_contrat,
+        gas_used, gas_price, statut)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id`,
     [
       data.diplome_id,
       data.transaction_hash || null,
       data.block_number ?? null,
       data.adresse_contrat || null,
+      data.gas_used ?? null,
+      data.gas_price ?? null,
       data.statut || 'en_attente',
     ]
   );

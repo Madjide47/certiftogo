@@ -111,3 +111,37 @@ jobs:
       - name: Compiler
         working-directory: ${{ matrix.app }}
         run: npm run build
+
+  # ── Dépendances vulnérables (L-14) ──────────────────────────
+  # Seuil « high » : le bruit des alertes faibles ferait ignorer le
+  # travail, et c'est ainsi qu'une alerte critique dort six mois.
+  #
+  # `blockchain/` est hors périmètre : Hardhat et son outillage ne
+  # tournent jamais en production, et le contrat déployé est du bytecode
+  # figé qui ne dépend d'aucun paquet npm à l'exécution. Voir
+  # docs/SECURITE-DEPENDANCES.md.
+  dependances:
+    name: Audit des dépendances
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        paquet: [backend, frontend-back-office, frontend-public]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Bloquant pour le backend, qui est propre à ce seuil. Signalant
+      # seulement pour les deux fronts, où `vite` et `postcss` attendent
+      # encore leur mise à jour : rendre la CI rouge sans correctif
+      # disponible apprendrait à l'équipe à ignorer le rouge. À repasser
+      # en bloquant dès que la mise à jour est faite.
+      - name: Auditer ${{ matrix.paquet }}
+        working-directory: ${{ matrix.paquet }}
+        continue-on-error: ${{ matrix.paquet != 'backend' }}
+        run: npm audit --audit-level=high

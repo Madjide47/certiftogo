@@ -4,10 +4,12 @@
 # Déploie 4 ressources : PostgreSQL managé, l'API Express, et les
 # deux frontends React en sites statiques.
 #
-# ⚠️ Les migrations ne sont PAS jouées automatiquement :
-#    migrations/001_init_schema.sql fait DROP TABLE sur les 10 tables.
-#    L'automatiser viderait la base à chaque déploiement.
-#    → voir docs/DEPLOIEMENT.md pour l'initialisation manuelle (une fois).
+# ⚠️ Les migrations ne sont PAS jouées automatiquement, par prudence :
+#    `npm run migrate` est incrémental (suivi dans schema_migrations) et
+#    peut être rejoué sans risque, mais `npm run migrate:reset` — comme
+#    `db:reset` et `db:demo` — reconstruit la base et efface tout.
+#    Ne jamais mettre ces trois-là dans buildCommand ou startCommand.
+#    → voir docs/DEPLOIEMENT.md pour la procédure.
 # ─────────────────────────────────────────────────────────────
 
 databases:

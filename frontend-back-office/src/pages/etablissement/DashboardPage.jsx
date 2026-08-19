@@ -1,120 +1,197 @@
 // ─────────────────────────────────────────────────────────────
-// Tableau de bord établissement : indicateurs clés + accès rapides.
+// Tableau de bord établissement.
+//
+// Structuré autour d'UNE question : « qu'est-ce qui m'attend ? ».
+// Les lots en instruction et les motifs de rejet passent avant les
+// volumes — un compteur de dossiers n'appelle aucune action, un lot
+// rejeté si.
 // ─────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
-import { statistiquesEtablissement } from '../../services/statistiques.service.js';
+import { tableauDeBord } from '../../services/tableau-bord.service.js';
+import { messageErreur } from '../../utils/libelles.js';
 import {
-  LIBELLES_STATUT_DOSSIER,
-  BADGE_STATUT_DOSSIER,
-  BAR_STATUT_DOSSIER,
-  messageErreur,
-} from '../../utils/libelles.js';
-import StatCard from '../../components/ui/StatCard.jsx';
-import Card from '../../components/ui/Card.jsx';
-import Icon from '../../components/ui/Icon.jsx';
+  EnTetePage,
+  Section,
+  Chiffre,
+  Encart,
+  Chargement,
+  Tableau,
+  Etiquette,
+  EtatVide,
+  Bouton,
+  Icone,
+} from '../../components/ui/index.jsx';
+
+const LIBELLES_LOT = {
+  transmis: 'Transmis',
+  en_examen: 'En examen',
+  valide: 'Validé',
+  partiellement_traite: 'Partiellement traité',
+  rejete: 'Rejeté',
+  certifie: 'Certifié',
+};
+
+const TONS_LOT = {
+  transmis: 'info',
+  en_examen: 'alerte',
+  valide: 'succes',
+  partiellement_traite: 'alerte',
+  rejete: 'erreur',
+  certifie: 'vert',
+};
 
 export default function DashboardPage() {
   const { utilisateur } = useAuth();
-  const [stats, setStats] = useState(null);
+  const [tableau, setTableau] = useState(null);
   const [erreur, setErreur] = useState('');
   const [chargement, setChargement] = useState(true);
 
   useEffect(() => {
-    statistiquesEtablissement()
-      .then(setStats)
+    tableauDeBord()
+      .then(setTableau)
       .catch((err) => setErreur(messageErreur(err)))
       .finally(() => setChargement(false));
   }, []);
 
-  const parStatut = stats?.dossiers_par_statut || {};
-  const total = stats?.total_dossiers || 0;
+  if (chargement) return <Chargement />;
+
+  const lots = tableau?.lots || {};
+  const parStatut = lots.par_statut || {};
+  const delai = tableau?.delai_certification || {};
+  const motifs = tableau?.motifs_rejet || [];
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="font-display text-3xl font-extrabold tracking-tight text-on-surface">
-          Bonjour {utilisateur?.prenom} 👋
-        </h1>
-        <p className="mt-1 text-on-surface-variant">Vue d'ensemble de votre établissement.</p>
-      </div>
+      <EnTetePage
+        titre={`Bonjour ${utilisateur?.prenom || ''}`.trim()}
+        description="Vue d'ensemble de votre établissement."
+      />
 
       {erreur && (
-        <div className="mb-4 rounded-lg bg-error-container px-4 py-3 text-sm text-on-error-container">
-          {erreur}
+        <div className="mb-5">
+          <Encart ton="erreur">{erreur}</Encart>
         </div>
       )}
 
-      {chargement ? (
-        <div className="py-16 text-center text-on-surface-variant">Chargement…</div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard libelle="Candidats" valeur={stats?.total_candidats ?? 0} icone="group" />
-            <StatCard libelle="Dossiers" valeur={total} icone="folder" />
-            <StatCard libelle="Brouillons" valeur={parStatut.brouillon ?? 0} icone="draft" />
-            <StatCard libelle="Soumis" valeur={parStatut.soumis ?? 0} icone="task_alt" />
-          </div>
-
-          <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-3">
-            {/* Répartition par statut */}
-            <Card className="p-8 lg:col-span-2">
-              <h3 className="font-display text-xl font-bold text-on-surface">Dossiers par statut</h3>
-              <div className="mt-6 space-y-5">
-                {Object.entries(parStatut).map(([statut, valeur]) => {
-                  const pct = total > 0 ? Math.round((valeur / total) * 100) : 0;
-                  return (
-                    <div key={statut}>
-                      <div className="mb-2 flex items-center justify-between">
-                        <span
-                          className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${BADGE_STATUT_DOSSIER[statut]}`}
-                        >
-                          {LIBELLES_STATUT_DOSSIER[statut]}
-                        </span>
-                        <span className="font-display text-lg font-bold text-on-surface">
-                          {valeur}
-                        </span>
-                      </div>
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-container-low">
-                        <div
-                          className={`h-full rounded-full ${BAR_STATUT_DOSSIER[statut] || 'bg-primary-container'}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-
-            {/* Accès rapides */}
-            <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low p-8">
-              <h3 className="font-display text-xl font-bold text-on-surface">Accès rapides</h3>
-              <div className="mt-6 flex flex-col gap-4">
-                <AccesRapide to="/candidats" icone="groups" libelle="Gérer les candidats" />
-                <AccesRapide to="/dossiers" icone="snippet_folder" libelle="Gérer les dossiers" />
-              </div>
-            </div>
-          </div>
-        </>
+      {/* Ce qui appelle une action passe en premier. */}
+      {lots.rejetes > 0 && (
+        <div className="mb-5">
+          <Encart ton="alerte" titre={`${lots.rejetes} lot(s) rejeté(s) par le ministère`}>
+            Consultez les motifs, corrigez les promotions concernées puis retransmettez-les.{' '}
+            <Link to="/lots" className="underline underline-offset-2">
+              Voir les lots
+            </Link>
+          </Encart>
+        </div>
       )}
-    </div>
-  );
-}
 
-function AccesRapide({ to, icone, libelle }) {
-  return (
-    <Link
-      to={to}
-      className="group flex flex-col items-center justify-center gap-3 rounded-2xl border border-outline-variant/20 bg-white p-6 text-center transition-all hover:border-primary-fixed-dim hover:shadow-soft"
-    >
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-container-highest text-primary transition-transform group-hover:scale-110">
-        <Icon name={icone} filled size={28} />
-      </div>
-      <span className="font-display text-lg font-semibold text-on-surface group-hover:text-primary">
-        {libelle}
-      </span>
-    </Link>
+      <Section titre="Transmissions">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Chiffre
+            libelle="En attente au ministère"
+            valeur={lots.en_attente ?? 0}
+            precision="transmis ou en cours d'examen"
+            ton={lots.en_attente > 0 ? 'alerte' : 'neutre'}
+          />
+          <Chiffre libelle="Validés" valeur={parStatut.valide ?? 0} ton="vert" />
+          <Chiffre libelle="Certifiés" valeur={parStatut.certifie ?? 0} ton="vert" />
+          <Chiffre
+            libelle="Rejetés"
+            valeur={lots.rejetes ?? 0}
+            ton={lots.rejetes > 0 ? 'erreur' : 'neutre'}
+          />
+        </div>
+      </Section>
+
+      <Section
+        titre="Délai de certification"
+        description="Temps écoulé entre la transmission d'un dossier et sa certification par le ministère."
+      >
+        {delai.echantillon > 0 ? (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Chiffre libelle="Délai moyen" valeur={`${delai.jours_moyen ?? '—'} j`} />
+            <Chiffre libelle="Le plus rapide" valeur={`${delai.jours_min ?? '—'} j`} />
+            <Chiffre
+              libelle="Le plus long"
+              valeur={`${delai.jours_max ?? '—'} j`}
+              precision={`sur ${delai.echantillon} diplôme(s)`}
+            />
+          </div>
+        ) : (
+          <EtatVide
+            icone="schedule"
+            titre="Aucun diplôme certifié pour l'instant"
+          >
+            Le délai apparaîtra dès qu'un premier dossier aura été certifié par le ministère.
+          </EtatVide>
+        )}
+      </Section>
+
+      <Section
+        titre="Motifs de rejet les plus fréquents"
+        description="Ce que le ministère vous renvoie le plus souvent — donc ce qu'il faut corriger en priorité."
+      >
+        <Tableau
+          legende="Motifs de rejet agrégés"
+          colonnes={[
+            { cle: 'motif', libelle: 'Motif' },
+            {
+              cle: 'occurrences',
+              libelle: 'Occurrences',
+              alignement: 'droite',
+              tabulaire: true,
+            },
+          ]}
+          lignes={motifs}
+          cle={(l, i) => `${i}`}
+          vide={
+            <EtatVide icone="thumb_up" titre="Aucun dossier rejeté">
+              Vos transmissions passent l'instruction sans renvoi.
+            </EtatVide>
+          }
+        />
+      </Section>
+
+      <Section titre="Promotions par statut">
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(tableau?.promotions || {}).map(([statut, total]) => (
+            <span key={statut} className="border border-gris-300 bg-white px-3 py-2 text-sm">
+              <span className="text-gris-500">{statut.replace('_', ' ')}</span>{' '}
+              <span className="tabulaire font-bold">{total}</span>
+            </span>
+          ))}
+          {Object.keys(tableau?.promotions || {}).length === 0 && (
+            <EtatVide
+              icone="groups"
+              titre="Aucune promotion"
+              action={
+                <Link to="/promotions">
+                  <Bouton icone="add">Créer une promotion</Bouton>
+                </Link>
+              }
+            >
+              Créez une promotion pour regrouper vos étudiants avant de les transmettre.
+            </EtatVide>
+          )}
+        </div>
+      </Section>
+
+      <Section titre="Répartition des lots">
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(parStatut).map(([statut, total]) => (
+            <Etiquette key={statut} ton={TONS_LOT[statut] || 'neutre'}>
+              {LIBELLES_LOT[statut] || statut} — {total}
+            </Etiquette>
+          ))}
+          {Object.keys(parStatut).length === 0 && (
+            <p className="flex items-center gap-1.5 text-base text-gris-500">
+              <Icone nom="info" taille={18} /> Aucun lot transmis pour l'instant.
+            </p>
+          )}
+        </div>
+      </Section>
+    </div>
   );
 }

@@ -7,6 +7,7 @@
 import * as diplomeModel from '../models/diplome.model.js';
 import * as verificationModel from '../models/verification.model.js';
 import * as blockchain from './blockchain.service.js';
+import * as notifications from './notification.service.js';
 
 const METHODES = ['hash', 'qr', 'pdf'];
 const RE_HASH = /^[0-9a-f]{64}$/i;
@@ -26,6 +27,13 @@ function vuePublique(d, resultat) {
     hash: d.hash_sha256,
     transaction_id: d.transaction_id,
     motif_revocation: d.statut === 'revoque' ? d.motif_revocation : null,
+    version: d.version,
+    message:
+      resultat === 'en_attente_ancrage'
+        ? 'Diplôme délivré par le ministère. Son enregistrement sur la blockchain est en cours ; la preuve publique sera disponible sous peu.'
+        : resultat === 'remplace'
+          ? 'Ce document a été remplacé par une version corrigée. Le diplôme reste valide : demandez la version en vigueur à son titulaire.'
+          : null,
   };
 }
 
@@ -46,7 +54,18 @@ export async function verifier(valeur, { methode = 'hash', ip = null, userAgent 
       : await diplomeModel.trouverParReference(cle.toUpperCase());
   }
 
-  const resultat = !diplome ? 'introuvable' : diplome.statut === 'revoque' ? 'revoque' : 'authentique';
+  // Un diplôme en attente d'ancrage est bien délivré, mais sa preuve
+  // publique n'est pas encore publiée. Le dire franchement vaut mieux que
+  // de l'annoncer « authentique » sans pouvoir l'étayer on-chain.
+  const resultat = !diplome
+    ? 'introuvable'
+    : diplome.statut === 'revoque'
+      ? 'revoque'
+      : diplome.statut === 'en_attente_ancrage'
+        ? 'en_attente_ancrage'
+        : diplome.statut === 'remplace'
+          ? 'remplace'
+          : 'authentique';
 
   // Journalisation (best-effort : ne bloque pas la réponse en cas d'échec).
   try {
@@ -64,9 +83,56 @@ export async function verifier(valeur, { methode = 'hash', ip = null, userAgent 
 
   if (!diplome) return { resultat: 'introuvable' };
 
+  // Le titulaire est averti que son diplôme a été consulté (I-10). Hors
+  // du chemin de réponse : un employeur n'a pas à attendre l'envoi d'une
+  // notification qui ne le concerne pas.
+  avertirTitulaire(diplome).catch(() => {
+    /* déjà journalisé par le service de notifications */
+  });
+
   const vue = vuePublique(diplome, resultat);
   vue.ancrage_blockchain = await lireAncrage(diplome.hash_sha256);
+
+  // Un employeur qui scanne un ancien PDF doit être renvoyé vers la
+  // version en vigueur, pas laissé avec un document périmé.
+  if (resultat === 'remplace') {
+    const courante = await diplomeModel.versionCourante(diplome.id);
+    vue.version_en_vigueur = courante
+      ? { reference: courante.reference, version: courante.version, statut: courante.statut }
+      : null;
+  }
+
   return vue;
+}
+
+/**
+ * Fenêtre de regroupement des avis de consultation.
+ *
+ * Un recruteur qui recharge la page, un QR scanné trois fois pendant un
+ * entretien : sans regroupement, le titulaire reçoit une rafale d'avis
+ * pour une seule vérification, et finit par tous les désactiver. Une
+ * alerte qu'on éteint ne protège plus personne.
+ */
+const FENETRE_AVIS_CONSULTATION_H = 6;
+
+/** Avertit le titulaire qu'un tiers a consulté son diplôme (I-10). */
+async function avertirTitulaire(diplome) {
+  const dejaAverti = await verificationModel.derniereNotificationConsultation(
+    diplome.id,
+    FENETRE_AVIS_CONSULTATION_H
+  );
+  if (dejaAverti) return;
+
+  await notifications.notifierDiplome(
+    notifications.EVENEMENTS.QR_CONSULTE,
+    diplome.candidat_id,
+    {
+      reference: diplome.reference,
+      date: new Date().toLocaleDateString('fr-FR'),
+      entite: 'diplomes',
+      entite_id: diplome.id,
+    }
+  );
 }
 
 /**

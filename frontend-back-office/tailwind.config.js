@@ -1,65 +1,98 @@
 /** @type {import('tailwindcss').Config} */
+
+// ─────────────────────────────────────────────────────────────
+// Jetons de design — registre « service public ».
+//
+// Trois règles qui gouvernent tout le reste :
+//
+//  1. UNE couleur primaire (le vert du drapeau togolais), une échelle de
+//     gris, quatre couleurs d'état. Rien d'autre. Une interface
+//     administrative qui multiplie les couleurs perd sa lisibilité et son
+//     autorité.
+//
+//  2. UNE famille typographique, quatre tailles. La hiérarchie se fait par
+//     la graisse et l'espacement, pas par la variété.
+//
+//  3. AUCUNE ombre portée, aucun dégradé, aucune animation décorative. La
+//     séparation se fait par des filets de 1 px. C'est ce qui distingue un
+//     portail d'État d'une application grand public.
+//
+// Références : DSFR (France), GOV.UK Design System.
+// ─────────────────────────────────────────────────────────────
+
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
+    // On REMPLACE l'échelle par défaut plutôt que de l'étendre : laisser
+    // les vingt-deux couleurs de Tailwind disponibles garantit qu'elles
+    // finiront par être utilisées.
+    colors: {
+      transparent: 'transparent',
+      current: 'currentColor',
+      white: '#ffffff',
+
+      // Primaire — vert du drapeau togolais.
+      vert: {
+        DEFAULT: '#006a4e',
+        fonce: '#00432f',
+        clair: '#e8f2ee',
+      },
+      // Accent d'État, réservé au bandeau officiel et aux liserés.
+      jaune: {
+        DEFAULT: '#ffce00',
+        fonce: '#8a6d00',
+        clair: '#fff6d6',
+      },
+
+      // Échelle de gris — la structure de l'interface.
+      gris: {
+        900: '#16191d', // texte principal
+        700: '#3a3f45', // texte secondaire
+        500: '#6a7178', // libellés, méta
+        300: '#d5d8dc', // filets, bordures
+        200: '#e5e7ea', // bordures légères
+        100: '#f2f3f4', // fonds alternés
+        50: '#f7f8f9', // fond de page
+      },
+
+      // États — quatre, pas davantage.
+      succes: { DEFAULT: '#18753c', clair: '#e3f4e9' },
+      alerte: { DEFAULT: '#b34000', clair: '#fdf0e8' },
+      erreur: { DEFAULT: '#ce0500', clair: '#fdeae9' },
+      info: { DEFAULT: '#0063cb', clair: '#e8f1fc' },
+    },
+
+    fontFamily: {
+      sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+      mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+    },
+
+    // Quatre tailles utiles, plus une pour les mentions.
+    fontSize: {
+      xs: ['0.75rem', { lineHeight: '1.1rem' }], // 12 — mentions, méta
+      sm: ['0.8125rem', { lineHeight: '1.25rem' }], // 13 — tableaux
+      base: ['0.875rem', { lineHeight: '1.375rem' }], // 14 — corps
+      lg: ['1.125rem', { lineHeight: '1.5rem' }], // 18 — titre de section
+      xl: ['1.5rem', { lineHeight: '1.875rem' }], // 24 — titre de page
+    },
+
+    borderRadius: {
+      none: '0',
+      DEFAULT: '2px',
+      md: '4px',
+      full: '9999px',
+    },
+
+    // Pas d'ombre portée : seul l'anneau de focus subsiste, parce qu'il
+    // est fonctionnel et non décoratif.
+    boxShadow: {
+      none: 'none',
+      focus: '0 0 0 2px #ffffff, 0 0 0 4px #0063cb',
+    },
+
     extend: {
-      fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
-        display: ['Manrope', 'Inter', 'system-ui', 'sans-serif'],
-      },
-      colors: {
-        // Palette CertifTOGO historique (compat).
-        togo: {
-          green: '#006a4e',
-          'green-dark': '#00543e',
-          yellow: '#ffce00',
-          red: '#d21034',
-        },
-        // Design system (tokens Material 3 issus du DESIGN.md Stitch).
-        // Vert institutionnel, jaune togolais, rouge révocation.
-        primary: '#00503a',
-        'on-primary': '#ffffff',
-        'primary-container': '#006a4e',
-        'on-primary-container': '#92e7c3',
-        'primary-fixed': '#9ef4d0',
-        'primary-fixed-dim': '#83d7b4',
-        'on-primary-fixed': '#002116',
-        'inverse-primary': '#83d7b4',
-        secondary: '#735c00',
-        'on-secondary': '#ffffff',
-        'secondary-container': '#fdcc00',
-        'secondary-fixed': '#ffe086',
-        'secondary-fixed-dim': '#efc100',
-        'on-secondary-fixed': '#231a00',
-        'on-secondary-container': '#6e5700',
-        tertiary: '#8f001e',
-        'tertiary-container': '#bc002b',
-        'on-tertiary': '#ffffff',
-        error: '#ba1a1a',
-        'error-container': '#ffdad6',
-        'on-error': '#ffffff',
-        'on-error-container': '#93000a',
-        background: '#f8fafc',
-        surface: '#faf8ff',
-        'surface-bright': '#faf8ff',
-        'surface-dim': '#d2d9f4',
-        'surface-container-lowest': '#ffffff',
-        'surface-container-low': '#f2f3ff',
-        'surface-container': '#eaedff',
-        'surface-container-high': '#e2e7ff',
-        'surface-container-highest': '#dae2fd',
-        'surface-variant': '#dae2fd',
-        'on-surface': '#131b2e',
-        'on-surface-variant': '#3f4944',
-        outline: '#6f7a73',
-        'outline-variant': '#bec9c2',
-        'inverse-surface': '#283044',
-        'inverse-on-surface': '#eef0ff',
-      },
-      boxShadow: {
-        soft: '0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.05)',
-        'soft-md': '0 2px 4px rgba(15,23,42,0.05), 0 8px 24px rgba(15,23,42,0.08)',
-      },
+      spacing: { 18: '4.5rem', 72: '18rem' },
+      maxWidth: { contenu: '78rem' },
     },
   },
   plugins: [],

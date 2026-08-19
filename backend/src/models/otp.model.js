@@ -59,3 +59,34 @@ export async function invaliderCodesActifs(utilisateur_id) {
     [utilisateur_id]
   );
 }
+
+/**
+ * Code actif d'un numéro, quel que soit le code saisi.
+ * Sert à compter les essais infructueux : sans cela, une erreur de saisie
+ * et une attaque par force brute seraient indiscernables.
+ */
+export async function trouverCodeActif(telephone) {
+  const { rows } = await query(
+    `SELECT id, utilisateur_id, code, telephone, utilise, bloque, tentatives, date_expiration
+       FROM codes_otp
+      WHERE telephone = $1 AND utilise = FALSE AND date_expiration > now()
+      ORDER BY date_creation DESC
+      LIMIT 1`,
+    [telephone]
+  );
+  return rows[0] || null;
+}
+
+/** Incrémente le compteur d'essais et brûle le code au-delà du plafond. */
+export async function enregistrerEchec(id, plafond) {
+  const { rows } = await query(
+    `UPDATE codes_otp
+        SET tentatives = tentatives + 1,
+            bloque = (tentatives + 1 >= $2),
+            utilise = (tentatives + 1 >= $2)
+      WHERE id = $1
+      RETURNING tentatives, bloque`,
+    [id, plafond]
+  );
+  return rows[0] || null;
+}

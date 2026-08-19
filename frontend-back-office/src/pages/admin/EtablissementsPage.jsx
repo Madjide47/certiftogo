@@ -1,37 +1,52 @@
 // ─────────────────────────────────────────────────────────────
-// Admin système — gestion des établissements : liste, création,
-// suspension / réactivation.
+// Établissements, vus par l'exploitant.
+//
+// L'écran précédent proposait un bouton « Nouvel établissement » qui
+// appelait une route supprimée : l'agrément est passé au ministère, où
+// il s'accompagne d'un code officiel, d'habilitations et d'un premier
+// agent. Créer un établissement n'est pas un acte technique — c'est
+// reconnaître un organisme, et cela ne relève pas de l'exploitant.
+//
+// Reste ici ce qui est bien de son ressort : constater l'état du parc, et
+// suspendre en urgence. Une suspension gèle les transmissions ; elle ne
+// touche PAS aux diplômes déjà certifiés, qui restent vérifiables.
 // ─────────────────────────────────────────────────────────────
-import { useEffect, useState } from 'react';
-import Modal from '../../components/ui/Modal.jsx';
-import PageHeader from '../../components/ui/PageHeader.jsx';
-import Badge from '../../components/ui/Badge.jsx';
-import Icon from '../../components/ui/Icon.jsx';
-import { INPUT, BTN_PRIMARY, BTN_GHOST, TABLE_WRAP, TH, TD, ROW, ACT } from '../../components/ui/classes.js';
+import { useEffect, useMemo, useState } from 'react';
 import {
   listerEtablissements,
-  creerEtablissement,
   definirStatutEtablissement,
 } from '../../services/admin.service.js';
 import {
   LIBELLES_TYPE_ETABLISSEMENT,
-  OPTIONS_TYPE_ETABLISSEMENT,
   LIBELLES_STATUT_ETABLISSEMENT,
-  BADGE_STATUT_ETABLISSEMENT,
   messageErreur,
 } from '../../utils/libelles.js';
+import {
+  EnTetePage,
+  Tableau,
+  Etiquette,
+  Encart,
+  EtatVide,
+  Bouton,
+  Champ,
+  Saisie,
+  Liste,
+  Modale,
+  Chiffre,
+  Icone,
+} from '../../components/ui/index.jsx';
 
-const FORM_VIDE = { nom: '', type: 'institut', ville: '', email: '', telephone: '', adresse: '' };
+const TONS_STATUT = { actif: 'succes', suspendu: 'erreur', archive: 'neutre' };
 
-export default function EtablissementsPage() {
+export default function AdminEtablissementsPage() {
   const [etablissements, setEtablissements] = useState([]);
+  const [recherche, setRecherche] = useState('');
+  const [filtreStatut, setFiltreStatut] = useState('');
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState('');
-
-  const [modaleOuverte, setModaleOuverte] = useState(false);
-  const [form, setForm] = useState(FORM_VIDE);
-  const [erreurForm, setErreurForm] = useState('');
-  const [enregistrement, setEnregistrement] = useState(false);
+  const [message, setMessage] = useState('');
+  const [confirmation, setConfirmation] = useState(null);
+  const [enCours, setEnCours] = useState(false);
 
   async function charger() {
     setChargement(true);
@@ -49,162 +64,205 @@ export default function EtablissementsPage() {
     charger();
   }, []);
 
-  function majChamp(nom, valeur) {
-    setForm((f) => ({ ...f, [nom]: valeur }));
-  }
+  const affiches = useMemo(() => {
+    const q = recherche.trim().toLowerCase();
+    return etablissements.filter((e) => {
+      if (filtreStatut && e.statut !== filtreStatut) return false;
+      if (!q) return true;
+      return `${e.nom} ${e.code || ''} ${e.ville || ''}`.toLowerCase().includes(q);
+    });
+  }, [etablissements, recherche, filtreStatut]);
 
-  function ouvrirCreation() {
-    setForm(FORM_VIDE);
-    setErreurForm('');
-    setModaleOuverte(true);
-  }
+  const parStatut = (s) => etablissements.filter((e) => e.statut === s).length;
 
-  async function soumettre(e) {
-    e.preventDefault();
-    setEnregistrement(true);
-    setErreurForm('');
+  async function appliquer() {
+    if (!confirmation) return;
+    setEnCours(true);
+    setErreur('');
     try {
-      await creerEtablissement(form);
-      setModaleOuverte(false);
-      await charger();
-    } catch (err) {
-      setErreurForm(messageErreur(err));
-    } finally {
-      setEnregistrement(false);
-    }
-  }
-
-  async function basculerStatut(et) {
-    const cible = et.statut === 'actif' ? 'suspendu' : 'actif';
-    try {
-      await definirStatutEtablissement(et.id, cible);
+      await definirStatutEtablissement(confirmation.etablissement.id, confirmation.statut);
+      setMessage(
+        confirmation.statut === 'suspendu'
+          ? `${confirmation.etablissement.nom} est suspendu : ses transmissions sont gelées. Ses diplômes déjà certifiés restent vérifiables.`
+          : `${confirmation.etablissement.nom} est réactivé.`
+      );
+      setConfirmation(null);
       await charger();
     } catch (err) {
       setErreur(messageErreur(err));
+    } finally {
+      setEnCours(false);
     }
   }
 
   return (
     <div>
-      <PageHeader titre="Établissements" sous={`${etablissements.length} établissement(s)`}>
-        <button onClick={ouvrirCreation} className={BTN_PRIMARY}>
-          <Icon name="add" size={20} /> Nouvel établissement
-        </button>
-      </PageHeader>
+      <EnTetePage
+        titre="Établissements"
+        description="Parc des organismes agréés. L’agrément relève du ministère ; l’exploitation, de cet écran."
+        fil={[{ libelle: 'Comptes' }, { libelle: 'Établissements' }]}
+      />
 
       {erreur && (
-        <div className="mb-4 rounded-lg bg-error-container px-4 py-3 text-sm text-on-error-container">
-          {erreur}
+        <div className="mb-4">
+          <Encart ton="erreur">{erreur}</Encart>
+        </div>
+      )}
+      {message && (
+        <div className="mb-4">
+          <Encart ton="succes">{message}</Encart>
         </div>
       )}
 
-      <div className={TABLE_WRAP}>
-        <table className="w-full">
-          <thead className="bg-surface-container-low/60">
-            <tr>
-              <th className={TH}>Nom</th>
-              <th className={TH}>Type</th>
-              <th className={TH}>Ville</th>
-              <th className={TH}>Statut</th>
-              <th className={`${TH} text-right`}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {chargement ? (
-              <tr>
-                <td colSpan={5} className="px-5 py-10 text-center text-on-surface-variant">
-                  Chargement…
-                </td>
-              </tr>
-            ) : etablissements.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-5 py-10 text-center text-on-surface-variant">
-                  Aucun établissement.
-                </td>
-              </tr>
-            ) : (
-              etablissements.map((et) => (
-                <tr key={et.id} className={ROW}>
-                  <td className={`${TD} font-semibold`}>{et.nom}</td>
-                  <td className={`${TD} text-on-surface-variant`}>
-                    {LIBELLES_TYPE_ETABLISSEMENT[et.type] || et.type}
-                  </td>
-                  <td className={`${TD} text-on-surface-variant`}>{et.ville}</td>
-                  <td className={TD}>
-                    <Badge className={BADGE_STATUT_ETABLISSEMENT[et.statut]}>
-                      {LIBELLES_STATUT_ETABLISSEMENT[et.statut] || et.statut}
-                    </Badge>
-                  </td>
-                  <td className={`${TD} text-right`}>
-                    {et.statut !== 'archive' && (
-                      <button
-                        onClick={() => basculerStatut(et)}
-                        className={`${ACT} ${
-                          et.statut === 'actif'
-                            ? 'text-secondary hover:bg-secondary-fixed/40'
-                            : 'text-emerald-600 hover:bg-emerald-50'
-                        }`}
-                      >
-                        {et.statut === 'actif' ? 'Suspendre' : 'Réactiver'}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        <Chiffre libelle="Établissements" valeur={etablissements.length} />
+        <Chiffre libelle="Actifs" valeur={parStatut('actif')} ton="vert" />
+        <Chiffre
+          libelle="Suspendus"
+          valeur={parStatut('suspendu')}
+          ton={parStatut('suspendu') > 0 ? 'erreur' : 'neutre'}
+        />
       </div>
 
-      <Modal ouvert={modaleOuverte} titre="Nouvel établissement" onFermer={() => setModaleOuverte(false)}>
-        <form onSubmit={soumettre} className="space-y-4">
-          {erreurForm && (
-            <div className="rounded-lg bg-error-container px-4 py-2.5 text-sm text-on-error-container">
-              {erreurForm}
-            </div>
-          )}
-          <label className="block">
-            <span className="text-sm font-medium text-on-surface-variant">Nom *</span>
-            <input required value={form.nom} onChange={(e) => majChamp('nom', e.target.value)} className={INPUT} />
-          </label>
-          <div className="grid grid-cols-2 gap-4">
-            <label className="block">
-              <span className="text-sm font-medium text-on-surface-variant">Type *</span>
-              <select value={form.type} onChange={(e) => majChamp('type', e.target.value)} className={INPUT}>
-                {OPTIONS_TYPE_ETABLISSEMENT.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium text-on-surface-variant">Ville *</span>
-              <input required value={form.ville} onChange={(e) => majChamp('ville', e.target.value)} className={INPUT} />
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium text-on-surface-variant">Email</span>
-              <input type="email" value={form.email} onChange={(e) => majChamp('email', e.target.value)} className={INPUT} />
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium text-on-surface-variant">Téléphone</span>
-              <input value={form.telephone} onChange={(e) => majChamp('telephone', e.target.value)} className={INPUT} />
-            </label>
-          </div>
-          <label className="block">
-            <span className="text-sm font-medium text-on-surface-variant">Adresse</span>
-            <input value={form.adresse} onChange={(e) => majChamp('adresse', e.target.value)} className={INPUT} />
-          </label>
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={() => setModaleOuverte(false)} className={BTN_GHOST}>
-              Annuler
-            </button>
-            <button type="submit" disabled={enregistrement} className={BTN_PRIMARY}>
-              {enregistrement ? 'Création…' : 'Créer'}
-            </button>
-          </div>
-        </form>
-      </Modal>
+      <div className="mb-4 grid gap-3 sm:grid-cols-2">
+        <Champ label="Rechercher" htmlFor="f-recherche" aide="Nom, code officiel ou ville.">
+          <Saisie
+            id="f-recherche"
+            value={recherche}
+            onChange={(e) => setRecherche(e.target.value)}
+            placeholder="IAI001, Lomé…"
+          />
+        </Champ>
+        <Champ label="Statut" htmlFor="f-statut">
+          <Liste
+            id="f-statut"
+            vide="Tous les statuts"
+            value={filtreStatut}
+            onChange={(e) => setFiltreStatut(e.target.value)}
+            options={[
+              { value: 'actif', label: 'Actifs' },
+              { value: 'suspendu', label: 'Suspendus' },
+              { value: 'archive', label: 'Archivés' },
+            ]}
+          />
+        </Champ>
+      </div>
+
+      <Tableau
+        legende="Établissements"
+        chargement={chargement}
+        lignes={affiches}
+        colonnes={[
+          {
+            cle: 'nom',
+            libelle: 'Établissement',
+            rendu: (e) => (
+              <span>
+                <span className="font-medium">{e.nom}</span>
+                <span className="block text-xs text-gris-500">
+                  {LIBELLES_TYPE_ETABLISSEMENT[e.type] || e.type}
+                  {e.ville && ` · ${e.ville}`}
+                </span>
+              </span>
+            ),
+          },
+          {
+            cle: 'code',
+            libelle: 'Code officiel',
+            tabulaire: true,
+            rendu: (e) => e.code || '—',
+          },
+          {
+            cle: 'contact',
+            libelle: 'Contact',
+            rendu: (e) => (
+              <span className="text-gris-700">
+                {e.telephone || '—'}
+                {e.email && <span className="block text-xs text-gris-500">{e.email}</span>}
+              </span>
+            ),
+          },
+          {
+            cle: 'statut',
+            libelle: 'Statut',
+            rendu: (e) => (
+              <Etiquette ton={TONS_STATUT[e.statut] || 'neutre'}>
+                {LIBELLES_STATUT_ETABLISSEMENT[e.statut] || e.statut}
+              </Etiquette>
+            ),
+          },
+          {
+            cle: 'actions',
+            libelle: '',
+            alignement: 'droite',
+            rendu: (e) =>
+              e.statut === 'suspendu' ? (
+                <Bouton
+                  variante="discret"
+                  onClick={() => setConfirmation({ etablissement: e, statut: 'actif' })}
+                >
+                  Réactiver
+                </Bouton>
+              ) : (
+                <Bouton
+                  variante="discret"
+                  className="text-erreur hover:text-erreur"
+                  onClick={() => setConfirmation({ etablissement: e, statut: 'suspendu' })}
+                >
+                  Suspendre
+                </Bouton>
+              ),
+          },
+        ]}
+        vide={
+          <EtatVide icone="account_balance" titre="Aucun établissement">
+            Les établissements sont agréés par le ministère, à partir des demandes d’intégration.
+          </EtatVide>
+        }
+      />
+
+      <p className="mt-3 flex items-start gap-1.5 text-sm text-gris-500">
+        <Icone nom="account_balance" taille={16} className="mt-0.5 shrink-0" />
+        Pour agréer un nouvel établissement, lui attribuer son code officiel et ses habilitations,
+        passez par l’espace ministère : c’est un acte administratif, pas une opération technique.
+      </p>
+
+      <Modale
+        ouvert={Boolean(confirmation)}
+        titre={
+          confirmation?.statut === 'suspendu'
+            ? `Suspendre ${confirmation?.etablissement?.nom}`
+            : `Réactiver ${confirmation?.etablissement?.nom}`
+        }
+        onFermer={() => setConfirmation(null)}
+        largeur="max-w-lg"
+      >
+        {confirmation?.statut === 'suspendu' ? (
+          <Encart ton="alerte" titre="Ce que la suspension produit">
+            Les transmissions de cet établissement sont gelées immédiatement : ses promotions ne
+            partent plus au ministère. Ses agents conservent leur accès en lecture. Les diplômes
+            déjà certifiés restent valides et vérifiables — une suspension n’efface pas le passé.
+          </Encart>
+        ) : (
+          <Encart ton="info">
+            L’établissement pourra de nouveau transmettre des promotions au ministère.
+          </Encart>
+        )}
+
+        <div className="mt-4 flex justify-end gap-2">
+          <Bouton variante="secondaire" onClick={() => setConfirmation(null)}>
+            Annuler
+          </Bouton>
+          <Bouton
+            variante={confirmation?.statut === 'suspendu' ? 'danger' : 'primaire'}
+            icone={confirmation?.statut === 'suspendu' ? 'block' : 'check'}
+            enCours={enCours}
+            onClick={appliquer}
+          >
+            {confirmation?.statut === 'suspendu' ? 'Suspendre' : 'Réactiver'}
+          </Bouton>
+        </div>
+      </Modale>
     </div>
   );
 }

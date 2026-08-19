@@ -14,6 +14,7 @@ const SELECT_DIPLOME = `
   d.id, d.reference, d.dossier_id, d.candidat_id, d.etablissement_id, d.ministere_id,
   d.donnees_signees, d.hash_sha256, d.signature_numerique, d.transaction_id,
   d.qr_code_url, d.pdf_url, d.statut, d.motif_revocation,
+  d.version, d.diplome_precedent_id, d.motif_version, d.cle_signature_id,
   d.date_certification, d.date_revocation,
   c.nom AS candidat_nom, c.prenom AS candidat_prenom,
   c.numero_etudiant AS candidat_numero_etudiant,
@@ -71,25 +72,32 @@ export async function trouverParReference(reference) {
   return rows[0] || null;
 }
 
-/** Liste les diplômes d'un candidat (son portefeuille). */
-export async function listerParCandidat(candidat_id) {
+/**
+ * Portefeuille d'une personne : tous ses diplômes, quel que soit
+ * l'établissement d'origine. Le passage par `candidats` est ce qui rend
+ * le portefeuille national — une personne peut avoir étudié ailleurs.
+ */
+export async function listerParPersonne(personne_id) {
   const { rows } = await query(
-    `SELECT ${SELECT_DIPLOME} ${FROM_DIPLOME}
-      WHERE d.candidat_id = $1
+    `SELECT ${SELECT_DIPLOME},
+            precedent.reference AS remplace_reference
+       ${FROM_DIPLOME}
+       LEFT JOIN diplomes precedent ON precedent.id = d.diplome_precedent_id
+      WHERE d.candidat_id IN (SELECT id FROM candidats WHERE personne_id = $1)
       ORDER BY d.date_certification DESC`,
-    [candidat_id]
+    [personne_id]
   );
   return rows;
 }
 
-/** Répartition des diplômes d'un candidat par statut. */
-export async function compterParCandidat(candidat_id) {
+/** Répartition par statut des diplômes d'une personne. */
+export async function compterParPersonne(personne_id) {
   const { rows } = await query(
     `SELECT statut, COUNT(*)::int AS total
        FROM diplomes
-      WHERE candidat_id = $1
+      WHERE candidat_id IN (SELECT id FROM candidats WHERE personne_id = $1)
       GROUP BY statut`,
-    [candidat_id]
+    [personne_id]
   );
   return rows;
 }
@@ -115,8 +123,9 @@ export async function creer(data, client) {
     `INSERT INTO diplomes
        (reference, dossier_id, candidat_id, etablissement_id, ministere_id,
         donnees_signees, hash_sha256, signature_numerique, transaction_id,
-        qr_code_url, pdf_url)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        qr_code_url, pdf_url, statut, version, diplome_precedent_id, motif_version,
+        cle_signature_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
      RETURNING id`,
     [
       data.reference,
@@ -130,6 +139,11 @@ export async function creer(data, client) {
       data.transaction_id || null,
       data.qr_code_url || null,
       data.pdf_url || null,
+      data.statut || 'actif',
+      data.version || 1,
+      data.diplome_precedent_id || null,
+      data.motif_version || null,
+      data.cle_signature_id || null,
     ]
   );
   return trouverParId(rows[0].id, client);
@@ -147,4 +161,52 @@ export async function revoquer(id, motif, client) {
     [id, motif]
   );
   return rows[0] ? trouverParId(id, client) : null;
+}
+
+/** Marque un diplôme comme remplacé par une nouvelle version. */
+export async function marquerRemplace(id, motif, client) {
+  const { rows } = await exec(client)(
+    `UPDATE diplomes SET statut = 'remplace', motif_version = $2, date_revocation = now()
+      WHERE id = $1 AND statut IN ('actif', 'en_attente_ancrage')
+      RETURNING id`,
+    [id, motif]
+  );
+  return rows[0] ? trouverParId(id, client) : null;
+}
+
+/**
+ * Chaîne complète des versions d'un diplôme, depuis n'importe laquelle.
+ * On remonte d'abord à la racine, puis on redescend : un employeur qui
+ * scanne une vieille version doit pouvoir atteindre celle en vigueur.
+ */
+export async function chaineVersions(id) {
+  const { rows } = await query(
+    `WITH RECURSIVE racine AS (
+         SELECT id, diplome_precedent_id FROM diplomes WHERE id = $1
+         UNION ALL
+         SELECT d.id, d.diplome_precedent_id
+           FROM diplomes d JOIN racine r ON d.id = r.diplome_precedent_id
+     ),
+     depart AS (
+         SELECT id FROM racine WHERE diplome_precedent_id IS NULL LIMIT 1
+     ),
+     descendance AS (
+         SELECT id, diplome_precedent_id FROM diplomes
+          WHERE id = (SELECT id FROM depart)
+         UNION ALL
+         SELECT d.id, d.diplome_precedent_id
+           FROM diplomes d JOIN descendance x ON d.diplome_precedent_id = x.id
+     )
+     SELECT ${SELECT_DIPLOME} ${FROM_DIPLOME}
+      WHERE d.id IN (SELECT id FROM descendance)
+      ORDER BY d.version`,
+    [id]
+  );
+  return rows;
+}
+
+/** Version en vigueur d'une chaîne (la plus récente non remplacée). */
+export async function versionCourante(id) {
+  const chaine = await chaineVersions(id);
+  return chaine.find((d) => d.statut !== 'remplace') || chaine[chaine.length - 1] || null;
 }

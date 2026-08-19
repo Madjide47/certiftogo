@@ -32,11 +32,20 @@ certifier, donc aucune transaction d'autorisation supplémentaire n'est requise.
 
 ---
 
-## 3. Initialiser la base — une seule fois
+## 3. Initialiser la base
 
-> ⚠️ **`migrations/001_init_schema.sql` commence par `DROP TABLE` sur les
-> 10 tables.** Ne jamais le mettre dans `buildCommand` ou `startCommand` :
-> la base serait vidée à chaque déploiement.
+`npm run migrate` joue les fichiers de `migrations/` dans l'ordre et note
+chacun dans la table `schema_migrations` : un fichier déjà appliqué n'est
+jamais rejoué. La commande est donc **sûre à relancer** — c'est elle qu'on
+utilise aussi bien pour l'initialisation que pour les migrations suivantes.
+
+Sur une base créée avant ce mécanisme, `001_init_schema.sql` est
+automatiquement marqué comme déjà appliqué : ses `DROP TABLE` ne sont pas
+rejoués et les données sont conservées.
+
+> ⚠️ **`migrate:reset`, `db:reset` et `db:demo` reconstruisent la base
+> intégralement** (les migrations commencent par des `DROP TABLE`). Ne jamais
+> les mettre dans `buildCommand` ou `startCommand`.
 
 Depuis un poste local, en visant la base Render (récupérer l'**External
 Database URL** dans le dashboard) :

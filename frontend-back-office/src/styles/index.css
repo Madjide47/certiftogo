@@ -2,7 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Styles de base */
+/* ─────────────────────────────────────────────────────────────
+   Base — registre « service public ».
+   Une seule famille typographique, densité assumée, aucune
+   décoration. Voir tailwind.config.js pour les jetons.
+   ───────────────────────────────────────────────────────────── */
+
 html,
 body,
 #root {
@@ -12,24 +17,93 @@ body,
 body {
   margin: 0;
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  background-color: #f8fafc;
-  color: #131b2e;
+  font-size: 0.875rem;
+  background-color: #f7f8f9;
+  color: #16191d;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Titres en Manrope (via utilitaire font-display si besoin explicite). */
-h1, h2, h3 {
-  font-family: 'Manrope', 'Inter', system-ui, sans-serif;
+/* Les titres partagent la famille du corps : la hiérarchie se fait par la
+   graisse et l'espacement, pas par un second caractère. */
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 700;
+  color: #16191d;
+  margin: 0;
 }
 
-/* Icônes Material Symbols */
+/* ── Accessibilité ────────────────────────────────────────────
+   L'anneau de focus est VISIBLE et uniforme. Le masquer rendrait la
+   navigation au clavier impraticable — ce qui, sur un service public,
+   n'est pas une option. */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #0063cb;
+  border-radius: 2px;
+}
+
+/* Lien d'évitement : premier élément focusable de la page, invisible
+   jusqu'à ce qu'on l'atteigne au clavier. */
+.lien-evitement {
+  position: absolute;
+  left: -9999px;
+  z-index: 100;
+  padding: 0.5rem 1rem;
+  background: #006a4e;
+  color: #ffffff;
+}
+.lien-evitement:focus {
+  left: 0.5rem;
+  top: 0.5rem;
+}
+
+/* ── Tableaux ──────────────────────────────────────────────────
+   Les tableaux portent l'essentiel de l'information : ils sont denses,
+   alignés, et séparés par des filets plutôt que par des cartes. */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+/* Les nombres s'alignent : une colonne de moyennes doit se lire
+   verticalement. */
+.tabulaire {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Icônes Material Symbols ──────────────────────────────────
+   Conservées : elles sont neutres et lisibles à petite taille. */
 .material-symbols-outlined {
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-  font-size: 22px;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+  font-size: 20px;
   line-height: 1;
   user-select: none;
 }
 .material-symbols-outlined.filled {
-  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+}
+
+/* ── Impression ───────────────────────────────────────────────
+   Un agent imprime une liste de dossiers ou un lot : on retire la
+   navigation et on laisse le contenu. */
+@media print {
+  .sans-impression {
+    display: none !important;
+  }
+  body {
+    background: #ffffff;
+  }
+}
+
+/* ── Mouvement réduit ─────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

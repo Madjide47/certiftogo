@@ -61,15 +61,14 @@ export const LIBELLES_TYPE_DIPLOME = {
   bts: 'BTS',
 };
 
-export const OPTIONS_MENTION = Object.entries(LIBELLES_MENTION).map(([value, label]) => ({
-  value,
-  label,
-}));
-
-export const OPTIONS_TYPE_DIPLOME = Object.entries(LIBELLES_TYPE_DIPLOME).map(([value, label]) => ({
-  value,
-  label,
-}));
+// Les listes de choix de mention et de type de diplôme ne sont plus ici :
+// ce sont des NOMENCLATURES nationales, servies par l'API et lues via
+// `useNomenclatures`. Les figer dans le front ferait proposer à l'agent
+// une liste que le serveur refuserait, dès le premier arrêté qui ajoute
+// un type.
+//
+// LIBELLES_MENTION et LIBELLES_TYPE_DIPLOME restent, comme traduction
+// de secours pour un code affiché hors formulaire.
 
 export const LIBELLES_ROLE = {
   etablissement: 'Établissement',
@@ -100,6 +99,126 @@ export const BADGE_STATUT_ETABLISSEMENT = {
   suspendu: 'bg-amber-100 text-amber-700',
   archive: 'bg-slate-100 text-slate-600',
 };
+
+// ── Référentiel académique ─────────────────────────────────────────
+export const LIBELLES_STATUT_ANNEE = {
+  preparation: 'En préparation',
+  ouverte: 'Ouverte',
+  cloturee: 'Clôturée',
+};
+
+export const BADGE_STATUT_ANNEE = {
+  preparation: 'bg-slate-100 text-slate-600',
+  ouverte: 'bg-emerald-100 text-emerald-700',
+  cloturee: 'bg-slate-200 text-slate-700',
+};
+
+export const LIBELLES_TYPE_SESSION = {
+  normale: 'Normale',
+  rattrapage: 'Rattrapage',
+  exceptionnelle: 'Exceptionnelle',
+};
+
+export const OPTIONS_TYPE_SESSION = Object.entries(LIBELLES_TYPE_SESSION).map(([value, label]) => ({
+  value,
+  label,
+}));
+
+export const LIBELLES_STATUT_STRUCTURE = {
+  active: 'Active',
+  archivee: 'Archivée',
+};
+
+export const BADGE_STATUT_STRUCTURE = {
+  active: 'bg-emerald-100 text-emerald-700',
+  archivee: 'bg-slate-100 text-slate-600',
+};
+
+export const LIBELLES_STATUT_PROMOTION = {
+  brouillon: 'Brouillon',
+  ouverte: 'Ouverte',
+  controle_interne: 'Contrôle interne',
+  validee_interne: 'Validée en interne',
+  transmise: 'Transmise',
+  certifiee: 'Certifiée',
+  cloturee: 'Clôturée',
+};
+
+export const TON_STATUT_PROMOTION = {
+  brouillon: 'neutre',
+  ouverte: 'info',
+  controle_interne: 'alerte',
+  validee_interne: 'succes',
+  transmise: 'alerte',
+  certifiee: 'vert',
+  cloturee: 'neutre',
+};
+
+export const OPTIONS_STATUT_PROMOTION = Object.entries(LIBELLES_STATUT_PROMOTION).map(
+  ([value, label]) => ({ value, label })
+);
+
+/**
+ * Transitions proposées à l'écran — miroir de TRANSITIONS_PROMOTION et de
+ * TRANSITIONS_INTERNES côté backend. Le serveur reste seul juge : l'interface
+ * n'affiche que les actions plausibles, elle ne décide pas.
+ *
+ * « transmise » n'y figure pas : la transmission passe par son propre
+ * endpoint, qui crée le lot et les dossiers.
+ */
+const ACTIONS_SIMPLE = {
+  brouillon: [{ statut: 'ouverte', libelle: 'Ouvrir' }],
+  ouverte: [{ statut: 'brouillon', libelle: 'Repasser en brouillon' }],
+  transmise: [{ statut: 'ouverte', libelle: 'Rouvrir' }],
+  certifiee: [{ statut: 'cloturee', libelle: 'Clôturer' }],
+  cloturee: [],
+};
+
+const ACTIONS_HIERARCHIQUE = {
+  brouillon: [{ statut: 'ouverte', libelle: 'Ouvrir' }],
+  ouverte: [
+    { statut: 'controle_interne', libelle: 'Envoyer au contrôle' },
+    { statut: 'brouillon', libelle: 'Repasser en brouillon' },
+  ],
+  controle_interne: [
+    { statut: 'validee_interne', libelle: 'Valider en interne' },
+    { statut: 'ouverte', libelle: 'Renvoyer à la saisie' },
+  ],
+  validee_interne: [{ statut: 'controle_interne', libelle: 'Renvoyer au contrôle' }],
+  transmise: [{ statut: 'ouverte', libelle: 'Rouvrir' }],
+  certifiee: [{ statut: 'cloturee', libelle: 'Clôturer' }],
+  cloturee: [],
+};
+
+export function actionsPromotion(statut, mode = 'simple') {
+  const table = mode === 'hierarchique' ? ACTIONS_HIERARCHIQUE : ACTIONS_SIMPLE;
+  return table[statut] || [];
+}
+
+/** Statut à partir duquel une promotion peut partir au ministère. */
+export function transmissiblePromotion(statut, mode = 'simple') {
+  return mode === 'hierarchique' ? statut === 'validee_interne' : statut === 'ouverte';
+}
+
+export const LIBELLES_STATUT_INSCRIPTION = {
+  inscrit: 'Inscrit',
+  admis: 'Admis',
+  ajourne: 'Ajourné',
+  abandon: 'Abandon',
+  exclu: 'Exclu',
+};
+
+export const TON_STATUT_INSCRIPTION = {
+  inscrit: 'info',
+  admis: 'succes',
+  ajourne: 'alerte',
+  abandon: 'neutre',
+  exclu: 'erreur',
+};
+
+export const OPTIONS_STATUT_INSCRIPTION = Object.entries(LIBELLES_STATUT_INSCRIPTION).map(
+  ([value, label]) => ({ value, label })
+);
 
 /** Extrait un message d'erreur lisible d'une erreur axios. */
 export function messageErreur(err, defaut = 'Une erreur est survenue.') {

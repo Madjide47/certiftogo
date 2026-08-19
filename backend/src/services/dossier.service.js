@@ -4,12 +4,11 @@
 // ─────────────────────────────────────────────────────────────
 import * as dossierModel from '../models/dossier.model.js';
 import * as candidatModel from '../models/candidat.model.js';
+import * as nomenclature from './nomenclature.service.js';
 import { ErreurApp } from '../utils/errors.js';
 import {
   nettoyerTexte,
   estDansEnum,
-  MENTIONS,
-  TYPES_DIPLOME,
 } from '../utils/validators.js';
 import { genererReferenceDossier } from '../utils/reference-generator.js';
 
@@ -28,13 +27,13 @@ export async function recuperer(id, etablissement_id) {
 }
 
 /** Valide et normalise les données métier d'un dossier. */
-function validerDonnees(donnees) {
+async function validerDonnees(donnees) {
   const mention = nettoyerTexte(donnees.mention);
-  if (!estDansEnum(mention, MENTIONS)) {
+  if (!(await nomenclature.estMentionValide(mention))) {
     throw new ErreurApp(400, 'MENTION_INVALIDE', 'Mention invalide.');
   }
   const type_diplome = nettoyerTexte(donnees.type_diplome);
-  if (!estDansEnum(type_diplome, TYPES_DIPLOME)) {
+  if (!(await nomenclature.estTypeDiplomeValide(type_diplome))) {
     throw new ErreurApp(400, 'TYPE_DIPLOME_INVALIDE', 'Type de diplôme invalide.');
   }
 
@@ -75,7 +74,7 @@ async function verifierCandidat(candidat_id, etablissement_id) {
 /** Crée un dossier (brouillon) pour un candidat de l'établissement. */
 export async function creer(etablissement_id, agent_etablissement_id, donnees) {
   await verifierCandidat(donnees.candidat_id, etablissement_id);
-  const data = validerDonnees(donnees);
+  const data = await validerDonnees(donnees);
   const reference = await genererReferenceUnique();
 
   return dossierModel.creer({
@@ -100,7 +99,7 @@ export async function modifier(id, etablissement_id, donnees) {
 
   const candidat_id = donnees.candidat_id || dossier.candidat_id;
   await verifierCandidat(candidat_id, etablissement_id);
-  const data = validerDonnees(donnees);
+  const data = await validerDonnees(donnees);
 
   return dossierModel.modifier(id, { ...data, candidat_id });
 }
