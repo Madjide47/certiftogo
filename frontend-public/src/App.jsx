@@ -4,6 +4,7 @@
 //   /                : saisie (empreinte, référence, QR)
 //   /verifier/:code  : résultat — cible des QR codes imprimés
 //   /integration     : demande d'agrément d'un établissement, et son suivi
+//   /demonstration   : diplômes réellement ancrés — pour les présentations
 //
 // L'ossature est celle d'un site d'État : bandeau République Togolaise,
 // identité du service, pied de page institutionnel. Ce n'est pas de la
@@ -14,6 +15,7 @@ import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import HomePage from './pages/HomePage.jsx';
 import VerificationPage from './pages/VerificationPage.jsx';
 import IntegrationPage from './pages/IntegrationPage.jsx';
+import DemonstrationPage from './pages/DemonstrationPage.jsx';
 import { Icone } from './components/ui.jsx';
 import Embleme from './components/Embleme.jsx';
 
@@ -70,6 +72,13 @@ function Entete() {
           >
             Espace établissements
           </Link>
+          {/* Discret : la page sert aux présentations, pas au public. */}
+          <Link
+            to="/demonstration"
+            className="hidden text-base text-gris-500 underline underline-offset-2 hover:text-gris-900 sm:inline"
+          >
+            Démonstration
+          </Link>
         </nav>
       </div>
     </header>
@@ -107,6 +116,7 @@ export default function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/verifier/:code" element={<VerificationPage />} />
           <Route path="/integration" element={<IntegrationPage />} />
+          <Route path="/demonstration" element={<DemonstrationPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
