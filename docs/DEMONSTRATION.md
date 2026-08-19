@@ -63,6 +63,30 @@ curl -s -o /dev/null -w '%{http_code}\n' localhost:5174/demonstration
 Attendus : `"ancre":true`, puis `200`, puis `200`. Remplacer `localhost` par
 l'adresse réseau si l'étape 0a a été faite.
 
+### 0c. Les prérequis du parcours, qui bloquent en amont
+
+```sql
+select coalesce((select libelle from annees_academiques where statut='ouverte'), 'AUCUNE') as annee,
+       coalesce((select s.libelle from sessions_academiques s
+                   join annees_academiques a on a.id = s.annee_id
+                  where a.statut='ouverte' and s.statut='ouverte'), 'AUCUNE') as session;
+```
+
+> **Une année ouverte ne suffit pas : il lui faut une session ouverte.** Sans
+> elle, aucune promotion ne peut être créée et le parcours s'arrête avant le
+> premier étudiant — sur un écran qui dit « Aucune année académique ouverte »,
+> ce qui envoie chercher au mauvais endroit. C'est exactement le cas qu'a
+> révélé la répétition : l'année 2026-2027 était ouverte, mais orpheline de
+> session, toutes les sessions existantes appartenant à l'année clôturée.
+>
+> Le ministère crée la session (Années académiques), puis **l'ouvre** : elle
+> naît en `preparation`, état dans lequel elle ne sert à rien.
+
+> ⚠️ **Vérifier aussi l'année des promotions existantes.** Celles du jeu de
+> démonstration sont rattachées à 2024-2025, **clôturée**. Pour une répétition
+> complète, créer une promotion neuve sur l'année ouverte plutôt que réutiliser
+> une ancienne.
+
 **Onglets à ouvrir d'avance**, dans cet ordre :
 
 1. `http://localhost:5174` — vérification publique
