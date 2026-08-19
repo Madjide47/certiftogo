@@ -242,7 +242,14 @@ async function lireAncrage(hash) {
   }
   try {
     const onchain = await blockchain.verifierOnChain(hash);
-    if (!onchain || !onchain.existe) return { verifie: true, ancre: false };
+    if (!onchain || !onchain.existe) {
+      // Une empreinte absente de la chaîne n'a pas le même sens selon que
+      // cette plateforme y écrit ou non. Si elle certifie en `mock`, elle
+      // n'a JAMAIS rien inscrit : l'absence est la sienne, pas une anomalie
+      // du diplôme. Présenter son propre silence comme un motif d'alerte
+      // ferait passer pour douteux un diplôme parfaitement régulier.
+      return { verifie: true, ancre: false, ecriture_onchain: blockchain.estOnChain() };
+    }
     return {
       verifie: true,
       ancre: true,
