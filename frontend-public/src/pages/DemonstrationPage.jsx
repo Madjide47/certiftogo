@@ -33,18 +33,23 @@ const FICHIERS = API.replace(/\/api\/?$/, '');
 /**
  * Adresse d'un fichier servi par l'API.
  *
- * `qr_url` arrive ABSOLUE de la vérification publique
- * (`http://localhost:4000/uploads/qr-….png`) : la préfixer une seconde fois
- * produisait `http://localhost:4000http://localhost:4000/uploads/…`, donc une
- * image cassée — et un QR cassé sur la page faite pour être scannée.
+ * `qr_url` arrive ABSOLUE et FIGÉE : elle a été écrite en base au moment de
+ * la certification, avec l'origine qu'avait le serveur ce jour-là — le plus
+ * souvent `http://localhost:4000`. Cette origine ne veut rien dire ailleurs :
+ * sur un téléphone, `localhost` désigne le téléphone. L'image ne charge pas,
+ * et l'écran affiche un cadre vide sur la page faite pour être scannée.
  *
- * On ne « corrige » pas l'API pour autant : une URL absolue est ce qu'attend
- * un QR imprimé, qui sera lu hors de tout contexte de page. C'est au client de
- * savoir qu'une adresse déjà complète se laisse tranquille.
+ * On ne garde donc que le CHEMIN, et on le raccroche à l'origine que ce front
+ * utilise réellement pour parler à l'API. La donnée stockée dit *quel*
+ * fichier ; c'est au client de savoir *où* il le sert.
  */
 function urlFichier(chemin) {
   if (!chemin) return null;
-  return /^https?:\/\//i.test(chemin) ? chemin : `${FICHIERS}${chemin}`;
+  try {
+    return `${FICHIERS}${new URL(chemin, FICHIERS).pathname}`;
+  } catch {
+    return `${FICHIERS}${chemin.startsWith('/') ? chemin : `/${chemin}`}`;
+  }
 }
 
 const REFERENCES = (

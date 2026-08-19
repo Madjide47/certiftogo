@@ -19,6 +19,31 @@ import {
   messageErreur,
 } from '../../utils/libelles.js';
 import { EtiquetteStatut } from './PortefeuillePage.jsx';
+
+/**
+ * Racine des fichiers servis par l'API (QR, PDF), et remise à l'adresse
+ * de CE front.
+ *
+ * `qr_code_url` et `pdf_url` sont figées en base à la certification, avec
+ * l'origine qu'avait le serveur ce jour-là — le plus souvent
+ * `http://localhost:4000`. Elle ne veut rien dire ailleurs : sur un
+ * téléphone, `localhost` désigne le téléphone, et l'image ne charge pas.
+ * On ne retient donc que le chemin. La base dit *quel* fichier ; c'est au
+ * client de savoir *où* il le sert.
+ */
+const FICHIERS = (import.meta.env.VITE_API_URL || 'http://localhost:4000/api').replace(
+  /\/api\/?$/,
+  ''
+);
+
+function urlFichier(chemin) {
+  if (!chemin) return null;
+  try {
+    return `${FICHIERS}${new URL(chemin, FICHIERS).pathname}`;
+  } catch {
+    return `${FICHIERS}${chemin.startsWith('/') ? chemin : `/${chemin}`}`;
+  }
+}
 import {
   EnTetePage,
   Encart,
@@ -132,7 +157,7 @@ function CarteDiplome({ d, onCopie }) {
             {d.qr_code_url && (
               <div className="mt-4 flex flex-wrap items-center gap-4">
                 <img
-                  src={d.qr_code_url}
+                  src={urlFichier(d.qr_code_url)}
                   alt={`QR code de vérification du diplôme ${d.reference}`}
                   className="h-40 w-40 shrink-0 border border-gris-300 bg-white p-2"
                 />
@@ -155,7 +180,7 @@ function CarteDiplome({ d, onCopie }) {
               </a>
               {d.pdf_url && (
                 <a
-                  href={d.pdf_url}
+                  href={urlFichier(d.pdf_url)}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1.5 border border-gris-500 bg-white px-4 py-2 text-base font-medium text-gris-900 hover:bg-gris-100"
@@ -166,7 +191,7 @@ function CarteDiplome({ d, onCopie }) {
               )}
               {d.qr_code_url && (
                 <a
-                  href={d.qr_code_url}
+                  href={urlFichier(d.qr_code_url)}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1.5 border border-gris-500 bg-white px-4 py-2 text-base font-medium text-gris-900 hover:bg-gris-100"
