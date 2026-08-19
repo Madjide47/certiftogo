@@ -1000,6 +1000,7 @@ export default function PromotionsPage() {
                 setNouvelEtudiant((n) => ({ ...n, [champ]: valeur }))
               }
               prefixe="ne"
+              numeroAuto
             />
 
             <div className="flex flex-wrap justify-end gap-2 border-t border-gris-200 pt-4">

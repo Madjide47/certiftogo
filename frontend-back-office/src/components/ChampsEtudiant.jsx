@@ -37,7 +37,14 @@ const OPTIONS_SEXE = [
  * @param {string}   [props.prefixe] préfixe des `id`, pour monter deux
  *                                   fois le formulaire sans collision
  */
-export default function ChampsEtudiant({ valeurs, onChange, prefixe = 'e' }) {
+/**
+ * `numeroAuto` : le matricule sera attribué par le serveur si le champ
+ * reste vide. On ne masque pas le champ pour autant — une reprise
+ * d'historique ou un fichier d'établissement portent des matricules
+ * légitimes, qu'il serait absurde de renuméroter. Il cesse simplement
+ * d'être obligatoire, et le dit.
+ */
+export default function ChampsEtudiant({ valeurs, onChange, prefixe = 'e', numeroAuto = false }) {
   const id = (nom) => `${prefixe}-${nom}`;
 
   return (
@@ -46,12 +53,17 @@ export default function ChampsEtudiant({ valeurs, onChange, prefixe = 'e' }) {
         <Champ
           label="N° étudiant"
           htmlFor={id('numero')}
-          requis
-          aide="Unique dans votre établissement."
+          requis={!numeroAuto}
+          aide={
+            numeroAuto
+              ? 'Laissez vide : le numéro suivant sera attribué automatiquement.'
+              : 'Unique dans votre établissement.'
+          }
         >
           <Saisie
             id={id('numero')}
-            required
+            required={!numeroAuto}
+            placeholder={numeroAuto ? 'attribué automatiquement' : undefined}
             value={valeurs.numero_etudiant}
             onChange={(e) => onChange('numero_etudiant', e.target.value)}
           />
