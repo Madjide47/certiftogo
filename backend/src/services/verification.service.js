@@ -234,7 +234,10 @@ async function avertirTitulaire(diplome) {
  *   date_certification?: number|null } | null>}
  */
 async function lireAncrage(hash) {
-  if (!blockchain.estOnChain()) {
+  // La lecture ne dépend pas du mode d'écriture : une plateforme qui
+  // certifie en `mock` peut néanmoins dire la vérité sur ce qui est
+  // ancré, et c'est ce qu'un vérificateur attend d'elle.
+  if (!blockchain.peutLireOnChain()) {
     return { verifie: false, mode: 'mock' };
   }
   try {

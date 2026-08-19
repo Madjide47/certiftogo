@@ -63,6 +63,12 @@ services:
       DATABASE_URL: ""
       NODE_ENV: production
       PORT: 4000
+      # Écriture en `mock` (aucun frais, aucune clé nécessaire), mais
+      # LECTURE réelle du contrat : la vérification publique dit alors la
+      # vérité sur ce qui est ancré, y compris pour des diplômes inscrits
+      # par une autre instance. Un appel `view` ne coûte rien.
+      BLOCKCHAIN_MODE: mock
+      BLOCKCHAIN_LECTURE: onchain
       # Les fronts sont servis par nginx sur ces deux ports.
       CORS_ORIGINS: http://localhost:${PORT_BACK_OFFICE:-5173},http://localhost:${PORT_PUBLIC:-5174}
       PUBLIC_BASE_URL: http://localhost:${PORT_API:-4000}
