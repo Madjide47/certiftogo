@@ -22,6 +22,22 @@ export async function listerPourPromotion(promotionId) {
   return data.data.pieces;
 }
 
+/**
+ * Grille de dépôt : une case par document attendu, remplie ou vide.
+ *
+ * La liste plate ne montrait que le déposé ; c'est la grille qui montre
+ * le manquant, seule information dont l'agent a besoin pour agir.
+ */
+export async function grilleCandidat(candidatId) {
+  const { data } = await api.get(`/candidats/${candidatId}/pieces/grille`);
+  return data.data;
+}
+
+export async function grillePromotion(promotionId) {
+  const { data } = await api.get(`/promotions/${promotionId}/pieces/grille`);
+  return data.data;
+}
+
 function corps({ fichier, type_piece, libelle }) {
   const donnees = new FormData();
   donnees.append('type_piece', type_piece);

@@ -117,6 +117,28 @@ export async function compterParStatutPourLot(lot_id) {
   return Object.fromEntries(rows.map((r) => [r.statut, r.total]));
 }
 
+/**
+ * Types de pièces réellement acquis pour une liste d'étudiants — les
+ * pièces rejetées sont exclues : une pièce que le ministère a renvoyée
+ * ne remplit pas sa case, sinon un dossier resterait « complet » avec un
+ * document refusé.
+ *
+ * Sert au contrôle qui précède la transmission, quand aucun lot n'existe
+ * encore et que `typesParCandidatPourLot` n'a donc rien à interroger.
+ */
+export async function typesAcquisParCandidats(candidat_ids) {
+  if (!candidat_ids || candidat_ids.length === 0) return new Map();
+  const { rows } = await query(
+    `SELECT candidat_id, array_agg(DISTINCT type_piece) AS types
+       FROM pieces_jointes
+      WHERE candidat_id = ANY($1::uuid[])
+        AND statut <> 'rejetee'
+      GROUP BY candidat_id`,
+    [candidat_ids]
+  );
+  return new Map(rows.map((r) => [r.candidat_id, r.types]));
+}
+
 /** Types de pièces présents pour chaque candidat d'un lot. */
 export async function typesParCandidatPourLot(lot_id) {
   const { rows } = await query(

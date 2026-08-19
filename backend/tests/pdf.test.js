@@ -116,6 +116,28 @@ describe('PDF de diplôme', () => {
     assert.ok(v2.contenu.length > v1.contenu.length);
   });
 
+  test('garde son bloc de signature même sur un diplôme saturé', async () => {
+    // La mise en page ancrait autrefois la signature APRÈS le contenu et
+    // la supprimait si la place manquait : un acte administratif sans
+    // signature, défaut invisible en développement. Elle est désormais
+    // posée depuis le bas ; ce cas extrême vérifie que rien ne déborde
+    // sur une seconde page pour autant.
+    const { contenu } = await generer('DIP-TEST-0011', {
+      candidat_prenom: 'Koffi Mawuli Sénamé Elom Kokou Édem Yawovi',
+      candidat_nom: 'AGBEKO-KOUASSI DE SOUZA',
+      etablissement_nom:
+        "Institut Africain d'Informatique — Représentation du Togo, Campus de Lomé-Tokoin, " +
+        'Département des Sciences et Technologies du Numérique',
+      filiere: 'Génie Logiciel et Systèmes d’Information Répartis, parcours recherche',
+      parcours:
+        'Architecture des systèmes distribués, sécurité applicative et ingénierie des données massives',
+      annee_academique: '2024-2025',
+      lieu_naissance: 'Kpalimé, préfecture de Kloto, région des Plateaux',
+    });
+    assert.equal(nombreDePages(contenu), 1);
+    assert.ok(contenu.length > 4000);
+  });
+
   test('renseigne les métadonnées du document', async () => {
     const { contenu } = await generer('DIP-TEST-0010');
     const texte = contenu.toString('latin1');

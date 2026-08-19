@@ -17,7 +17,7 @@ import * as verificationService from '../src/services/verification.service.js';
 import * as promotionService from '../src/services/promotion.service.js';
 import * as lotService from '../src/services/lot.service.js';
 import * as pieceService from '../src/services/piece-jointe.service.js';
-import { genererReferenceDossier } from '../src/utils/reference-generator.js';
+import * as references from '../src/services/reference.service.js';
 
 const MINISTERE_ID = '10000000-0000-0000-0000-000000000001';
 
@@ -33,13 +33,10 @@ const VILLES_LIEU = ['Lomé','Kara','Sokodé','Kpalimé','Atakpamé','Dapaong','
 const rand = (a) => a[Math.floor(Math.random() * a.length)];
 const randInt = (n) => Math.floor(Math.random() * n);
 
-let refCounter = 1;
-async function refUnique() {
-  for (let i = 0; i < 8; i += 1) {
-    const r = genererReferenceDossier();
-    if (!(await dossierModel.referenceExiste(r))) return r;
-  }
-  return `CT-2025-${String(90000 + refCounter++).slice(-5)}`;
+// Même compteur que l'application : un seed qui numéroterait à sa façon
+// laisserait des références que le service pourrait réattribuer ensuite.
+function refUnique() {
+  return references.reserverUne('CT');
 }
 
 // Depuis la migration 004, un étudiant n'existe pas sans son identité
@@ -200,14 +197,18 @@ async function creerChaineAcademique(etab, annee, session, candidats) {
         const inscription = await promotionService.inscrire(promotion.id, etab.id, {
           candidat_id: candidat.id,
         });
-        // Le relevé de notes conditionne l'instruction : sans lui, chaque
-        // dossier serait bloqué et la file du ministère ne montrerait que
-        // des rejets automatiques.
-        await deposerPiece(
-          { candidat_id: candidat.id, etablissement_id: etab.id, agent_id: etab.agent_id },
-          'releve_notes',
-          `releve-${candidat.numero_etudiant || candidat.id.slice(0, 8)}.pdf`
-        );
+        // Le dossier complet conditionne la transmission : il manque une
+        // seule pièce obligatoire et la promotion entière reste à quai —
+        // la file du ministère serait alors vide, et la démonstration
+        // s'arrêterait à l'écran d'établissement.
+        const reference = candidat.numero_etudiant || candidat.id.slice(0, 8);
+        for (const type of pieceService.TYPES_REQUIS_CANDIDAT) {
+          await deposerPiece(
+            { candidat_id: candidat.id, etablissement_id: etab.id, agent_id: etab.agent_id },
+            type,
+            `${type}-${reference}.pdf`
+          );
+        }
         const admis = Math.random() > 0.25;
         // La mention n'est plus tirée au hasard : elle découle de la
         // moyenne. Un jeu de démonstration qui montrerait un 10,2

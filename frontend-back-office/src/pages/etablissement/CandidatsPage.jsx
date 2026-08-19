@@ -15,8 +15,8 @@ import {
   creerCandidat,
   modifierCandidat,
   supprimerCandidat,
+  ficheEtudiant,
 } from '../../services/candidat.service.js';
-import { parcoursEtudiant } from '../../services/promotion.service.js';
 import {
   messageErreur,
   LIBELLES_STATUT_INSCRIPTION,
@@ -37,22 +37,12 @@ import {
   Chargement,
   Icone,
 } from '../../components/ui/index.jsx';
+import ChampsEtudiant, { ETUDIANT_VIDE } from '../../components/ChampsEtudiant.jsx';
+import FicheEtudiant from '../../components/FicheEtudiant.jsx';
 
-const CANDIDAT_VIDE = {
-  numero_etudiant: '',
-  nom: '',
-  prenom: '',
-  date_naissance: '',
-  lieu_naissance: '',
-  sexe: '',
-  telephone: '',
-  email: '',
-};
-
-const OPTIONS_SEXE = [
-  { value: 'M', label: 'Masculin' },
-  { value: 'F', label: 'Féminin' },
-];
+// L'état civil est saisi par `ChampsEtudiant`, monté aussi depuis
+// l'écran Promotions : un champ ajouté ici l'est donc des deux côtés.
+const CANDIDAT_VIDE = ETUDIANT_VIDE;
 
 export default function CandidatsPage() {
   const [candidats, setCandidats] = useState([]);
@@ -66,7 +56,10 @@ export default function CandidatsPage() {
   const [erreurForm, setErreurForm] = useState('');
   const [enregistrement, setEnregistrement] = useState(false);
 
-  const [parcours, setParcours] = useState(null);
+  // La fiche remplace l'ancienne modale « Parcours » : celle-ci ne
+  // montrait que les inscriptions, alors que juger un cas demande aussi
+  // l'état civil, les pièces, les dossiers et les diplômes.
+  const [fiche, setFiche] = useState(null);
 
   async function charger(q = '') {
     setChargement(true);
@@ -139,14 +132,13 @@ export default function CandidatsPage() {
     }
   }
 
-  async function ouvrirParcours(candidat) {
-    setParcours({ candidat, inscriptions: null });
+  async function ouvrirFiche(candidat) {
+    setFiche({ candidat, donnees: null });
     try {
-      const ins = await parcoursEtudiant(candidat.id);
-      setParcours({ candidat, inscriptions: ins });
+      setFiche({ candidat, donnees: await ficheEtudiant(candidat.id) });
     } catch (err) {
       setErreur(messageErreur(err));
-      setParcours(null);
+      setFiche(null);
     }
   }
 
@@ -231,8 +223,8 @@ export default function CandidatsPage() {
             alignement: 'droite',
             rendu: (c) => (
               <span className="whitespace-nowrap">
-                <Bouton variante="discret" onClick={() => ouvrirParcours(c)}>
-                  Parcours
+                <Bouton variante="discret" onClick={() => ouvrirFiche(c)}>
+                  Fiche
                 </Bouton>
                 <Bouton variante="discret" className="ml-3" onClick={() => ouvrirEdition(c)}>
                   Modifier
@@ -276,82 +268,7 @@ export default function CandidatsPage() {
         <form onSubmit={soumettre} className="space-y-4">
           {erreurForm && <Encart ton="erreur">{erreurForm}</Encart>}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Champ
-              label="N° étudiant"
-              htmlFor="c-numero"
-              requis
-              aide="Unique dans votre établissement."
-            >
-              <Saisie
-                id="c-numero"
-                required
-                value={form.numero_etudiant}
-                onChange={(e) => majChamp('numero_etudiant', e.target.value)}
-              />
-            </Champ>
-            <Champ label="Sexe" htmlFor="c-sexe">
-              <Liste
-                id="c-sexe"
-                value={form.sexe}
-                onChange={(e) => majChamp('sexe', e.target.value)}
-                options={OPTIONS_SEXE}
-              />
-            </Champ>
-            <Champ label="Nom" htmlFor="c-nom" requis>
-              <Saisie
-                id="c-nom"
-                required
-                value={form.nom}
-                onChange={(e) => majChamp('nom', e.target.value)}
-              />
-            </Champ>
-            <Champ label="Prénom" htmlFor="c-prenom" requis>
-              <Saisie
-                id="c-prenom"
-                required
-                value={form.prenom}
-                onChange={(e) => majChamp('prenom', e.target.value)}
-              />
-            </Champ>
-            <Champ label="Date de naissance" htmlFor="c-naissance">
-              <Saisie
-                id="c-naissance"
-                type="date"
-                value={form.date_naissance}
-                onChange={(e) => majChamp('date_naissance', e.target.value)}
-              />
-            </Champ>
-            <Champ label="Lieu de naissance" htmlFor="c-lieu">
-              <Saisie
-                id="c-lieu"
-                value={form.lieu_naissance}
-                onChange={(e) => majChamp('lieu_naissance', e.target.value)}
-              />
-            </Champ>
-          </div>
-
-          <Champ
-            label="Téléphone"
-            htmlFor="c-telephone"
-            aide="Sert à ouvrir le portefeuille du diplômé après certification. Sans numéro, l'étudiant ne pourra pas consulter ses diplômes."
-          >
-            <Saisie
-              id="c-telephone"
-              placeholder="+228 90 00 00 00"
-              value={form.telephone}
-              onChange={(e) => majChamp('telephone', e.target.value)}
-            />
-          </Champ>
-
-          <Champ label="Email" htmlFor="c-email">
-            <Saisie
-              id="c-email"
-              type="email"
-              value={form.email}
-              onChange={(e) => majChamp('email', e.target.value)}
-            />
-          </Champ>
+          <ChampsEtudiant valeurs={form} onChange={majChamp} prefixe="c" />
 
           <div className="flex justify-end gap-2 border-t border-gris-200 pt-4">
             <Bouton variante="neutre" onClick={() => setModaleOuverte(false)}>
@@ -364,71 +281,19 @@ export default function CandidatsPage() {
         </form>
       </Modale>
 
-      {/* ── Parcours pluriannuel ── */}
+      {/* ── Fiche complète ── */}
       <Modale
-        ouvert={Boolean(parcours)}
-        titre={`Parcours — ${parcours?.candidat?.nom || ''} ${parcours?.candidat?.prenom || ''}`}
-        onFermer={() => setParcours(null)}
-        largeur="max-w-3xl"
+        ouvert={Boolean(fiche)}
+        titre={`Fiche — ${fiche?.candidat?.nom || ''} ${fiche?.candidat?.prenom || ''}`}
+        onFermer={() => setFiche(null)}
+        largeur="max-w-5xl"
       >
-        {parcours?.inscriptions === null ? (
-          <Chargement />
-        ) : (
-          <>
-            <Tableau
-              legende="Inscriptions successives"
-              lignes={parcours?.inscriptions || []}
-              colonnes={[
-                { cle: 'annee_libelle', libelle: 'Année' },
-                {
-                  cle: 'promotion',
-                  libelle: 'Promotion',
-                  rendu: (i) => (
-                    <span>
-                      <span className="font-medium">{i.promotion_libelle}</span>
-                      <span className="block text-xs text-gris-500">
-                        {i.filiere_nom} — niveau {i.niveau}
-                      </span>
-                    </span>
-                  ),
-                },
-                {
-                  cle: 'statut',
-                  libelle: 'Résultat',
-                  rendu: (i) => (
-                    <Etiquette ton={TON_STATUT_INSCRIPTION[i.statut]}>
-                      {LIBELLES_STATUT_INSCRIPTION[i.statut]}
-                    </Etiquette>
-                  ),
-                },
-                {
-                  cle: 'moyenne',
-                  libelle: 'Moyenne',
-                  alignement: 'droite',
-                  tabulaire: true,
-                  rendu: (i) => i.moyenne ?? '—',
-                },
-                {
-                  cle: 'mention',
-                  libelle: 'Mention',
-                  rendu: (i) => (i.mention ? LIBELLES_MENTION[i.mention] : '—'),
-                },
-              ]}
-              vide={
-                <EtatVide icone="timeline" titre="Aucune inscription">
-                  Cet étudiant n'est encore inscrit dans aucune promotion.
-                </EtatVide>
-              }
-            />
-
-            <p className="mt-4 flex items-start gap-1.5 text-sm text-gris-500">
-              <Icone nom="info" taille={16} className="mt-0.5 shrink-0" />
-              Ce parcours ne couvre que votre établissement. Un diplômé peut avoir étudié
-              ailleurs : son portefeuille national, lui, réunit tout.
-            </p>
-          </>
-        )}
+        <FicheEtudiant
+          fiche={fiche?.donnees}
+          onChangement={() => fiche?.candidat && ouvrirFiche(fiche.candidat)}
+        />
       </Modale>
+
     </div>
   );
 }

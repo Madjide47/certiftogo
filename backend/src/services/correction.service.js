@@ -28,7 +28,7 @@ import { signer, empreinteCle } from './signature.service.js';
 import { idCleCourante } from './exceptions.service.js';
 import { genererQrFichier, genererQrDataUrl } from './qr.service.js';
 import { genererPdfDiplome } from './pdf.service.js';
-import { genererReferenceDiplome } from '../utils/reference-generator.js';
+import * as references from './reference.service.js';
 import { journaliser, ACTIONS } from './audit.service.js';
 import * as notifications from './notification.service.js';
 import { contexteCourant } from '../config/contexte.js';
@@ -189,7 +189,7 @@ export async function corriger(diplome_id, ministere_id, donnees = {}) {
   const hash = calculerHash(snapshot);
   const signature = signer(hash);
   const cleSignature = await idCleCourante();
-  const reference = genererReferenceDiplome();
+  const reference = await references.reserverUne('DIP');
 
   // ── 3. Chaîne : révoquer l'ancien hash, ancrer le nouveau ──
   const txRevocation = await blockchain.revoquer({

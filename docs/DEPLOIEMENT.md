@@ -1,7 +1,54 @@
-# Déploiement — CertifTOGO sur Render
+# Déploiement — CertifTOGO
 
-Le fichier [`render.yaml`](../render.yaml) à la racine décrit l'infrastructure
-complète : PostgreSQL managé, API Express, et les deux frontends React.
+Deux chemins, pour deux besoins différents :
+
+| | Docker Compose | Render |
+|---|---|---|
+| Sert à | démonstration locale, répétition de soutenance | démonstration en ligne, QR scannables au téléphone |
+| Dépend de | rien d'autre que Docker | un compte Render, une facturation GitHub active |
+| Décrit par | [`docker-compose.yml`](../docker-compose.yml) + 3 `Dockerfile` | [`render.yaml`](../render.yaml) |
+
+---
+
+## 0. Chemin Docker — la pile entière en une commande
+
+```bash
+docker compose --profile complet up -d --build
+```
+
+Trois images sont construites et démarrées derrière PostgreSQL :
+
+| Service | Image | Port | Contenu |
+|---|---|---|---|
+| `postgres` | `postgres:17-alpine` | 5433 | la base |
+| `api` | `node:22-alpine` | 4000 | Express, en `NODE_ENV=production`, sous l'utilisateur `node` |
+| `back-office` | `nginx:1.27-alpine` | 5173 | React construit, servi en statique |
+| `public` | `nginx:1.27-alpine` | 5174 | React construit, servi en statique |
+
+Chacun porte un `HEALTHCHECK`, et celui de l'API **interroge la base** : un
+conteneur qui répond mais dont la connexion PostgreSQL est morte se déclare
+`unhealthy` au lieu de mentir. `docker compose ps` suffit donc à savoir si la
+démonstration est prête.
+
+**Sans le profil**, `docker compose up -d` ne démarre que la base — c'est le
+mode de travail quotidien, où l'on veut `npm run dev` et son rechargement à
+chaud plutôt qu'une reconstruction d'image à chaque ligne écrite.
+
+**Deux pièges, tous deux traités dans le fichier :**
+
+- À l'intérieur du réseau Docker, la base ne s'appelle pas `localhost:5433`
+  mais `postgres:5432`. Le bloc `environment` du service `api` écrase donc les
+  valeurs héritées de `backend/.env`, et neutralise `DATABASE_URL` — laissée
+  telle quelle, elle serait prioritaire dans le code et annulerait la
+  correction.
+- Vite fige `import.meta.env` **au moment du build** : les URLs de l'API et du
+  front public sont des `ARG` de construction, pas des variables du conteneur.
+  Changer d'adresse impose de reconstruire — c'est une propriété du produit,
+  pas une limite de l'emballage.
+
+Les PDF, QR codes et pièces justificatives vivent dans deux volumes nommés
+(`certiftogo_uploads`, `certiftogo_stockage`) : ils survivent à la
+reconstruction des images, puisque ce sont des données et non du code.
 
 ---
 

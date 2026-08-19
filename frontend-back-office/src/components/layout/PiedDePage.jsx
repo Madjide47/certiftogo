@@ -5,14 +5,14 @@
 // Sur un service public, le pied de page n'est pas un espace résiduel :
 // c'est là que se trouvent les mentions légales et le recours.
 // ─────────────────────────────────────────────────────────────
-const PUBLIC = import.meta.env.VITE_URL_PUBLIQUE || 'http://localhost:5174';
+const PUBLIC = import.meta.env.VITE_PUBLIC_URL || 'http://localhost:5174';
 
 const COLONNES = [
   {
     titre: 'Le service',
     liens: [
       { libelle: 'Vérifier un diplôme', href: PUBLIC, externe: true },
-      { libelle: 'Demander une intégration', href: `${PUBLIC}/demande`, externe: true },
+      { libelle: 'Demander une intégration', href: `${PUBLIC}/integration`, externe: true },
     ],
   },
   {

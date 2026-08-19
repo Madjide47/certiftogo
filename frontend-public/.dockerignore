@@ -1,0 +1,15 @@
+node_modules
+dist
+npm-debug.log
+
+# Les URLs sont passées en ARG au build ; un .env local qui entrerait
+# dans l'image écraserait silencieusement celles de production.
+.env
+.env.*
+!.env.example
+
+.git
+.gitignore
+*.md
+Dockerfile
+.dockerignore

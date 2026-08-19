@@ -92,6 +92,10 @@ export const ACTIONS = {
   LOT_REJETE: 'lot_rejete',
   DOSSIER_VALIDE: 'dossier_valide',
   DOSSIER_REJETE: 'dossier_rejete',
+  // Faire passer un dossier devant les autres est une décision, pas une
+  // préférence d'affichage : elle se justifie et se relit.
+  DOSSIER_PRIORISE: 'dossier_priorise',
+  DOSSIER_DEPRIORISE: 'dossier_depriorise',
 
   // Certification et ancrage
   LOT_CERTIFIE: 'lot_certifie',

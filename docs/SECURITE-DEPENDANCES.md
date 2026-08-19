@@ -1,6 +1,6 @@
 # Sécurité des dépendances (L-14)
 
-État au 3 août 2026. Relancer `npm audit` dans chaque paquet pour actualiser.
+État au 16 août 2026. Relancer `npm audit` dans chaque paquet pour actualiser.
 
 Une alerte n'est pas une vulnérabilité : elle le devient si le code
 *atteint* la fonction fautive. Ce document tranche pour chaque cas, plutôt
@@ -39,18 +39,28 @@ que d'afficher un compteur à zéro obtenu en désinstallant ce qui gêne.
 
 ---
 
-## Front-office et back-office — 5 alertes, non corrigées faute d'espace disque
+## Front-office et back-office — de 6 alertes à **zéro**
 
-| Paquet | Gravité | Portée |
+| Paquet | Gravité | Décision |
 |---|---|---|
-| `vite`, `esbuild` | haute / modérée | **Outillage de développement.** Le serveur de développement d'esbuild accepte des requêtes de n'importe quelle origine ; cela n'affecte pas le site construit, qui est un ensemble de fichiers statiques. |
-| `postcss` | haute | Outillage de build. |
-| `react-router`, `react-router-dom` | modérée | **Embarqué dans le site livré** — celui-ci mérite une correction réelle. |
+| `nanoid` | haute | Mis à jour (`npm audit fix`). Boucle infinie sur une taille nulle ou négative. |
+| `postcss` | haute | Mis à jour. Lecture arbitraire de fichiers `.map` via `sourceMappingURL`. Outillage de build, mais le correctif ne coûtait rien. |
+| `react-router`, `react-router-dom` | modérée | **Monté en v7.** Aucun correctif n'existe sur la branche 6 : l'avis couvre `6.0.0 – 7.17.0`, la version saine est `7.18`. Redirection ouverte via un antislash dans `<Link>` et `useNavigate`. |
+| `vite`, `esbuild` | modérée | **Monté en vite 7** (esbuild 0.25). |
 
-⏳ **À faire** : `npm audit fix` dans les deux fronts. La commande a échoué
-le 3 août sur un disque plein (`npm error nospc`) ; le poste n'avait plus
-que 50 Mo libres. Rien n'est cassé — les deux fronts se construisent — mais
-la mise à jour reste à passer.
+> **Pourquoi accepter un saut de version majeure à trois semaines de la
+> soutenance ?** Parce qu'il n'en était pas vraiment un ici. Les deux fronts
+> n'utilisent que l'API déclarative de React Router — `BrowserRouter`,
+> `Routes`, `Route`, `Navigate`, `Link`, `NavLink`, `Outlet`, `useNavigate`,
+> `useParams`, `useSearchParams`, `useLocation` — toutes inchangées en v7 ;
+> les ruptures de la v7 portent sur le mode « framework » et le rendu serveur,
+> que le projet n'emploie pas. Vite 7 ne demande que Node ≥ 20.19. Les deux
+> builds ont été rejoués et passent (`vite build`, 105 et 163 modules).
+
+> `react-router` méritait la correction réelle : c'est le seul des quatre à
+> être **embarqué dans le site livré au public**. `postcss`, `esbuild` et
+> `vite` ne servent qu'à fabriquer des fichiers statiques — leur avis ne
+> concerne que le poste du développeur.
 
 ---
 
@@ -69,10 +79,38 @@ fait, assumé.**
 
 ---
 
+## Récapitulatif
+
+| Paquet | Critiques | Hautes | Modérées |
+|---|---|---|---|
+| `backend/` | 0 | 0 | 0 |
+| `frontend-back-office/` | 0 | 0 | 0 |
+| `frontend-public/` | 0 | 0 | 0 |
+| `blockchain/` | — | — | outillage seul, hors production |
+
+---
+
+## Backend — les deux dernières modérées, réglées par `overrides`
+
+`exceljs@4.4.0` déclare `uuid@^8.3.0`, visé par un avis modéré : absence de
+contrôle de bornes sur le tampon fourni à `v3`/`v5`/`v6`. `npm audit fix --force`
+proposait de **redescendre exceljs en 3.4.0** — une rupture qui casserait
+l'import Excel d'une promotion, pour corriger une faille que le projet
+n'atteint pas : exceljs n'importe que `v4`, et jamais avec un tampon.
+
+Le `overrides: { "uuid": "^11.1.1" }` de `backend/package.json` force la
+version saine sans toucher à exceljs. Le pari est mince et vérifié :
+`cf-rule-ext-xform.js` est le seul fichier d'exceljs à requérir uuid, il en
+tire `{ v4 }`, export nommé toujours présent en CJS sur uuid 11. Les **304
+tests passent**, import Excel compris.
+
+> Corriger une dépendance transitive vaut mieux que dégrader la dépendance
+> directe qui la tire : la seconde a des utilisateurs dans le code, la
+> première non.
+
 ## Ce qu'il reste à faire
 
-1. `npm audit fix` dans `frontend-back-office/` et `frontend-public/`
-   (bloqué par l'espace disque le 3 août).
-2. Revoir `exceljs` quand une version alignée sur `uuid@11.1.1` sortira.
-3. Ajouter `npm audit --audit-level=high` à la CI, pour que la prochaine
+1. Retirer l'`overrides` le jour où exceljs publie une version alignée sur
+   `uuid@11` — l'override est une béquille, pas une réparation amont.
+2. `npm audit --audit-level=high` est en CI, pour que la prochaine
    alerte critique ne dorme pas six mois.

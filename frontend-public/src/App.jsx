@@ -4,6 +4,7 @@
 //   /                : saisie (empreinte, référence, QR)
 //   /verifier/:code  : résultat — cible des QR codes imprimés
 //   /integration     : demande d'agrément d'un établissement, et son suivi
+//   /demonstration   : diplômes réellement ancrés — pour les présentations
 //
 // L'ossature est celle d'un site d'État : bandeau République Togolaise,
 // identité du service, pied de page institutionnel. Ce n'est pas de la
@@ -14,13 +15,22 @@ import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import HomePage from './pages/HomePage.jsx';
 import VerificationPage from './pages/VerificationPage.jsx';
 import IntegrationPage from './pages/IntegrationPage.jsx';
+import DemonstrationPage from './pages/DemonstrationPage.jsx';
 import { Icone } from './components/ui.jsx';
+import Embleme from './components/Embleme.jsx';
 
 /** Bandeau d'État : filet tricolore et rattachement institutionnel. */
 function BandeauEtat() {
   return (
     <div className="border-b border-gris-300 bg-white">
-      <div className="h-1 w-full bg-vert" />
+      {/* Trois bandes égales — le même filet que sur le diplôme imprimé.
+          Une seule bande verte ne disait rien : c'est le tricolore qui
+          se lit comme une marque d'État. */}
+      <div className="flex h-1 w-full" aria-hidden="true">
+        <span className="flex-1 bg-vert" />
+        <span className="flex-1 bg-jaune" />
+        <span className="flex-1 bg-rouge" />
+      </div>
       <div className="mx-auto flex max-w-contenu items-center justify-between gap-4 px-5 py-2 lg:px-8">
         <p className="text-xs font-bold uppercase tracking-wide text-gris-700">
           République Togolaise
@@ -38,9 +48,7 @@ function Entete() {
     <header className="border-b border-gris-300 bg-white">
       <div className="mx-auto flex max-w-contenu flex-wrap items-center justify-between gap-3 px-5 py-4 lg:px-8">
         <Link to="/" className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center bg-vert text-white">
-            <Icone nom="verified" taille={22} className="filled" />
-          </span>
+          <Embleme taille={40} />
           <span>
             <span className="block text-xl font-bold leading-tight text-gris-900">CertifTOGO</span>
             <span className="block text-sm text-gris-500">
@@ -63,6 +71,13 @@ function Entete() {
             className="text-base text-vert underline underline-offset-2 hover:text-vert-fonce"
           >
             Espace établissements
+          </Link>
+          {/* Discret : la page sert aux présentations, pas au public. */}
+          <Link
+            to="/demonstration"
+            className="hidden text-base text-gris-500 underline underline-offset-2 hover:text-gris-900 sm:inline"
+          >
+            Démonstration
           </Link>
         </nav>
       </div>
@@ -101,6 +116,7 @@ export default function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/verifier/:code" element={<VerificationPage />} />
           <Route path="/integration" element={<IntegrationPage />} />
+          <Route path="/demonstration" element={<DemonstrationPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

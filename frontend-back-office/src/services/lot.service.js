@@ -11,6 +11,15 @@ export async function transmettrePromotion(promotionId, { date_deliberation }) {
   return data.data;
 }
 
+/**
+ * État de préparation d'une promotion : effectif, exclus, numéros et
+ * pièces manquantes. Lecture seule — le serveur revérifie tout.
+ */
+export async function preparerTransmission(promotionId) {
+  const { data } = await api.get(`/promotions/${promotionId}/transmission`);
+  return data.data;
+}
+
 /** Lots émis par mon établissement. */
 export async function mesLots({ statut = '' } = {}) {
   const { data } = await api.get('/lots', { params: statut ? { statut } : {} });
@@ -54,6 +63,52 @@ export async function examinerLot(id) {
 export async function validerLot(id, { dossiers_rejetes = [] } = {}) {
   const { data } = await api.post(`/ministere/lots/${id}/valider`, { dossiers_rejetes });
   return data.data;
+}
+
+/**
+ * Statue sur une TRANCHE de dossiers : ce qui n'est pas désigné reste
+ * en attente. C'est ce qui permet de reprendre l'instruction plus tard
+ * au lieu de devoir tout traiter d'une séance.
+ */
+export async function traiterDossiers(id, { dossiers_valides = [], dossiers_rejetes = [] } = {}) {
+  const { data } = await api.post(`/ministere/lots/${id}/traiter`, {
+    dossiers_valides,
+    dossiers_rejetes,
+  });
+  return data.data;
+}
+
+/** Fiche complète du titulaire d'un dossier reçu (ministère). */
+export async function ficheDuDossier(dossierId) {
+  const { data } = await api.get(`/ministere/dossiers/${dossierId}/fiche`);
+  return data.data;
+}
+
+/** Les urgences en attente, tous lots confondus. */
+export async function dossiersUrgents() {
+  const { data } = await api.get('/ministere/dossiers/urgents');
+  return data.data.dossiers;
+}
+
+/** Déclare ou lève l'urgence d'un dossier reçu (ministère). */
+export async function prioriserDossierMinistere(id, declaration) {
+  const { data } = await api.patch(`/ministere/dossiers/${id}/priorite`, declaration);
+  return data.data.dossier;
+}
+
+/** Déclare ou lève l'urgence d'un dossier transmis (établissement). */
+export async function prioriserDossier(id, declaration) {
+  const { data } = await api.patch(`/dossiers/${id}/priorite`, declaration);
+  return data.data.dossier;
+}
+
+/** Urgence déclarée sur un étudiant avant que la promotion ne parte. */
+export async function prioriserInscription(promotionId, inscriptionId, declaration) {
+  const { data } = await api.patch(
+    `/promotions/${promotionId}/inscriptions/${inscriptionId}/priorite`,
+    declaration
+  );
+  return data.data.inscription;
 }
 
 export async function rejeterLot(id, motif) {

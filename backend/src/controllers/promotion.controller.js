@@ -3,6 +3,7 @@
 // L'établissement courant provient du JWT (req.utilisateur.etablissement_id).
 // ─────────────────────────────────────────────────────────────
 import * as promotionService from '../services/promotion.service.js';
+import * as priorite from '../services/priorite.service.js';
 
 const etab = (req) => req.utilisateur.etablissement_id;
 
@@ -153,6 +154,25 @@ export async function parcoursEtudiant(req, res, next) {
   try {
     const parcours = await promotionService.parcoursEtudiant(req.params.candidatId, etab(req));
     return res.json({ success: true, data: { parcours } });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/**
+ * PATCH /api/promotions/:id/inscriptions/:inscriptionId/priorite
+ *
+ * Avant transmission, le dossier n'existe pas encore : l'urgence se
+ * déclare sur l'inscription, et suivra le dossier qu'elle engendrera.
+ */
+export async function definirPrioriteInscription(req, res, next) {
+  try {
+    const inscription = await priorite.definirPourInscription(
+      req.params.inscriptionId,
+      req.utilisateur,
+      req.body || {}
+    );
+    return res.json({ success: true, data: { inscription } });
   } catch (err) {
     return next(err);
   }

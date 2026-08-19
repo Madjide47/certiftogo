@@ -22,11 +22,16 @@ router.use(authJWT, requireRole('ministere'));
 
 // /statistiques doit précéder /:id pour ne pas être capturé comme un id.
 router.get('/dossiers/statistiques', ministereController.statistiques);
+// Les urgences traversent les lots : sans cette vue, une échéance
+// dormant dans un lot ancien ne se découvre qu'en l'ouvrant.
+router.get('/dossiers/urgents', ministereController.listerUrgents);
 router.get('/dossiers', ministereController.listerDossiers);
 router.get('/dossiers/:id', ministereController.recupererDossier);
 // Les actes du dossier : ce que l'agent doit pouvoir ouvrir avant de
 // valider un dossier pris hors de son lot.
 router.get('/dossiers/:id/pieces', pieceController.listerPourDossier);
+// Fiche complète du titulaire, atteinte depuis son dossier.
+router.get('/dossiers/:id/fiche', ministereController.ficheEtudiant);
 router.post('/dossiers/:id/examiner', ministereController.examiner);
 router.post('/dossiers/:id/valider', ministereController.valider);
 router.post('/dossiers/:id/rejeter', ministereController.rejeter);
@@ -53,8 +58,15 @@ router.post('/pieces/:id/decision', pieceController.decider);
 router.get('/lots', lotController.lister);
 router.get('/lots/:id', lotController.detailler);
 router.post('/lots/:id/examiner', lotController.examiner);
+// Instruction par tranches : statuer sur les dossiers examinés, laisser
+// les autres en attente et reprendre plus tard. Une promotion de 12 000
+// diplômés ne s'instruit pas en une séance.
+router.post('/lots/:id/traiter', lotController.traiterDossiers);
 router.post('/lots/:id/valider', lotController.valider);
 router.post('/lots/:id/rejeter', lotController.rejeter);
+
+// Priorité d'un dossier reçu — le ministère arbitre sur pièce.
+router.patch('/dossiers/:id/priorite', ministereController.definirPriorite);
 
 // ── Ancrage blockchain : certification de masse et supervision de la file.
 // Chemins fixes avant les paramétrés.

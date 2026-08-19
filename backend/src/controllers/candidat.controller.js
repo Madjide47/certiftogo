@@ -3,6 +3,7 @@
 // L'établissement courant provient du JWT (req.utilisateur.etablissement_id).
 // ─────────────────────────────────────────────────────────────
 import * as candidatService from '../services/candidat.service.js';
+import * as fiche from '../services/fiche-etudiant.service.js';
 
 /** GET /api/candidats?recherche=&limit=&offset= */
 export async function lister(req, res, next) {
@@ -59,6 +60,21 @@ export async function supprimer(req, res, next) {
   try {
     await candidatService.supprimer(req.params.id, req.utilisateur.etablissement_id);
     return res.json({ success: true, data: { supprime: true } });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/**
+ * GET /api/candidats/:id/fiche
+ *
+ * Tout ce que le système sait de cet étudiant, en une lecture : état
+ * civil, parcours, dossiers, diplômes, pièces et ce qui manque.
+ */
+export async function ficheEtudiant(req, res, next) {
+  try {
+    const data = await fiche.pourEtablissement(req.params.id, req.utilisateur);
+    return res.json({ success: true, data });
   } catch (err) {
     return next(err);
   }

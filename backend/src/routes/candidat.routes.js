@@ -24,11 +24,16 @@ router.use(authJWT, requireRole('etablissement'));
 router.get('/', candidatController.lister);
 router.post('/', requirePermission('candidat.creer'), candidatController.creer);
 router.get('/:id', candidatController.recuperer);
+// Fiche complète : l'examen d'un cas ne doit pas obliger à ouvrir
+// cinq écrans et à recomposer de tête.
+router.get('/:id/fiche', candidatController.ficheEtudiant);
 router.put('/:id', candidatController.modifier);
 router.delete('/:id', requirePermission('candidat.supprimer'), candidatController.supprimer);
 
 // ── Pièces justificatives de l'étudiant ────────────────────────────
 router.get('/:id/pieces', pieceController.listerPourCandidat);
+// Grille : ce qui est attendu, pas seulement ce qui est déposé.
+router.get('/:id/pieces/grille', pieceController.grilleCandidat);
 router.post(
   '/:id/pieces',
   requirePermission('piece.deposer'),

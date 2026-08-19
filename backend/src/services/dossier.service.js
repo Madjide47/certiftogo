@@ -10,7 +10,7 @@ import {
   nettoyerTexte,
   estDansEnum,
 } from '../utils/validators.js';
-import { genererReferenceDossier } from '../utils/reference-generator.js';
+import * as references from './reference.service.js';
 
 /** Liste les dossiers de l'établissement courant. */
 export async function lister(etablissement_id, { statut, limit, offset } = {}) {
@@ -54,13 +54,16 @@ async function validerDonnees(donnees) {
   };
 }
 
-/** Génère une référence CT-AAAA-XXXXX unique (quelques tentatives). */
-async function genererReferenceUnique() {
-  for (let i = 0; i < 5; i += 1) {
-    const reference = genererReferenceDossier();
-    if (!(await dossierModel.referenceExiste(reference))) return reference;
-  }
-  throw new ErreurApp(500, 'REFERENCE_INDISPONIBLE', 'Impossible de générer une référence unique.');
+/**
+ * Attribue une référence CT-AAAA-XXXXX.
+ *
+ * L'ancienne version tirait au hasard puis demandait « existe déjà ? » —
+ * cinq fois, avant d'abandonner. Deux défauts : le tirage s'épuise à
+ * mesure que l'année se remplit, et entre la question et l'insertion une
+ * autre transaction peut prendre la place. Le compteur tranche les deux.
+ */
+function genererReferenceUnique() {
+  return references.reserverUne('CT');
 }
 
 /** Vérifie que le candidat appartient bien à l'établissement. */

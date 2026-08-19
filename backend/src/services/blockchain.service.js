@@ -140,6 +140,42 @@ function contrat() {
   return _contrat;
 }
 
+/**
+ * Lecture seule du contrat — sans portefeuille, sans clé, sans frais.
+ *
+ * Écrire et lire n'ont ni le même coût ni les mêmes prérequis : ancrer
+ * exige une clé privée et dépense des fonds, interroger le registre est
+ * un appel `view` gratuit qui ne demande qu'une URL RPC. Les confondre
+ * sous un seul mode obligeait à choisir entre « je certifie pour de vrai »
+ * et « je ne sais rien dire de la chaîne » — d'où des vérifications
+ * publiques qui répondaient `mode: mock` alors que le hash était bel et
+ * bien ancré, simplement inscrit par une autre instance.
+ */
+let _contratLecture = null;
+function contratLecture() {
+  if (_contratLecture) return _contratLecture;
+  if (!ADRESSE_CONTRAT) {
+    throw new Error('CONTRAT_ADRESSE absent : lecture on-chain impossible.');
+  }
+  const provider = new ethers.JsonRpcProvider(RPC_URL);
+  _contratLecture = new ethers.Contract(ADRESSE_CONTRAT, ABI, provider);
+  return _contratLecture;
+}
+
+/**
+ * true si l'état on-chain peut être LU.
+ *
+ * Vrai dès que le mode d'écriture est `onchain`, et aussi lorsque
+ * `BLOCKCHAIN_LECTURE=onchain` : un serveur de démonstration certifie
+ * alors en `mock` — sans dépenser un centime — tout en disant la vérité
+ * sur ce qui est réellement ancré.
+ */
+export function peutLireOnChain() {
+  return Boolean(
+    ADRESSE_CONTRAT && (MODE === 'onchain' || process.env.BLOCKCHAIN_LECTURE === 'onchain')
+  );
+}
+
 /** Faux hash de transaction déterministe (mode mock). */
 function fauxTxHash(graine) {
   return `0x${crypto.createHash('sha256').update(`tx:${graine}:${Date.now()}`).digest('hex')}`;
@@ -214,13 +250,17 @@ export async function revoquer({ reference, hash, motif }) {
 }
 
 /**
- * Lit l'état ancré d'un diplôme sur la chaîne (mode onchain uniquement).
+ * Lit l'état ancré d'un diplôme sur la chaîne.
+ *
+ * Passe par le contrat en lecture seule : aucune clé privée n'est requise,
+ * l'appel est un `view` et ne coûte rien.
+ *
  * @returns {Promise<null | { existe: boolean, revoque: boolean, valide: boolean,
  *   refDiplome: string, dateCertification: number|null, certificateur: string }>}
  */
 export async function verifierOnChain(hash) {
-  if (MODE !== 'onchain') return null;
-  const r = await surLaChaine(() => contrat().verifier(versBytes32(hash)));
+  if (!peutLireOnChain()) return null;
+  const r = await surLaChaine(() => contratLecture().verifier(versBytes32(hash)));
   const existe = r[0];
   const revoque = r[1];
   return {

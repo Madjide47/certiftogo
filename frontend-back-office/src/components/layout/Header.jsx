@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { LIBELLES_ROLES } from '../../config/navigation.js';
 import { Icone } from '../ui/index.jsx';
+import Embleme from './Embleme.jsx';
 import { compterNonLues } from '../../services/notification.service.js';
 
 const SOUS_ROLES = {
@@ -18,7 +19,7 @@ const SOUS_ROLES = {
   directeur: 'Directeur',
 };
 
-export default function Header() {
+export default function Header({ onOuvrirNavigation }) {
   const { utilisateur, deconnecter } = useAuth();
   const [nonLues, setNonLues] = useState(0);
 
@@ -39,17 +40,30 @@ export default function Header() {
   return (
     <header className="border-b border-gris-300 bg-white">
       <div className="mx-auto flex max-w-contenu flex-wrap items-center justify-between gap-3 px-5 py-3 lg:px-8">
-        <Link to="/" className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center bg-vert text-white">
-            <Icone nom="verified" taille={20} className="filled" />
-          </span>
-          <span>
-            <span className="block text-lg font-bold leading-tight text-gris-900">CertifTOGO</span>
-            <span className="block text-xs text-gris-500">
-              Certification et traçabilité des diplômes
+        <div className="flex items-center gap-3">
+          {/* Sous 1024 px, la barre latérale est masquée : sans ce bouton,
+              plus aucune navigation n'est atteignable. */}
+          <button
+            type="button"
+            onClick={onOuvrirNavigation}
+            aria-label="Ouvrir la navigation"
+            className="sans-impression rounded border border-gris-300 p-1.5 text-gris-700 hover:bg-gris-100 lg:hidden"
+          >
+            <Icone nom="menu" taille={22} />
+          </button>
+
+          <Link to="/" className="flex items-center gap-3">
+            <Embleme taille={36} />
+            <span>
+              <span className="block text-lg font-bold leading-tight text-gris-900">
+                CertifTOGO
+              </span>
+              <span className="block text-xs text-gris-500">
+                Certification et traçabilité des diplômes
+              </span>
             </span>
-          </span>
-        </Link>
+          </Link>
+        </div>
 
         <div className="flex items-center gap-3 sans-impression">
           <Link
@@ -82,6 +96,16 @@ export default function Header() {
             <span className="hidden sm:inline">Déconnexion</span>
           </button>
         </div>
+      </div>
+
+      {/* Filet tricolore : le même que sur le diplôme imprimé. Trois
+          bandes égales, aucune ombre, aucun dégradé — c'est la signature
+          visuelle des documents de l'État, et elle relie l'écran au
+          papier que le titulaire aura en main. */}
+      <div className="flex h-1" aria-hidden="true">
+        <span className="flex-1 bg-vert" />
+        <span className="flex-1 bg-jaune" />
+        <span className="flex-1 bg-rouge" />
       </div>
     </header>
   );

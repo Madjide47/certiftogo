@@ -5,7 +5,8 @@
 import { query } from '../config/database.js';
 
 const COLONNES = `i.id, i.candidat_id, i.promotion_id, i.statut, i.moyenne,
-                  i.mention, i.date_inscription`;
+                  i.mention, i.date_inscription,
+                  i.priorite, i.motif_urgence, i.date_echeance`;
 
 export async function listerParPromotion(promotion_id) {
   const { rows } = await query(
@@ -60,6 +61,24 @@ export async function enregistrerResultat(id, { statut, moyenne, mention }) {
       WHERE id = $1
       RETURNING id, candidat_id, promotion_id, statut, moyenne, mention, date_inscription`,
     [id, statut, moyenne, mention]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Urgence déclarée par l'établissement, avant transmission. Elle sera
+ * recopiée sur le dossier engendré : l'information est connue ici, elle
+ * doit voyager jusqu'à celui qui instruit.
+ */
+export async function definirPriorite(id, { priorite, motif_urgence, date_echeance }) {
+  const { rows } = await query(
+    `UPDATE inscriptions
+        SET priorite = $2,
+            motif_urgence = $3,
+            date_echeance = $4
+      WHERE id = $1
+      RETURNING id, candidat_id, promotion_id, statut, priorite, motif_urgence, date_echeance`,
+    [id, priorite, motif_urgence || null, date_echeance || null]
   );
   return rows[0] || null;
 }

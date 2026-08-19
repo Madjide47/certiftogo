@@ -3,6 +3,8 @@
 // ─────────────────────────────────────────────────────────────
 import * as ministereService from '../services/dossier-ministere.service.js';
 import * as diplomeService from '../services/diplome.service.js';
+import * as priorite from '../services/priorite.service.js';
+import * as fiche from '../services/fiche-etudiant.service.js';
 
 /** GET /api/ministere/dossiers?statut=&limit=&offset= */
 export async function listerDossiers(req, res, next) {
@@ -99,6 +101,46 @@ export async function certifier(req, res, next) {
       req.utilisateur.ministere_id
     );
     return res.status(201).json({ success: true, data: { diplome } });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** PATCH /api/ministere/dossiers/:id/priorite  body: { priorite, motif_urgence, date_echeance } */
+export async function definirPriorite(req, res, next) {
+  try {
+    const dossier = await priorite.definirPourDossier(
+      req.params.id,
+      req.utilisateur,
+      req.body || {}
+    );
+    return res.json({ success: true, data: { dossier } });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/** GET /api/ministere/dossiers/urgents — les urgences, tous lots confondus. */
+export async function listerUrgents(req, res, next) {
+  try {
+    const dossiers = await priorite.listerUrgents({});
+    return res.json({ success: true, data: { dossiers } });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+/**
+ * GET /api/ministere/dossiers/:id/fiche
+ *
+ * Le ministère n'administre pas d'étudiants : il instruit des dossiers.
+ * Sa porte d'entrée est donc le dossier, pas la personne — mais ce qu'il
+ * doit examiner est bien la personne entière.
+ */
+export async function ficheEtudiant(req, res, next) {
+  try {
+    const data = await fiche.pourMinistere(req.params.id, req.utilisateur);
+    return res.json({ success: true, data });
   } catch (err) {
     return next(err);
   }

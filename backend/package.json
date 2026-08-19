@@ -12,6 +12,8 @@
     "migrate:reset": "node scripts/run-migrations.js --reset",
     "seed": "node scripts/run-sql.js seeds/seed_dev.sql",
     "seed:demo": "node scripts/seed-demo.mjs",
+    "pdf:regenerer": "node scripts/regenerer-pdf.mjs",
+    "charge": "node scripts/charge.mjs",
     "db:reset": "node scripts/run-migrations.js --reset && node scripts/run-sql.js seeds/seed_dev.sql",
     "db:demo": "node scripts/run-migrations.js --reset && node scripts/run-sql.js seeds/seed_dev.sql && node scripts/seed-demo.mjs"
   },
@@ -32,5 +34,8 @@
   "devDependencies": {
     "nodemon": "^3.1.4",
     "supertest": "^7.2.2"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   }
 }

@@ -117,6 +117,21 @@ export const limiteVerificationPublique = limiter({
   message: 'Trop de vérifications. Réessayez dans une minute.',
 });
 
+/**
+ * Vérification par lot : compté en APPELS, mais chaque appel porte
+ * jusqu'à 50 codes. Six par minute plafonnent donc à 300 vérifications,
+ * cinq fois la limite unitaire — c'est assumé : l'usage visé est un
+ * recruteur qui contrôle une liste, pas un balayage de l'espace des
+ * références. Le plafond de 50 par appel, lui, empêche qu'une seule
+ * requête serve à énumérer.
+ */
+export const limiteVerificationLot = limiter({
+  nom: 'verification-lot',
+  max: 6,
+  fenetreMs: 60 * 1000,
+  message: 'Trop de vérifications par lot. Réessayez dans une minute.',
+});
+
 /** Dépôt de demande d'intégration : endpoint public non authentifié. */
 export const limiteDemandeIntegration = limiter({
   nom: 'demande',

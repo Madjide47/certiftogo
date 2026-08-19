@@ -16,7 +16,8 @@ import * as habilitationModel from '../models/habilitation.model.js';
 import * as demandeModel from '../models/demande-integration.model.js';
 import * as utilisateurModel from '../models/utilisateur.model.js';
 import { ErreurApp, avecErreursSql } from '../utils/errors.js';
-import { genererReferenceDemande, initialesEtablissement } from '../utils/reference-generator.js';
+import { initialesEtablissement } from '../utils/reference-generator.js';
+import * as references from './reference.service.js';
 import { journaliser, ACTIONS } from './audit.service.js';
 import * as notifications from './notification.service.js';
 import * as permissions from './permissions.service.js';
@@ -393,10 +394,12 @@ export async function deposerDemande(donnees) {
   // 32 octets : ce jeton tient lieu de mot de passe au dossier.
   const jeton = brouillon ? crypto.randomBytes(32).toString('hex') : null;
 
+  const reference = await references.reserverUne('DI');
+
   const demande = await avecErreursSql(
     () =>
       demandeModel.creer({
-        reference: genererReferenceDemande(),
+        reference,
         ...etab,
         ...identite,
         responsable_nom: responsable.nom,

@@ -46,12 +46,19 @@ router.get('/:id/inscriptions', promotionController.listerInscriptions);
 router.post('/:id/inscriptions', promotionController.inscrire);
 router.put('/:id/inscriptions/:inscriptionId', requirePermission('promotion.resultat'), promotionController.enregistrerResultat);
 router.delete('/:id/inscriptions/:inscriptionId', promotionController.desinscrire);
+// Urgence d'un étudiant, avant que la promotion ne parte.
+router.patch(
+  '/:id/inscriptions/:inscriptionId/priorite',
+  requirePermission('dossier.prioriser'),
+  promotionController.definirPrioriteInscription
+);
 
 // Import d'une promotion entière. `?simulation=true` valide sans écrire.
 router.post('/:id/import', requirePermission('promotion.importer'), recevoirClasseur, promotionController.importer);
 
 // ── Pièces collectives : procès-verbal de délibération, arrêté de jury ──
 router.get('/:id/pieces', pieceController.listerPourPromotion);
+router.get('/:id/pieces/grille', pieceController.grillePromotion);
 router.post(
   '/:id/pieces',
   requirePermission('piece.deposer'),
@@ -61,6 +68,9 @@ router.post(
 
 // Transmission de la promotion entière au ministère : génère un lot et
 // un dossier par étudiant admis.
+// Lecture seule : ce qui manque encore pour que la promotion parte.
+// Ouverte à tout agent — voir l'obstacle n'est pas le lever.
+router.get('/:id/transmission', lotController.preparerTransmission);
 router.post('/:id/transmettre', requirePermission('promotion.transmettre'), lotController.transmettre);
 
 export default router;
