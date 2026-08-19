@@ -394,10 +394,23 @@ docker compose --profile complet up -d --build
 #   back-office  http://localhost:5173
 #   public       http://localhost:5174
 docker compose --profile complet ps    # état de santé des 4 conteneurs
+
+# Hydrater les fichiers générés (PDF et QR) — À FAIRE APRÈS UN `down -v` :
+docker cp backend/uploads/. certiftogo_api:/app/uploads/
 ```
+
 > Sans `--profile complet`, seule la base démarre : c'est le mode de travail
 > quotidien (`npm run dev` et rechargement à chaud). Détail en
 > [`docs/DEPLOIEMENT.md`](docs/DEPLOIEMENT.md) §0.
+
+> **Pourquoi cette copie.** `/app/uploads` est un **volume Docker nommé**, vide
+> à la création. Or la base de démonstration a été peuplée hors conteneur : ses
+> 2 900 diplômes pointent vers des fichiers qui vivent dans `backend/uploads/`,
+> sur l'hôte. Sans hydratation, chaque PDF et chaque QR répond **404** — le
+> portefeuille du candidat n'ouvre rien, et les QR de la page `/demonstration`
+> s'affichent cassés. Le volume n'est pas en tort : c'est le bon emballage pour
+> une image qui doit tourner ailleurs. C'est le couple base-hors-conteneur /
+> fichiers-dans-le-conteneur qu'il faut recoller, une fois, à la main.
 
 ### Base de données
 ```bash

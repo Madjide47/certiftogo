@@ -69,6 +69,11 @@ services:
       # par une autre instance. Un appel `view` ne coûte rien.
       BLOCKCHAIN_MODE: mock
       BLOCKCHAIN_LECTURE: onchain
+      # Affiche le code OTP sur l'écran de connexion, pour les quatre rôles.
+      # Sans lui il faut le lire dans `docker logs certiftogo_api` en pleine
+      # démonstration. Sans effet dès que WHATSAPP_MODE=cloud : un code
+      # réellement envoyé n'est jamais réaffiché. À retirer en production.
+      OTP_AFFICHE_CODE: "true"
       # Les fronts sont servis par nginx sur ces deux ports.
       CORS_ORIGINS: http://localhost:${PORT_BACK_OFFICE:-5173},http://localhost:${PORT_PUBLIC:-5174}
       PUBLIC_BASE_URL: http://localhost:${PORT_API:-4000}
