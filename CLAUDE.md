@@ -703,11 +703,29 @@ Le contrat `RegistreDiplomes` est déployé et **vérifié** sur le testnet publ
   `etherscan: { apiKey: '…' }`) ; l'ancien format par réseau est rejeté.
 - **Coût réel ≈ 0,0075 POL par opération** (certification ou révocation).
   Prévoir le solde en conséquence ; faucet : https://faucet.polygon.technology
-- ⚠️ **Données mixtes en base de démo** : les diplômes issus de `seed:demo` ont
-  été ancrés en mode `mock` — leurs hash **ne sont pas** sur le contrat, la
-  vérification publique renvoie `ancrage_blockchain.ancre = false`. Seuls
-  **6 diplômes vitrine** sont réellement ancrés, dont **un révoqué**
-  (`DIP-2026-23831`) qui démontre l'état `valide=false / revoqué=true` on-chain.
+- ⚠️ **Données mixtes en base de démo** : les diplômes issus de `seed:demo` sont
+  ancrés en mode `mock` — leurs hash **ne sont pas** sur le contrat, et la
+  vérification publique renvoie honnêtement `ancrage_blockchain.ancre = false`.
+  Deux **diplômes vitrine** sont réellement ancrés (16/08/2026) :
+
+  | Référence | État on-chain | Transaction |
+  |---|---|---|
+  | `DIP-2026-83470` (Yao KPODAR) | `existe=true, valide=true` | [`0xccc4590…`](https://amoy.polygonscan.com/tx/0xccc4590494511ef9ae51747562aabaa1b688ccd5fe066ce8b34fadea285f4009) |
+  | `DIP-2026-91564` (Elom EKUE) | `existe=true, valide=false, revoque=true` | [certif.](https://amoy.polygonscan.com/tx/0x6948e99e2f5db40637a6b2f998d1588df6639794482063d78b11bb066baf26a8) + [révoc.](https://amoy.polygonscan.com/tx/0x0a9eeaece91a2e3452546d1b20be80cee106a3921589aae70c8855658808ca70) |
+
+  > **Attention en cas de reseed.** `npm run db:demo` reconstruit la base : les
+  > deux références ci-dessus disparaissent, leurs hash restent sur la chaîne
+  > sans rien en face, et cette section devient fausse. C'est exactement ce qui
+  > s'était produit — la version précédente annonçait six diplômes vitrine dont
+  > un révoqué (`DIP-2026-23831`) qui n'existait plus en base. Après tout
+  > reseed : `node scripts/ancrer-vitrine.mjs --lister` pour constater, puis
+  > réancrer et **mettre ce tableau à jour**.
+
+  ```bash
+  node scripts/ancrer-vitrine.mjs --lister          # état on-chain, sans écrire
+  node scripts/ancrer-vitrine.mjs DIP-… DIP-… --revoquer="motif"
+  ```
+
   Un reseed complet en mode `onchain` coûterait ~0,15 POL.
 - Le coût réel de chaque opération est désormais tracé :
   `blockchain.service.js` remonte `receipt.gasUsed` dans
