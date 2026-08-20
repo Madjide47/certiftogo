@@ -11,6 +11,7 @@
 // révocation de toute façon, et mieux vaut que le titulaire l'apprenne
 // ici que devant un employeur.
 // ─────────────────────────────────────────────────────────────
+import { adressePublique, urlFichier } from '../../services/adresse-api.js';
 import { useEffect, useState } from 'react';
 import { listerMesDiplomes } from '../../services/portefeuille.service.js';
 import {
@@ -19,6 +20,7 @@ import {
   messageErreur,
 } from '../../utils/libelles.js';
 import { EtiquetteStatut } from './PortefeuillePage.jsx';
+
 import {
   EnTetePage,
   Encart,
@@ -28,7 +30,7 @@ import {
   Icone,
 } from '../../components/ui/index.jsx';
 
-const URL_PUBLIC = import.meta.env.VITE_PUBLIC_URL || 'http://localhost:5174';
+const URL_PUBLIC = adressePublique();
 
 const date = (v) => (v ? new Date(v).toLocaleDateString('fr-FR') : '—');
 
@@ -125,6 +127,24 @@ function CarteDiplome({ d, onCopie }) {
               </Bouton>
             </div>
 
+            {/* Le QR était un LIEN, pas une image : il fallait l'ouvrir dans
+                un onglet pour espérer le scanner. Or c'est l'objet même que
+                l'on tend à un employeur — il doit être lisible à l'écran, par
+                un téléphone tenu devant. */}
+            {d.qr_code_url && (
+              <div className="mt-4 flex flex-wrap items-center gap-4">
+                <img
+                  src={urlFichier(d.qr_code_url)}
+                  alt={`QR code de vérification du diplôme ${d.reference}`}
+                  className="h-40 w-40 shrink-0 border border-gris-300 bg-white p-2"
+                />
+                <p className="min-w-48 flex-1 text-sm text-gris-500">
+                  Ce QR code mène à la page publique de vérification. Un employeur le scanne
+                  avec l’appareil photo de son téléphone : ni compte, ni application.
+                </p>
+              </div>
+            )}
+
             <div className="mt-3 flex flex-wrap gap-2">
               <a
                 href={lien}
@@ -137,7 +157,7 @@ function CarteDiplome({ d, onCopie }) {
               </a>
               {d.pdf_url && (
                 <a
-                  href={d.pdf_url}
+                  href={urlFichier(d.pdf_url)}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1.5 border border-gris-500 bg-white px-4 py-2 text-base font-medium text-gris-900 hover:bg-gris-100"
@@ -148,13 +168,13 @@ function CarteDiplome({ d, onCopie }) {
               )}
               {d.qr_code_url && (
                 <a
-                  href={d.qr_code_url}
+                  href={urlFichier(d.qr_code_url)}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1.5 border border-gris-500 bg-white px-4 py-2 text-base font-medium text-gris-900 hover:bg-gris-100"
                 >
                   <Icone nom="qr_code_2" taille={18} />
-                  QR code
+                  Télécharger le QR
                 </a>
               )}
             </div>

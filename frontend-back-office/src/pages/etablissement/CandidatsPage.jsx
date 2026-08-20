@@ -268,7 +268,9 @@ export default function CandidatsPage() {
         <form onSubmit={soumettre} className="space-y-4">
           {erreurForm && <Encart ton="erreur">{erreurForm}</Encart>}
 
-          <ChampsEtudiant valeurs={form} onChange={majChamp} prefixe="c" />
+          {/* À la création seulement : modifier une fiche ne doit pas
+              pouvoir vider son matricule. */}
+          <ChampsEtudiant valeurs={form} onChange={majChamp} prefixe="c" numeroAuto={!enEdition} />
 
           <div className="flex justify-end gap-2 border-t border-gris-200 pt-4">
             <Bouton variante="neutre" onClick={() => setModaleOuverte(false)}>

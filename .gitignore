@@ -34,3 +34,6 @@ coverage/
 
 # Pièces justificatives déposées par les établissements (stockage privé)
 backend/stockage/
+
+# Sauvegardes locales (dumps SQL et pièces) — données personnelles, jamais versionnées.
+sauvegardes/

@@ -86,9 +86,23 @@ export async function demanderOtp(telephone) {
 
   const reponse = { ...reponseGenerique };
 
-  // Le code n'est renvoyé au front que si AUCUN envoi réel n'a eu lieu
-  // (mode mock) et hors production. NE JAMAIS exposer autrement.
-  if (process.env.NODE_ENV !== 'production' && !whatsappActif()) {
+  // Le code n'est renvoyé au front que si AUCUN envoi réel n'a eu lieu.
+  // Cette condition-là n'a pas d'échappatoire : dès qu'un WhatsApp part
+  // vraiment, le second facteur redevient un secret et rien ne le montre.
+  //
+  // Reste le cas de la DÉMONSTRATION. L'image conteneurisée tourne en
+  // `NODE_ENV=production` — c'est voulu : on montre le vrai emballage, pas
+  // un serveur de développement. Mais aller lire le code dans les journaux
+  // du conteneur devant un jury est laborieux et donne l'impression d'une
+  // ficelle. `OTP_AFFICHE_CODE=true` rouvre donc l'affichage, explicitement
+  // et nommément, pour cette pile-là seulement.
+  //
+  // Un drapeau distinct plutôt qu'un `NODE_ENV=development` : rétrograder
+  // l'environnement changerait aussi la verbosité des erreurs et le
+  // durcissement HTTP, soit bien plus que ce qu'on demande.
+  const afficherLeCode =
+    process.env.NODE_ENV !== 'production' || process.env.OTP_AFFICHE_CODE === 'true';
+  if (afficherLeCode && !whatsappActif()) {
     reponse.code_dev = code;
   }
 

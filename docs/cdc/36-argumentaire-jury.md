@@ -205,11 +205,30 @@ Les énoncer soi-même vaut mieux que de les laisser découvrir.
 | Point | État | Conséquence |
 |---|---|---|
 | Clé en variable d'environnement | niveau 1 sur 4 | acceptable en MVP, à élever avant mise en service |
-| Contrôle à quatre yeux | table posée, non branché | la révocation reste une décision individuelle |
 | Limitation de débit en mémoire | par processus | insuffisant derrière plusieurs instances |
-| SMS et email | canaux tracés, non raccordés | seul WhatsApp achemine réellement |
-| Données de démonstration | ancrées en mode `mock` | signalé honnêtement à la vérification |
-| Frontend | fonctionnel, refonte prévue | l'interface actuelle n'est pas le rendu final |
+| WhatsApp, SMS, email | code écrit et testé, **aucun opérateur raccordé** | rien ne part réellement ; l'envoi est simulé et le code OTP s'affiche à l'écran. Le blocage est administratif (validation du numéro et du modèle de message par Meta), pas technique |
+| Données de démonstration | ancrées en mode `mock` | signalé honnêtement à la vérification, qui répond « non inscrit » après avoir réellement interrogé la chaîne |
+| **Transmission à l'unité** | **aucune pièce exigée** | voir ci-dessous |
+| Examen des pièces à grande échelle | 60 pièces/s, soit ~23 min pour 12 000 dossiers | la vraie limite est le temps HUMAIN d'instruction, pas la machine ([`CHARGE.md`](../CHARGE.md)) |
+
+**La transmission à l'unité mérite d'être expliquée avant qu'on la
+découvre.** Un établissement peut créer un dossier pour un seul étudiant et
+le transmettre sans lot. Cette voie n'exige alors **ni pièce justificative,
+ni contrôle automatique** — là où la transmission par promotion impose sept
+pièces par admis, le procès-verbal de délibération, et neuf contrôles à la
+réception.
+
+L'asymétrie est délibérée : la voie individuelle est le **rattrapage** — un
+diplômé oublié dans une promotion déjà transmise, une réémission après
+correction, un cas d'espèce. Elle est instruite à vue par un agent du
+ministère qui décide en connaissance de cause, dossier par dossier, et
+chaque geste est journalisé.
+
+Elle constitue néanmoins un **contournement possible** du dispositif de
+preuve : un agent pressé peut certifier sans acte à l'appui. La réponse
+n'est pas d'interdire la voie — les cas d'espèce existent — mais d'exiger
+un **motif écrit**, comme le fait déjà la priorité de traitement (migration
+019). C'est la correction identifiée, non implémentée à ce jour.
 
 **Ce qui reste hors périmètre :** reprise des diplômes papier antérieurs,
 reconnaissance optique, ouverture à d'autres ministères, application mobile

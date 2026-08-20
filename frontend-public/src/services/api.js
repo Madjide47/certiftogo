@@ -2,8 +2,9 @@
 // Instance axios pour le front-office public (aucune authentification).
 // ─────────────────────────────────────────────────────────────
 import axios from 'axios';
+import { adresseApi } from './adresse-api.js';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+const API_URL = adresseApi();
 
 const api = axios.create({
   baseURL: API_URL,

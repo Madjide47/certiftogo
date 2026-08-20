@@ -90,6 +90,29 @@ fait, assumé.**
 
 ---
 
+## Le code OTP affiché à l'écran — un drapeau, et deux verrous
+
+`OTP_AFFICHE_CODE=true` fait renvoyer le code OTP dans la réponse de
+`request-otp`, que l'écran de connexion montre alors dans un encart. C'est un
+confort de **démonstration** : sans lui, il faut lire le code dans
+`docker logs certiftogo_api` au milieu d'une présentation.
+
+Deux conditions le bornent, et la seconde n'a pas d'échappatoire :
+
+1. le drapeau doit être posé — il ne l'est que dans `docker-compose.yml`, sur la
+   pile de démonstration, jamais dans `render.yaml` ;
+2. **aucun envoi réel ne doit avoir eu lieu** (`WHATSAPP_MODE` ≠ `cloud`). Dès
+   qu'un code part vraiment sur le téléphone de quelqu'un, il redevient un
+   secret et rien ne le réaffiche, drapeau ou pas.
+
+> **Pourquoi un drapeau dédié plutôt que `NODE_ENV=development` ?** Parce que
+> l'image conteneurisée tourne délibérément en `production` — on montre le vrai
+> emballage, pas un serveur de développement. Rétrograder `NODE_ENV` pour
+> obtenir l'affichage du code changerait au passage la verbosité des erreurs et
+> le durcissement HTTP : bien plus que ce qu'on demande, et sans le dire.
+
+---
+
 ## Backend — les deux dernières modérées, réglées par `overrides`
 
 `exceljs@4.4.0` déclare `uuid@^8.3.0`, visé par un avis modéré : absence de

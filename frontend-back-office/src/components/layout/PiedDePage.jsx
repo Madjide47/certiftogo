@@ -5,7 +5,9 @@
 // Sur un service public, le pied de page n'est pas un espace résiduel :
 // c'est là que se trouvent les mentions légales et le recours.
 // ─────────────────────────────────────────────────────────────
-const PUBLIC = import.meta.env.VITE_PUBLIC_URL || 'http://localhost:5174';
+import { adressePublique } from '../../services/adresse-api.js';
+
+const PUBLIC = adressePublique();
 
 const COLONNES = [
   {

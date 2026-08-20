@@ -5,7 +5,7 @@ et numérotée pour que tu puisses valider, refuser ou réordonner.
 
 **Légende** — ✅ fait et testé · 🔨 partiel ou en cours · ⬜ à faire
 
-Dernière mise à jour : 19 août 2026.
+Dernière mise à jour : 20 août 2026.
 
 ---
 
@@ -267,9 +267,9 @@ ci-dessus : voici ce que seul le CDC mentionne.
 | # | Élément | Chapitre | Statut |
 |---|---|---|---|
 | P-00 | **Refonte complète du frontend** — socle « service public » (DSFR/GOV.UK) appliqué aux quatre espaces du back-office et au front public. | 26 | ✅ |
-| P-01 | **Description écran par écran** : composition, actions, états vides, états d'erreur | 26.4 | 🔨 *les écrans portent leurs états ; la description reste à rédiger* |
+| P-01 | **Description écran par écran** : composition, actions, états vides, états d'erreur | 26.4 | ✅ *32 écrans décrits dans [`cdc/26-ecrans.md`](cdc/26-ecrans.md), écrits depuis le code livré* |
 | P-02 | **Accessibilité et affichage mobile** | 26.5 | 🔨 *navigation repliable sous 1024 px (la barre latérale disparaissait sans remplacement), lien d'évitement, focus visible, tableaux défilants, mouvement réduit ; audit RGAA complet restant* |
-| P-03 | **Tests de charge** : promotion de 12 000 diplômés | 31.4 | ⬜ |
+| P-03 | **Tests de charge** : promotion de 12 000 diplômés | 31.4 | ✅ *banc `npm run charge`, mesures et limites dans [`CHARGE.md`](CHARGE.md) — il a révélé une transmission impossible au-delà de ~700 dossiers* |
 | P-04 | **Tests de sécurité** | 31.5 | ⬜ |
 | P-05 | Glossaire métier (français) et technique (anglais) | 1.3 | ✅ |
 | P-06 | Frontières de confiance et zones de sécurité | 4.3 | ✅ |
@@ -302,9 +302,9 @@ ci-dessus : voici ce que seul le CDC mentionne.
 
 | Statut | Nombre |
 |---|---|
-| ✅ fait et testé | 184 |
-| 🔨 partiel ou en cours | 16 |
-| ⬜ à faire | 5 |
+| ✅ fait et testé | 186 |
+| 🔨 partiel ou en cours | 15 |
+| ⬜ à faire | 4 |
 | **Total** | **174** |
 
 ## Ordre d'implémentation proposé

@@ -375,6 +375,7 @@ certiftogo/
 ├── blockchain/       Solidity/Hardhat (contrat RegistreDiplomes)
 ├── docs/
 │   ├── CDC-V2.md              cahier des charges (+ docs/cdc/)
+│   ├── DEMONSTRATION.md       déroulé minuté de la soutenance
 │   ├── BACKLOG-V2.md          reste à faire
 │   ├── DEPLOIEMENT.md         blueprint Render
 │   ├── WHATSAPP.md            bascule mock → cloud
@@ -394,10 +395,32 @@ docker compose --profile complet up -d --build
 #   back-office  http://localhost:5173
 #   public       http://localhost:5174
 docker compose --profile complet ps    # état de santé des 4 conteneurs
+
+# Hydrater les fichiers — À FAIRE APRÈS UN `down -v`, et après tout script
+# lancé depuis l'hôte (seed, equiper-promotion) qui écrit hors du conteneur :
+docker cp backend/uploads/.  certiftogo_api:/app/uploads/     # PDF et QR
+docker cp backend/stockage/. certiftogo_api:/app/stockage/    # pièces justificatives
 ```
+
 > Sans `--profile complet`, seule la base démarre : c'est le mode de travail
 > quotidien (`npm run dev` et rechargement à chaud). Détail en
 > [`docs/DEPLOIEMENT.md`](docs/DEPLOIEMENT.md) §0.
+
+> **Pourquoi cette copie.** `/app/uploads` est un **volume Docker nommé**, vide
+> à la création. Or la base de démonstration a été peuplée hors conteneur : ses
+> 2 900 diplômes pointent vers des fichiers qui vivent dans `backend/uploads/`,
+> sur l'hôte. Sans hydratation, chaque PDF et chaque QR répond **404** — le
+> portefeuille du candidat n'ouvre rien, et les QR de la page `/demonstration`
+> s'affichent cassés. Le volume n'est pas en tort : c'est le bon emballage pour
+> une image qui doit tourner ailleurs. C'est le couple base-hors-conteneur /
+> fichiers-dans-le-conteneur qu'il faut recoller, une fois, à la main.
+
+> **`stockage/` se recolle pour une raison de plus.** Un script lancé depuis
+> l'hôte (`seed:demo`, `equiper-promotion.mjs`) écrit les pièces dans
+> `backend/stockage/`, sur Windows — pendant que l'API du conteneur lit
+> `/app/stockage`, sous Linux. Sans la copie, l'instruction des pièces répond
+> « document absent » sur des fichiers pourtant déposés, et **aucun lot ne peut
+> être validé** puisqu'une pièce obligatoire non examinée bloque la décision.
 
 ### Base de données
 ```bash
@@ -701,8 +724,20 @@ Le contrat `RegistreDiplomes` est déployé et **vérifié** sur le testnet publ
   signe avec **la même clé** que le déploiement, aucun appel `autoriser()` requis.
 - `hardhat-verify` exige le format de clé **Etherscan API V2** (une clé unique,
   `etherscan: { apiKey: '…' }`) ; l'ancien format par réseau est rejeté.
-- **Coût réel ≈ 0,0075 POL par opération** (certification ou révocation).
-  Prévoir le solde en conséquence ; faucet : https://faucet.polygon.technology
+- **Coût réel : 146 704 gas par certification**, soit ≈ 0,0044 POL au prix
+  observé le 19/08/2026 (30 gwei). Le chiffre en POL suit le marché — mesurer
+  plutôt que le citer :
+
+  ```bash
+  node -e "import('ethers').then(async({ethers})=>{const p=new ethers.JsonRpcProvider(process.env.BLOCKCHAIN_RPC_URL);console.log(ethers.formatEther(await p.getBalance('0x038151d7d0A18B4fe604C94EeE72D8913A3b871D')),'POL')})"
+  ```
+
+  > ⚠️ **Le portefeuille est à sec** : 0,0125 POL au 19/08/2026, soit **2
+  > opérations**. C'est la marge de secours pour réancrer les diplômes vitrine
+  > après un incident, pas un budget disponible. **Le POL d'Amoy est gratuit**
+  > (testnet) : recharger au faucet https://faucet.polygon.technology **bien
+  > avant** d'en avoir besoin — il est plafonné par jour et exige parfois une
+  > authentification, ce qu'on ne découvre pas la veille d'une soutenance.
 - ⚠️ **Données mixtes en base de démo** : les diplômes issus de `seed:demo` sont
   ancrés en mode `mock` — leurs hash **ne sont pas** sur le contrat, et la
   vérification publique renvoie honnêtement `ancrage_blockchain.ancre = false`.

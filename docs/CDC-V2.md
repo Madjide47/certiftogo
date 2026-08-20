@@ -331,7 +331,7 @@ met en œuvre.
 - 26.1 Deux applications, deux publics
 - 26.2 Design system Material 3 (vert Togo et jaune), Manrope/Inter
 - 26.3 Routage, contexte d'authentification, routes protégées
-- 26.4 **Description écran par écran** : composition, actions, états vides, états d'erreur
+- 26.4 **Description écran par écran** : composition, actions, états vides, états d'erreur — [`cdc/26-ecrans.md`](cdc/26-ecrans.md)
 - 26.5 Accessibilité et affichage mobile
 
 **27. [Tableau de bord](#27-tableau-de-bord)** 🔨

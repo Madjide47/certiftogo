@@ -236,7 +236,11 @@ function validerType(type_piece, portee) {
 /** Écrit le fichier puis enregistre la ligne. En cas d'échec, rien ne subsiste. */
 async function enregistrer(fichier, meta) {
   const empreinte = crypto.createHash('sha256').update(fichier.buffer).digest('hex');
-  const relatif = path.join(
+  // `path.posix.join`, et non `path.join` : le chemin part en BASE, où il
+  // sera relu par une autre machine que celle qui l'écrit — un conteneur
+  // Linux lisant ce qu'un poste Windows a déposé. Un antislash y devient
+  // un caractère ordinaire dans un nom de fichier, et la pièce introuvable.
+  const relatif = path.posix.join(
     'pieces',
     meta.etablissement_id,
     `${empreinte.slice(0, 16)}${path.extname(meta.nom_fichier).toLowerCase()}`

@@ -293,11 +293,33 @@ function EtatAncrage({ ancrage, resultat }) {
     );
   }
 
+  if (resultat === 'en_attente_ancrage') {
+    return (
+      <Encart ton="info" titre="Pas encore inscrit sur la chaîne">
+        L’inscription est en file d’attente : elle interviendra sous peu.
+      </Encart>
+    );
+  }
+
+  // L'empreinte est absente de la chaîne — mais l'absence n'accuse le
+  // diplôme que si cette plateforme y écrit vraiment. Quand elle certifie
+  // en simulation, elle n'a jamais rien inscrit : le silence est le sien.
+  // Confondre les deux ferait passer pour douteux un diplôme régulier.
+  if (ancrage.ecriture_onchain === false) {
+    return (
+      <Encart ton="info" titre="Diplôme non inscrit sur la chaîne">
+        Ce serveur certifie en mode démonstration : il n’inscrit rien sur la chaîne publique. Il
+        l’a bien interrogée — c’est pourquoi il peut l’affirmer — et cette empreinte n’y figure
+        pas. Les mentions ci-dessus proviennent du registre du ministère, qui fait foi.
+      </Encart>
+    );
+  }
+
   return (
-    <Encart ton={resultat === 'en_attente_ancrage' ? 'info' : 'alerte'} titre="Pas encore inscrit sur la chaîne">
-      {resultat === 'en_attente_ancrage'
-        ? 'L’inscription est en file d’attente : elle interviendra sous peu.'
-        : 'Le registre du ministère connaît ce diplôme, mais son empreinte n’a pas été retrouvée sur la chaîne publique. Signalez-le à l’établissement émetteur.'}
+    <Encart ton="alerte" titre="Empreinte absente de la chaîne">
+      Le registre du ministère connaît ce diplôme, et cette plateforme inscrit normalement ses
+      certifications sur la chaîne publique — or cette empreinte ne s’y trouve pas. Signalez-le à
+      l’établissement émetteur.
     </Encart>
   );
 }

@@ -67,10 +67,18 @@ const STATUTS_DOSSIER = {
   certifie: { libelle: 'Certifié', ton: 'vert' },
 };
 
+// Un onglet par état, sans exception. Il en manquait trois — dont
+// `partiellement_traite`, qui est précisément l'état d'un lot dont
+// l'instruction est COMMENCÉE et INACHEVÉE : le plus susceptible de
+// contenir du travail en attente, et le seul qu'on ne pouvait atteindre
+// que par « Tous ». Un état sans onglet est un état où le travail se perd.
 const ONGLETS = [
   { cle: 'transmis', libelle: 'À prendre en charge' },
   { cle: 'en_examen', libelle: 'En examen' },
-  { cle: 'valide', libelle: 'À certifier' },
+  { cle: 'partiellement_traite', libelle: 'Partiellement traité' },
+  { cle: 'a_certifier', libelle: 'À certifier' },
+  { cle: 'certifie', libelle: 'Certifiés' },
+  { cle: 'rejete', libelle: 'Rejetés' },
   { cle: '', libelle: 'Tous' },
 ];
 
@@ -116,6 +124,7 @@ function MarqueurUrgence({ dossier }) {
 export default function LotsRecusPage() {
   const [lots, setLots] = useState([]);
   const [repartition, setRepartition] = useState({});
+  const [aCertifier, setACertifier] = useState({ total: 0, lots: 0 });
   const [onglet, setOnglet] = useState('transmis');
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState('');
@@ -145,6 +154,7 @@ export default function LotsRecusPage() {
       const data = await fileDesLots({ statut: onglet });
       setLots(data.lots);
       setRepartition(data.repartition || {});
+      setACertifier(data.a_certifier || { total: 0, lots: 0 });
     } catch (err) {
       setErreur(messageErreur(err));
     } finally {
@@ -274,15 +284,28 @@ export default function LotsRecusPage() {
           valeur={repartition.transmis ?? 0}
           ton={repartition.transmis > 0 ? 'alerte' : 'neutre'}
         />
-        <Chiffre libelle="En examen" valeur={repartition.en_examen ?? 0} />
-        <Chiffre libelle="À certifier" valeur={repartition.valide ?? 0} ton="vert" />
-        <Chiffre libelle="Certifiés" valeur={repartition.certifie ?? 0} ton="vert" />
+        <Chiffre
+          libelle="En examen"
+          valeur={(repartition.en_examen ?? 0) + (repartition.partiellement_traite ?? 0)}
+        />
+        {/* Le reste à certifier se compte en DOSSIERS, pas en lots : un lot
+            partiellement traité en porte autant qu'un lot validé, et
+            compter les étiquettes faisait disparaître son travail. */}
+        <Chiffre
+          libelle="Dossiers à certifier"
+          valeur={aCertifier.total ?? 0}
+          ton={aCertifier.total > 0 ? 'vert' : 'neutre'}
+        />
+        <Chiffre libelle="Lots rejetés" valeur={repartition.rejete ?? 0} />
       </div>
 
       <Onglets
         onglets={ONGLETS.map((o) => ({
           ...o,
-          compteur: o.cle ? repartition[o.cle] : undefined,
+          // « À certifier » ne correspond à aucun statut : son compteur est
+          // le nombre de LOTS qui portent encore un dossier validé.
+          compteur:
+            o.cle === 'a_certifier' ? aCertifier.lots : o.cle ? repartition[o.cle] : undefined,
         }))}
         actif={onglet}
         onChanger={setOnglet}

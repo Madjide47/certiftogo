@@ -38,7 +38,14 @@ export function assurerDossierUploads() {
  * répertoire : un `../` stocké en base ne doit pas donner accès au disque.
  */
 export function cheminPiece(cheminRelatif) {
-  const absolu = path.resolve(STOCKAGE_PRIVE_DIR, cheminRelatif);
+  // Le chemin stocké en base est POSIX — séparateurs `/`, toujours. Une
+  // pièce déposée depuis un poste Windows y écrivait des antislashs, que
+  // Linux ne reconnaît pas comme séparateurs : le même enregistrement
+  // devenait illisible d'un système à l'autre, et le serveur répondait
+  // « document absent » sur un fichier pourtant bien présent. On
+  // normalise donc à la LECTURE aussi, pour les lignes déjà écrites.
+  const normalise = String(cheminRelatif || '').split('\\').join('/');
+  const absolu = path.resolve(STOCKAGE_PRIVE_DIR, normalise);
   if (!absolu.startsWith(STOCKAGE_PRIVE_DIR + path.sep)) {
     throw new Error('Chemin de pièce hors du stockage privé.');
   }
