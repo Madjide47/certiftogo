@@ -101,14 +101,13 @@ services:
   back-office:
     profiles: [complet]
     build:
+      # AUCUN `args` d'adresse, volontairement. Les fronts déduisent
+      # l'adresse de l'API — et celle du front public — de la page qui les
+      # sert (`window.location`). Figées au build, elles rendaient toute la
+      # pile inutilisable au moindre changement de réseau : l'adresse
+      # inscrite dans le bundle ne répondait plus, et pas même la connexion
+      # ne fonctionnait. Voir `services/adresse-api.js`.
       context: ./frontend-back-office
-      args:
-        # Bâties au build : Vite fige `import.meta.env` dans le bundle.
-        # Donc un changement de HOTE_DEMO impose un `--build`, sans quoi
-        # le téléphone qui ouvre la page appellerait `localhost:4000` —
-        # c'est-à-dire lui-même.
-        VITE_API_URL: http://${HOTE_DEMO:-localhost}:${PORT_API:-4000}/api
-        VITE_PUBLIC_URL: http://${HOTE_DEMO:-localhost}:${PORT_PUBLIC:-5174}
     container_name: certiftogo_back_office
     restart: unless-stopped
     ports:
@@ -120,9 +119,9 @@ services:
   public:
     profiles: [complet]
     build:
+      # Aucun `args` : l'adresse de l'API se déduit à l'exécution, depuis
+      # la page qui sert le front. Voir `services/adresse-api.js`.
       context: ./frontend-public
-      args:
-        VITE_API_URL: http://${HOTE_DEMO:-localhost}:${PORT_API:-4000}/api
     container_name: certiftogo_public
     restart: unless-stopped
     ports:

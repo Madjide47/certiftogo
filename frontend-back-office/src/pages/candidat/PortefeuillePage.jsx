@@ -9,6 +9,7 @@
 // établissements fréquentés. C'est le sens de la table `personnes` — un
 // diplômé de deux universités n'a qu'un seul portefeuille.
 // ─────────────────────────────────────────────────────────────
+import { adressePublique } from '../../services/adresse-api.js';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { listerMesDiplomes, statistiquesPortefeuille } from '../../services/portefeuille.service.js';
@@ -25,7 +26,7 @@ import {
   Icone,
 } from '../../components/ui/index.jsx';
 
-const URL_PUBLIC = import.meta.env.VITE_PUBLIC_URL || 'http://localhost:5174';
+const URL_PUBLIC = adressePublique();
 
 const date = (v) => (v ? new Date(v).toLocaleDateString('fr-FR') : '—');
 

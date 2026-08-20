@@ -11,6 +11,7 @@
 // révocation de toute façon, et mieux vaut que le titulaire l'apprenne
 // ici que devant un employeur.
 // ─────────────────────────────────────────────────────────────
+import { adressePublique, urlFichier } from '../../services/adresse-api.js';
 import { useEffect, useState } from 'react';
 import { listerMesDiplomes } from '../../services/portefeuille.service.js';
 import {
@@ -20,30 +21,6 @@ import {
 } from '../../utils/libelles.js';
 import { EtiquetteStatut } from './PortefeuillePage.jsx';
 
-/**
- * Racine des fichiers servis par l'API (QR, PDF), et remise à l'adresse
- * de CE front.
- *
- * `qr_code_url` et `pdf_url` sont figées en base à la certification, avec
- * l'origine qu'avait le serveur ce jour-là — le plus souvent
- * `http://localhost:4000`. Elle ne veut rien dire ailleurs : sur un
- * téléphone, `localhost` désigne le téléphone, et l'image ne charge pas.
- * On ne retient donc que le chemin. La base dit *quel* fichier ; c'est au
- * client de savoir *où* il le sert.
- */
-const FICHIERS = (import.meta.env.VITE_API_URL || 'http://localhost:4000/api').replace(
-  /\/api\/?$/,
-  ''
-);
-
-function urlFichier(chemin) {
-  if (!chemin) return null;
-  try {
-    return `${FICHIERS}${new URL(chemin, FICHIERS).pathname}`;
-  } catch {
-    return `${FICHIERS}${chemin.startsWith('/') ? chemin : `/${chemin}`}`;
-  }
-}
 import {
   EnTetePage,
   Encart,
@@ -53,7 +30,7 @@ import {
   Icone,
 } from '../../components/ui/index.jsx';
 
-const URL_PUBLIC = import.meta.env.VITE_PUBLIC_URL || 'http://localhost:5174';
+const URL_PUBLIC = adressePublique();
 
 const date = (v) => (v ? new Date(v).toLocaleDateString('fr-FR') : '—');
 

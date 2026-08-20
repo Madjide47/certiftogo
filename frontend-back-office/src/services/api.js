@@ -4,8 +4,9 @@
 // - Redirige vers /login si le serveur renvoie 401.
 // ─────────────────────────────────────────────────────────────
 import axios from 'axios';
+import { adresseApi } from './adresse-api.js';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+const API_URL = adresseApi();
 
 export const TOKEN_STORAGE_KEY = 'certiftogo_token';
 

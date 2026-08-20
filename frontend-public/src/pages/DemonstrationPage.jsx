@@ -24,34 +24,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { verifierLot } from '../services/verification.service.js';
 import { Encart, Icone } from '../components/ui.jsx';
+import { urlFichier } from '../services/adresse-api.js';
 
 const EXPLORATEUR = 'https://amoy.polygonscan.com';
-const API = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
-/** Racine des fichiers servis en statique (QR, PDF) : l'API sans /api. */
-const FICHIERS = API.replace(/\/api\/?$/, '');
-
-/**
- * Adresse d'un fichier servi par l'API.
- *
- * `qr_url` arrive ABSOLUE et FIGÉE : elle a été écrite en base au moment de
- * la certification, avec l'origine qu'avait le serveur ce jour-là — le plus
- * souvent `http://localhost:4000`. Cette origine ne veut rien dire ailleurs :
- * sur un téléphone, `localhost` désigne le téléphone. L'image ne charge pas,
- * et l'écran affiche un cadre vide sur la page faite pour être scannée.
- *
- * On ne garde donc que le CHEMIN, et on le raccroche à l'origine que ce front
- * utilise réellement pour parler à l'API. La donnée stockée dit *quel*
- * fichier ; c'est au client de savoir *où* il le sert.
- */
-function urlFichier(chemin) {
-  if (!chemin) return null;
-  try {
-    return `${FICHIERS}${new URL(chemin, FICHIERS).pathname}`;
-  } catch {
-    return `${FICHIERS}${chemin.startsWith('/') ? chemin : `/${chemin}`}`;
-  }
-}
-
 const REFERENCES = (
   import.meta.env.VITE_DEMO_REFERENCES || 'DIP-2026-83470,DIP-2026-91564'
 )
