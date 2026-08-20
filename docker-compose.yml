@@ -119,9 +119,13 @@ services:
   public:
     profiles: [complet]
     build:
-      # Aucun `args` : l'adresse de l'API se déduit à l'exécution, depuis
-      # la page qui sert le front. Voir `services/adresse-api.js`.
       context: ./frontend-public
+      args:
+        # Le front public parle à l'API sur SA PROPRE origine : nginx relaie
+        # `/api` vers le conteneur. Un QR scanné n'ouvre ainsi qu'une seule
+        # adresse et un seul port — au lieu de deux, dont il suffit qu'un
+        # pare-feu bloque le second pour que la vérification échoue.
+        VITE_API_URL: /api
     container_name: certiftogo_public
     restart: unless-stopped
     ports:

@@ -51,9 +51,20 @@ export function adresseFichiers() {
  */
 export function urlFichier(chemin) {
   if (!chemin) return null;
+
+  // La racine peut être VIDE : quand l'API est servie sur la même origine
+  // (`VITE_API_URL=/api`, relayée par nginx), retirer le `/api` ne laisse
+  // rien. Le fichier se demande alors en chemin relatif, ce qui est
+  // exactement ce qu'on veut — même hôte, même port.
   const racine = adresseFichiers();
+
+  // Il faut néanmoins une base valide pour isoler le chemin d'une URL
+  // absolue figée en base : `new URL(x, '')` lève.
+  const base =
+    racine || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+
   try {
-    return `${racine}${new URL(chemin, racine).pathname}`;
+    return `${racine}${new URL(chemin, base).pathname}`;
   } catch {
     return `${racine}${chemin.startsWith('/') ? chemin : `/${chemin}`}`;
   }
