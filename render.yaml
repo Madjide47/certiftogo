@@ -133,6 +133,12 @@ services:
     envVars:
       - key: VITE_API_URL
         value: https://certiftogo-api.onrender.com/api
+      # Références affichées par la page /demonstration. Elles doivent
+      # exister DANS CETTE BASE : la valeur par défaut vise les diplômes
+      # vitrine de la base locale, que l'instance déployée n'a jamais
+      # connus — l'écran montrait alors deux cartes « introuvable ».
+      - key: VITE_DEMO_REFERENCES
+        value: DIP-2026-00005
     routes:
       - type: rewrite
         source: /*
