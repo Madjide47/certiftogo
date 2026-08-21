@@ -4,14 +4,45 @@
 // ─────────────────────────────────────────────────────────────
 import pg from 'pg';
 import dotenv from 'dotenv';
+import { parse as analyserUrl } from 'pg-connection-string';
 
 dotenv.config();
 
 const { Pool } = pg;
 
+/**
+ * Configuration issue d'une URL de connexion, SANS retomber sur les
+ * variables PG* de l'environnement.
+ *
+ * `{ connectionString }` seul ne suffit pas : `pg` complète les champs
+ * absents de l'URL avec `PGHOST`, `PGPORT`, `PGUSER`… Or la procédure de
+ * déploiement consiste précisément à viser une base distante DEPUIS un
+ * poste local, dont le `.env` porte les valeurs du Docker local. Une URL
+ * sans port explicite héritait donc de `PGPORT=5433`, et la connexion
+ * partait vers les serveurs de l'hébergeur sur un port qu'ils n'écoutent
+ * pas — `ETIMEDOUT`, sans que rien ne désigne la cause.
+ *
+ * On résout donc l'URL nous-mêmes, et on ne laisse aucun trou à combler.
+ */
+function depuisUrl(url) {
+  const c = analyserUrl(url);
+  return {
+    host: c.host,
+    port: Number(c.port) || 5432,
+    database: c.database,
+    user: c.user,
+    password: c.password,
+    // Un hébergeur managé impose TLS. Son certificat est signé par une
+    // autorité interne que le poste client ne connaît pas : on chiffre
+    // sans exiger la chaîne de confiance, faute de quoi la connexion est
+    // refusée. À durcir le jour où l'autorité est distribuée.
+    ssl: c.ssl || /sslmode=(require|prefer|verify)/.test(url) ? { rejectUnauthorized: false } : false,
+  };
+}
+
 // Deux modes de configuration : URL complète OU paramètres séparés.
 const poolConfig = process.env.DATABASE_URL
-  ? { connectionString: process.env.DATABASE_URL }
+  ? depuisUrl(process.env.DATABASE_URL)
   : {
       host: process.env.PGHOST || 'localhost',
       port: Number(process.env.PGPORT) || 5432,
