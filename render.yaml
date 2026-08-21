@@ -28,7 +28,22 @@ services:
     region: frankfurt
     rootDir: backend
     buildCommand: npm ci
-    startCommand: npm start
+    # Les PDF et QR sont RÉIMPRIMÉS à chaque démarrage.
+    #
+    # Le disque du plan gratuit n'est pas seulement vidé au redéploiement :
+    # il l'est à chaque réveil après mise en veille. Un diplôme certifié le
+    # matin perdait donc son PDF et son QR avant midi — la vérification
+    # publique continuait de répondre (elle porte sur le hash, pas sur le
+    # fichier), mais le portefeuille du diplômé n'affichait plus rien.
+    #
+    # La réimpression est sans danger : le hash et la signature portent sur
+    # les DONNÉES, et le fichier reprend le même nom — `pdf_url` reste
+    # valide, la base n'est pas touchée. Voir `scripts/regenerer-pdf.mjs`.
+    #
+    # `|| true` : un échec de réimpression ne doit pas empêcher l'API de
+    # démarrer. Mieux vaut un service debout sans ses fichiers qu'un
+    # service mort.
+    startCommand: (npm run pdf:regenerer || true) && npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV

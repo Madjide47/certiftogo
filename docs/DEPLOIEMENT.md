@@ -121,7 +121,7 @@ DATABASE_URL="…" npm run seed:demo
 | Limite | Conséquence | Contournement |
 |---|---|---|
 | **Mise en veille après inactivité** | Le premier appel réveille le service : ~50 s de latence | Ouvrir l'app quelques minutes **avant** la soutenance |
-| **Système de fichiers éphémère** | Les PDF et QR de `backend/uploads/` sont **perdus à chaque redéploiement** | Voir ci-dessous |
+| **Système de fichiers éphémère** | Les PDF et QR de `backend/uploads/` sont perdus à chaque redéploiement **et à chaque réveil après mise en veille** | Réimpression au démarrage — voir ci-dessous |
 | **PostgreSQL gratuit expiré au bout de ~30 jours** | La base est supprimée | Noter la date de création ; sauvegarder avant échéance |
 
 ### Le point le plus gênant : les fichiers générés
@@ -137,7 +137,24 @@ diplômes certifiés avant le redéploiement.
 hash en base et l'ancrage on-chain, pas sur les fichiers. Un QR code déjà
 imprimé ou photographié reste valide, puisqu'il encode une URL de vérification.
 
-**Options :**
+> ⚠️ **Ce n'est pas seulement le redéploiement.** Le service gratuit se met
+> en veille après une quinzaine de minutes d'inactivité, et repart sur un
+> disque vierge. Un diplôme certifié le matin perd donc son PDF et son QR
+> avant midi, sans qu'aucune action ait été faite. C'est ce qui a été
+> constaté le 21 août 2026, au lendemain d'une certification réussie.
+
+**Retenu : la réimpression au démarrage.** `startCommand` exécute
+`npm run pdf:regenerer` avant `npm start`. La commande est sans danger — le
+hash et la signature portent sur les DONNÉES, le fichier reprend le même
+nom, `pdf_url` reste valide et la base n'est pas touchée. Un échec n'empêche
+pas l'API de démarrer (`|| true`) : mieux vaut un service debout sans ses
+fichiers qu'un service mort.
+
+Le coût est un démarrage un peu plus long, proportionnel au nombre de
+diplômes. À l'échelle d'une vraie exploitation, ce n'est plus tenable : il
+faut alors un disque persistant, ou un stockage objet.
+
+**Autres options :**
 - *Court terme (démo)* — recertifier quelques diplômes après le déploiement
   final, et ne plus redéployer avant la soutenance.
 - *Propre* — ajouter un disque persistant Render (plan payant Starter),
